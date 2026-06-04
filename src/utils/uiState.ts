@@ -56,6 +56,7 @@ export const $romanization = persistAtom<boolean>("romanization", false);
 export const $chineseTranslitMode = persistAtom<"pinyin" | "jyutping">("chineseTranslitMode", "pinyin");
 export const $translationEnabled = persistAtom<boolean>("translationEnabled", false);
 export const $translationTargetLang = persistAtom<string>("translationTargetLang", "en");
+export const $lyricsCopyFormat = persistAtom<"plain" | "timestamps" | "translation" | "metadata">("lyricsCopyFormat", "plain");
 export const $flatViewControls = persistAtom<boolean>("flatViewControls", true);
 export const $prefetchNextLyrics = persistAtom<boolean>("prefetchNextLyrics", true);
 export const $showChineseTranslitButton = persistAtom<boolean>("showChineseTranslitButton", true);

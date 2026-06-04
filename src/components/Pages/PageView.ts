@@ -72,6 +72,7 @@ import { openSettingsPanel } from "../../utils/settings.ts";
 import Logger from "../../utils/Logger.ts";
 import Whentil from "../../modules/Whentil.ts";
 import { triggerRemeasureLV } from "../../utils/Lyrics/LyricsVirtualizer.ts";
+import { copyCurrentLyricsToClipboard } from "../../utils/Lyrics/CopyLyrics.ts";
 
 const pageLogger = new Logger("Page View");
 const controlsLogger = new Logger("View Controls");
@@ -88,6 +89,7 @@ export const Tooltips: {
   CinemaView: TippyInstance | null;
   NowBarSideToggle: TippyInstance | null;
   LyricsManager: TippyInstance | null;
+  CopyLyrics: TippyInstance | null;
   Settings: TippyInstance | null;
 } = {
   Close: null,
@@ -96,6 +98,7 @@ export const Tooltips: {
   CinemaView: null,
   NowBarSideToggle: null,
   LyricsManager: null,
+  CopyLyrics: null,
   Settings: null,
 };
 
@@ -498,6 +501,7 @@ function AppendViewControls(ReAppend: boolean = false) {
             ? `<button id="LyricsManager" class="ViewControl">${Icons.LyricsManager}</button>`
             : ""
         }
+        <button id="CopyLyrics" class="ViewControl">${Icons.CopyLyrics}</button>
         ${IsPIP ? "" : `<button id="SettingsToggle" class="ViewControl">${Icons.Settings}</button>`}
         <button id="Close" class="ViewControl">${Icons.Close}</button>
     `;
@@ -828,6 +832,29 @@ function AppendViewControls(ReAppend: boolean = false) {
         nowBarSideToggleBtn.addEventListener("click", () => NowBar_SwapSides());
       } catch (err) {
         controlsLogger.warn("Failed to setup NowBar Side Toggle tooltip", err);
+      }
+    }
+
+    const copyLyricsButton = elem.querySelector("#CopyLyrics");
+    if (copyLyricsButton) {
+      try {
+        if (!isPip) {
+          Tooltips.CopyLyrics = Spicetify.Tippy(copyLyricsButton, {
+            ...Spicetify.TippyProps,
+            content: `Copy Lyrics`,
+          });
+        }
+        copyLyricsButton.addEventListener("click", async () => {
+          try {
+            const copied = await copyCurrentLyricsToClipboard();
+            Spicetify.showNotification(copied ? "Lyrics copied" : "No lyrics to copy", !copied);
+          } catch (err) {
+            controlsLogger.warn("Failed to copy lyrics", err);
+            Spicetify.showNotification("Failed to copy lyrics", true);
+          }
+        });
+      } catch (err) {
+        controlsLogger.warn("Failed to setup Copy Lyrics tooltip", err);
       }
     }
 

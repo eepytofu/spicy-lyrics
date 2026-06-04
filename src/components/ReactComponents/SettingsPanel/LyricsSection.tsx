@@ -7,6 +7,7 @@ import {
 } from "../../../utils/stores.ts";
 import {
   $chineseTranslitMode,
+  $lyricsCopyFormat,
   $showChineseTranslitButton,
   $translationEnabled,
   $translationTargetLang,
@@ -17,6 +18,8 @@ const SECTION_NAME = "Lyrics Display";
 const renderingTypeOptions = ["calculate", "animate"];
 const chineseTranslitOptions = ["pinyin", "jyutping"];
 const translationTargetOptions = ["en", "es", "fr", "de", "it", "pt", "ja", "ko", "zh-CN", "zh-TW"];
+const lyricsCopyFormatOptions = ["plain", "timestamps", "translation", "metadata"];
+const lyricsCopyFormatLabels = ["Plain lyrics", "Lyrics + timestamps", "Lyrics + translation", "Artist/title + lyrics"];
 
 interface Props {
   query: string;
@@ -30,6 +33,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const chineseTranslitMode = useStore($chineseTranslitMode);
   const translationEnabled = useStore($translationEnabled);
   const translationTargetLang = useStore($translationTargetLang);
+  const lyricsCopyFormat = useStore($lyricsCopyFormat);
   const showChineseTranslitButton = useStore($showChineseTranslitButton);
 
   if (sectionFilter !== "All" && sectionFilter !== SECTION_NAME) return null;
@@ -41,8 +45,9 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const r5 = matches(query, "Lyrics Translation", "Show translated lyrics under each line.");
   const r6 = matches(query, "Translation Target Language", "Language used for lyrics translation.");
   const r7 = matches(query, "Chinese Transliteration Quick Button", "Show the pinyin/jyutping toggle in lyrics controls when Chinese lyrics are detected.");
+  const r8 = matches(query, "Copy Lyrics Format", "Choose what the lyrics copy button writes to clipboard.");
 
-  if (!r1 && !r2 && !r3 && !r4 && !r5 && !r6 && !r7) return null;
+  if (!r1 && !r2 && !r3 && !r4 && !r5 && !r6 && !r7 && !r8) return null;
 
   return (
     <>
@@ -107,6 +112,17 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
             value={translationTargetLang}
             options={translationTargetOptions}
             onChange={(v) => $translationTargetLang.set(v)}
+          />
+        </Row>
+      )}
+
+      {r8 && (
+        <Row label="Copy Lyrics Format" description="Choose what the lyrics copy button writes to clipboard.">
+          <Select
+            value={lyricsCopyFormat}
+            options={lyricsCopyFormatOptions}
+            labels={lyricsCopyFormatLabels}
+            onChange={(v) => $lyricsCopyFormat.set(v as "plain" | "timestamps" | "translation" | "metadata")}
           />
         </Row>
       )}
