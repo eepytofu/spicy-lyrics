@@ -4,7 +4,7 @@ import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
 import { Query } from "../API/Query.ts";
-import { ProcessLyrics } from "./ProcessLyrics.ts";
+import { LYRICS_PROCESSING_VERSION, ProcessLyrics } from "./ProcessLyrics.ts";
 import { translationEnabled } from "./lyrics.ts";
 import Logger from "../Logger.ts";
 import { LocalLyricsManager } from "./manager/index.ts";
@@ -91,6 +91,29 @@ function presentLyrics(lyricsData: any): void {
   PageContainer?.querySelector(".ContentBox .LyricsContainer")?.classList.remove("Hidden");
   PageView.AppendViewControls(true);
   $currentlyFetching.set(false);
+}
+
+async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any): Promise<any> {
+  if (lyrics) {
+    lyrics.uri = lyrics.uri || uri;
+    lyrics.id = lyrics.id || trackId;
+  }
+
+  if (!lyrics || lyrics.ProcessingPending === true || lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION) {
+    return lyrics;
+  }
+
+  lyricsCacheLogger.debug("Reprocessing stale cached lyrics", {
+    trackId,
+    fromVersion: lyrics.ProcessingVersion,
+    toVersion: LYRICS_PROCESSING_VERSION,
+  });
+  await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: true });
+  lyrics.ProcessingPending = false;
+  lyrics.RomanizationPending = false;
+  lyrics.TranslationPending = false;
+  await LyricsStore.SetItem(trackId, lyrics);
+  return lyrics;
 }
 
 export async function PrefetchLyrics(uri: string): Promise<void> {
@@ -214,10 +237,14 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         }
       } else {
         const lyricsData = JSON.parse(savedLyricsData);
-        // Return the stored lyrics if the URI matches the current track URI
-        if (lyricsData?.uri === uri && lyricsData?.ProcessingPending !== true) {
-          presentLyrics(lyricsData);
-          return [lyricsData, 200];
+        // Return stored lyrics only when they match the current track. Prefer the
+        // URI guard; fall back to id only for pre-uri cache entries.
+        const isCurrentTrack = lyricsData?.uri === uri || (!lyricsData?.uri && lyricsData?.id === trackId);
+        if (isCurrentTrack && lyricsData?.ProcessingPending !== true) {
+          const processedLyrics = await ensureProcessingVersion(trackId, uri, lyricsData);
+          $currentLyricsData.set(JSON.stringify(processedLyrics));
+          presentLyrics(processedLyrics);
+          return [processedLyrics, 200];
         }
       }
     } catch (error) {
@@ -255,7 +282,10 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         // Tag the cached payload with the current uri so the saved-data and
         // re-fetch checks (which match on uri) recognise it — older cache
         // entries predate the uri field.
-        const lyricsFromCache = { ...(lyricsFromCacheRes ?? {}), uri };
+        const lyricsFromCache = await ensureProcessingVersion(trackId, uri, {
+          ...(lyricsFromCacheRes ?? {}),
+          uri,
+        });
         $currentLyricsData.set(JSON.stringify(lyricsFromCache));
         presentLyrics(lyricsFromCache);
         return [{ ...lyricsFromCache, fromCache: true }, 200];
