@@ -177,3 +177,11 @@ src/components/cli-sync
 .claude/settings.local.json
 
 CHANGELOG.md
+
+# Local agent notes
+.pi/
+.codex/
+project/*.md
+
+# Release/build artifacts
+builds/
