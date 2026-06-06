@@ -178,9 +178,14 @@ src/components/cli-sync
 
 CHANGELOG.md
 
-# Local agent notes
+# Local agent/editor notes
 .pi/
 .codex/
+.agents/
+.claude/
+.cursor/
+CLAUDE.md
+AGENTS.md
 project/*.md
 
 # Release/build artifacts
