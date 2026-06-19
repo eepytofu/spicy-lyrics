@@ -373,7 +373,7 @@ export function romanizeKorean(text: string, mode: KoreanMode = "spelling"): str
 // ─── Japanese Romaji Fallback ─────────────────────────────────────────────────
 
 /**
- * Build complete romaji from kuromoji tokens with JUKUJIKUN overrides.
+ * Build complete romaji from Kuromoji token context.
  * This is the robust fallback when kuroshiro fails to convert certain kanji.
  * 
  * @param text - Japanese text to romanize

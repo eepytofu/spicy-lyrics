@@ -11,11 +11,9 @@
  * @fork-feature Main entry point for fork customizations
  */
 
-// Jukujikun dictionary for compound kanji readings
-export { JUKUJIKUN, getJukujikun, hasJukujikun } from "./JukujikuDict.ts";
-
-// Shared jukujikun + token merge logic
-export { applyJukujikun, computeNoSpaceBefore, type MergeableEntry } from "./JukujikunMerge.ts";
+// Shared token merge logic. Japanese readings should come from Kuromoji; keep
+// this layer limited to spacing and tiny POS-guarded phonetic fixes.
+export { computeNoSpaceBefore, type MergeableEntry } from "./JukujikunMerge.ts";
 
 // Text detection patterns and utilities
 export {

@@ -4,8 +4,6 @@
  * Shared compound kanji reading lookup and phonetic merge rules.
  */
 
-import { JUKUJIKUN } from "./JukujikuDict.ts";
-
 export interface MergeableEntry {
   romaji: string;
   consumed: boolean;
@@ -35,6 +33,8 @@ function setReading(entry: MergeableEntry, romaji: string, readingKana: string):
   entry.readingKana = readingKana;
 }
 
+const pos1 = (token: any): string => token?.pos || token?.part_of_speech || token?.pos_detail_1 || "";
+
 /**
  * Apply phonetic mutations that need neighboring tokens.
  * Example: いたっ + て => ita + tte, not itatsu te.
@@ -50,15 +50,44 @@ export function applyContextualReadingOverrides(
     const prevIndex = previousActive(entries, i - 1);
     const prevSf = prevIndex >= 0 ? entries[prevIndex].surface || tokens[prevIndex]?.surface_form || "" : "";
 
-    if (sf === "私") {
-      // Lyrics register: prefer わたし over formal わたくし. Keep as cited lexical override.
+    if (sf === "私" && pos1(tokens[i]) === "代名詞") {
+      // Lyrics register: prefer わたし over formal わたくし. POS-guarded so
+      // compounds such as 私立 stay dictionary-owned.
       setReading(entries[i], "watashi", "わたし");
+      continue;
+    }
+
+    if (sf === "1人" || (sf === "1" && entries[i + 1]?.surface === "人")) {
+      // Numeric shorthand is outside the tokenizer's normal Japanese reading
+      // lattice; keep this as a narrow counter normalization, not a compound
+      // reading table.
+      setReading(entries[i], "hitori", "ひとり");
+      if (sf === "1") {
+        entries[i].surface = "1人";
+        (entries[i] as any).end = (entries[i + 1] as any).end;
+        entries[i + 1].consumed = true;
+      }
+      continue;
+    }
+
+    if (sf === "2人" || (sf === "2" && entries[i + 1]?.surface === "人")) {
+      setReading(entries[i], "futari", "ふたり");
+      if (sf === "2") {
+        entries[i].surface = "2人";
+        (entries[i] as any).end = (entries[i + 1] as any).end;
+        entries[i + 1].consumed = true;
+      }
       continue;
     }
 
     if (sf === "方" && PLURAL_PRONOUN_BEFORE_KATA.test(prevSf)) {
       // Dictionary cannot infer plural-pronoun rendaku when tokenized as 貴方 + 方.
-      setReading(entries[i], "gata", "がた");
+      const prevToken = prevIndex >= 0 ? tokens[prevIndex] : undefined;
+      const currentPos = pos1(tokens[i]);
+      if ((currentPos === "接尾辞" || currentPos === "名詞" || currentPos === "接尾")
+          && pos1(prevToken) === "代名詞") {
+        setReading(entries[i], "gata", "がた");
+      }
     }
   }
 }
@@ -82,33 +111,6 @@ export function applyPhoneticMerges(
 
     entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
     entries[i].romaji = doubledSokuon(entries[i].romaji);
-  }
-}
-
-/**
- * Pass 1: Apply JUKUJIKUN compound overrides to consecutive token entries.
- * Mutates entries in-place — marks consumed entries and replaces romaji.
- */
-export function applyJukujikun(
-  entries: MergeableEntry[],
-  tokens: any[]
-): void {
-  for (let i = 0; i < tokens.length; i++) {
-    if (entries[i].consumed) continue;
-    for (let len = Math.min(4, tokens.length - i); len >= 2; len--) {
-      const combined = tokens.slice(i, i + len)
-        .map((t: any) => t.surface_form).join("");
-      if (JUKUJIKUN[combined]) {
-        entries[i].romaji = JUKUJIKUN[combined];
-        entries[i].surface = combined;
-        for (let j = 1; j < len; j++) entries[i + j].consumed = true;
-        break;
-      }
-    }
-    // Also check single-token jukujikun
-    if (!entries[i].consumed && JUKUJIKUN[tokens[i].surface_form]) {
-      entries[i].romaji = JUKUJIKUN[tokens[i].surface_form];
-    }
   }
 }
 

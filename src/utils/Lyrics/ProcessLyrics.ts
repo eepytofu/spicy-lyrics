@@ -19,6 +19,7 @@ import {
   annotateJapaneseTextTarget,
   applyJapaneseReadingToSyllables,
   clearLegacyFuriganaFields,
+  romanizeJapaneseFromFurigana,
 } from "./Reading/JapaneseReading.ts";
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 
@@ -336,16 +337,23 @@ const romanizeEntry = async (
   if (hasTransliteration(target)) {
     if (annotateJapanese && ItemJapaneseTest.test(target.Text || "")) {
       // Provider romaji can leak Chinese readings for kanji or mishandle particles.
-      // Rebuild Japanese reading locally; preserve provider furigana only if local analysis has none.
+      // If provider furigana is kept, derive romaji from that same ruby so the
+      // visible readings cannot disagree.
       const previousRomanized = target.RomanizedText || target.TransliteratedText;
       const providerReading = target.JapaneseReading;
+      if (providerReading?.furigana?.length) {
+        const providerRomaji = await romanizeJapaneseFromFurigana(target.Text || "", providerReading.furigana, RomajiPromise);
+        if (providerRomaji) {
+          target.TransliteratedText = providerRomaji;
+          target.RomanizedText = providerRomaji;
+          providerReading.romaji = providerRomaji;
+          return providerRomaji !== previousRomanized;
+        }
+      }
       const localReading = await annotateJapaneseTextTarget(target, undefined, RomajiPromise);
       if (localReading?.romaji) {
         target.TransliteratedText = localReading.romaji;
         target.RomanizedText = localReading.romaji;
-      }
-      if (providerReading?.furigana?.length && !target.JapaneseReading?.furigana?.length) {
-        target.JapaneseReading = { ...target.JapaneseReading, furigana: providerReading.furigana };
       }
       return (target.RomanizedText || target.TransliteratedText) !== previousRomanized;
     }

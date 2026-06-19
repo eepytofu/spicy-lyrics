@@ -9,12 +9,10 @@ import Kuroshiro from "kuroshiro";
 import * as KuromojiAnalyzer from "../KuromojiAnalyzer.ts";
 import {
   applyContextualReadingOverrides,
-  applyJukujikun,
   applyPhoneticMerges,
   computeNoSpaceBefore,
   type MergeableEntry,
 } from "../Fork/JukujikunMerge.ts";
-import { JUKUJIKUN } from "../Fork/JukujikuDict.ts";
 
 export type FuriganaSegment = {
   start: number;
@@ -75,28 +73,6 @@ const HIRAGANA_VOWEL: Record<string, string> = {
   お: "お", こ: "お", ご: "お", そ: "お", ぞ: "お", と: "お", ど: "お", の: "お", ほ: "お", ぼ: "お", ぽ: "お", も: "お", よ: "お", ろ: "お", を: "お", ぉ: "お", ょ: "お",
 };
 
-type KanaReadingOverride = {
-  kana: string;
-  reason: "lyric-context" | "jukujikun" | "corpus-bad";
-};
-
-// Small correction layer only. Normal compounds must come from Kuromoji +
-// generic alignment. Add entries only for lyric-context defaults, true
-// jukujikun, or known bad dictionary/corpus output.
-const KANA_READING_OVERRIDE_ENTRIES: Record<string, KanaReadingOverride> = {
-  "私": { kana: "わたし", reason: "lyric-context" },
-  "貴方方": { kana: "あなたがた", reason: "lyric-context" },
-  "君方": { kana: "きみがた", reason: "lyric-context" },
-  "一人": { kana: "ひとり", reason: "jukujikun" },
-  "二人": { kana: "ふたり", reason: "jukujikun" },
-  "1人": { kana: "ひとり", reason: "jukujikun" },
-  "2人": { kana: "ふたり", reason: "jukujikun" },
-};
-
-const KANA_READING_OVERRIDES: Record<string, string> = Object.fromEntries(
-  Object.entries(KANA_READING_OVERRIDE_ENTRIES).map(([surface, override]) => [surface, override.kana])
-);
-
 type TokenFuriganaReading = {
   text: string;
   targetStart: number;
@@ -116,6 +92,8 @@ type JapaneseTokenContext = {
   entries: JapaneseTokenEntry[];
   noSpaceBefore: boolean[];
 };
+
+const tokenPos1 = (token: any): string => token?.pos || token?.part_of_speech || token?.pos_detail_1 || "";
 
 function normalizeHiraganaLongMarks(text: string): string {
   let output = "";
@@ -137,9 +115,6 @@ function kataToHira(text: string): string {
 }
 
 function contextualKanaReading(surface: string, reading: string): string {
-  const normalizedSurface = kataToHira(surface);
-  const override = KANA_READING_OVERRIDES[normalizedSurface];
-  if (override) return override;
   return kataToHira(reading || "");
 }
 
@@ -227,38 +202,52 @@ function kanaReadingForToken(surface: string, reading: string): TokenFuriganaRea
     : undefined;
 }
 
-function applyKanaReadingOverrides(
-  entries: JapaneseTokenEntry[],
-  tokens: any[],
-  kanaToRomaji: (kana: string) => string
-): void {
-  const overrideTerms = Object.keys(KANA_READING_OVERRIDES).sort((a, b) => b.length - a.length);
+function entryRomaji(entry: JapaneseTokenEntry, token: any, kanaToRomaji: (kana: string) => string): string {
+  if (tokenPos1(token) === "助詞") {
+    if (entry.surface === "は") return "wa";
+    if (entry.surface === "へ") return "e";
+    if (entry.surface === "を") return "wo";
+  }
+  if (!entry.readingKana) return entry.surface;
+  const romaji = kanaToRomaji(entry.readingKana);
+  return romaji || entry.surface;
+}
 
-  for (let i = 0; i < tokens.length; i += 1) {
-    if (entries[i].consumed) continue;
+function furiganaSegmentAt(furigana: FuriganaSegment[], index: number): FuriganaSegment | undefined {
+  return furigana.find((segment) => segment.end > segment.start && index >= segment.start && index < segment.end);
+}
 
-    for (const term of overrideTerms) {
-      let combined = "";
-      let endIndex = i;
-      while (endIndex < tokens.length && combined.length < term.length) {
-        combined += tokens[endIndex].surface_form || "";
-        endIndex += 1;
+function readingFromProviderFurigana(
+  sourceText: string,
+  start: number,
+  end: number,
+  furigana: FuriganaSegment[]
+): string | undefined {
+  let reading = "";
+  let usedProvider = false;
+  let pos = start;
+  while (pos < end) {
+    const char = sourceText[pos];
+    const segment = furiganaSegmentAt(furigana, pos);
+    if (KanjiLikeCharTest.test(char) && segment && segment.start <= pos && segment.end > pos) {
+      if (pos === segment.start) {
+        reading += kataToHira(segment.reading);
+        usedProvider = true;
       }
-
-      if (combined !== term) continue;
-
-      const kana = KANA_READING_OVERRIDES[term];
-      const furigana = kanaReadingForToken(term, kana);
-      if (!furigana) break;
-
-      entries[i].romaji = JUKUJIKUN[term] || kanaToRomaji(kana);
-      entries[i].end = entries[endIndex - 1].end;
-      entries[i].surface = term;
-      entries[i].readingKana = kana;
-      entries[i].furigana = furigana;
-      for (let j = i + 1; j < endIndex; j += 1) entries[j].consumed = true;
-      break;
+      pos = Math.min(end, segment.end);
+      continue;
     }
+    if (/[ぁ-んァ-ンー]/.test(char)) reading += kataToHira(char);
+    pos += 1;
+  }
+  return usedProvider ? reading : undefined;
+}
+
+function applyProviderFuriganaOverrides(sourceText: string, entries: JapaneseTokenEntry[], furigana: FuriganaSegment[]): void {
+  const sorted = [...furigana].sort((a, b) => a.start - b.start);
+  for (const entry of entries) {
+    const reading = readingFromProviderFurigana(sourceText, entry.start, entry.end, sorted);
+    if (reading) entry.readingKana = reading;
   }
 }
 
@@ -272,30 +261,21 @@ async function buildJapaneseTokenContext(lineText: string, _fullSpacedRomaji?: s
     const surface: string = tokens[ti].surface_form || "";
     const reading: string = tokens[ti].reading || tokens[ti].pronunciation || "";
     const readingKana = contextualKanaReading(surface, reading);
-    let romaji = readingKana && readingKana !== "*" && KUtil.hasKana(readingKana)
-      ? KUtil.kanaToRomaji(readingKana)
-      : surface;
-    if (tokens[ti].pos === "助詞") {
-      if (surface === "は") romaji = "wa";
-      else if (surface === "へ") romaji = "e";
-      else if (surface === "を") romaji = "wo";
-    }
-
-    entries.push({
+    const entry: JapaneseTokenEntry = {
       start: charPos,
       end: charPos + surface.length,
-      romaji,
+      romaji: surface,
       surface,
       readingKana,
       furigana: kanaReadingForToken(surface, reading),
       consumed: false,
-    });
+    };
+    entry.romaji = entryRomaji(entry, tokens[ti], (kana) => KUtil.kanaToRomaji(kana));
+    entries.push(entry);
     charPos += surface.length;
   }
 
-  applyJukujikun(entries, tokens);
   applyContextualReadingOverrides(entries, tokens);
-  applyKanaReadingOverrides(entries, tokens, (kana) => KUtil.kanaToRomaji(kana));
   applyPhoneticMerges(entries, tokens);
 
   for (let i = 0; i < entries.length; i += 1) {
@@ -311,6 +291,25 @@ async function buildJapaneseTokenContext(lineText: string, _fullSpacedRomaji?: s
     entries,
     noSpaceBefore: computeNoSpaceBefore(entries, tokens),
   };
+}
+
+export async function romanizeJapaneseFromFurigana(
+  text: string,
+  furigana: FuriganaSegment[],
+  romajiPromise?: Promise<void>
+): Promise<string | undefined> {
+  const sourceText = (text || "").normalize("NFKC");
+  if (!JapaneseSourceTextTest.test(sourceText) || furigana.length === 0) return undefined;
+
+  await romajiPromise;
+  const context = await buildJapaneseTokenContext(sourceText);
+  const KUtil = (Kuroshiro as any).Util;
+  applyProviderFuriganaOverrides(sourceText, context.entries, furigana);
+  for (let i = 0; i < context.entries.length; i += 1) {
+    context.entries[i].romaji = entryRomaji(context.entries[i], context.tokens[i], (kana) => KUtil.kanaToRomaji(kana));
+  }
+  applyPhoneticMerges(context.entries, context.tokens);
+  return buildRomajiFromContext(context);
 }
 
 function buildRomajiFromContext(context: JapaneseTokenContext): string | undefined {
