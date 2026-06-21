@@ -6,6 +6,7 @@ import {
   $simpleLyricsModeRenderingType,
 } from "../../../utils/stores.ts";
 import {
+  $chineseTones,
   $chineseTranslitMode,
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
@@ -75,6 +76,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const simpleLyricsModeRenderingType = useStore($simpleLyricsModeRenderingType);
   const minimalLyricsMode = useStore($minimalLyricsMode);
   const chineseTranslitMode = useStore($chineseTranslitMode);
+  const chineseTones = useStore($chineseTones);
   const japaneseReadingMode = useStore($japaneseReadingMode);
   const koreanRomanizationMode = useStore($koreanRomanizationMode);
   const cyrillicRomanizationMode = useStore($cyrillicRomanizationMode);
@@ -90,6 +92,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const showSimpleRenderingStyle = matches(query, "Simple Mode: Text Animation Style", "How lyrics text transitions are rendered in Simple Lyrics Mode.");
   const showMinimalLyricsMode = matches(query, "Minimal Lyrics Mode", "Hides sung lyrics lines in Fullscreen and Cinema Mode");
   const showChineseTransliteration = matches(query, "Chinese Transliteration", "Choose Mandarin pinyin or Cantonese jyutping for Chinese lyrics.");
+  const showChineseTones = matches(query, "Chinese Tones", "Show Mandarin tone marks and Cantonese jyutping tone numbers.");
   const showJapaneseReadingDisplay = matches(query, "Japanese Reading Display", "Choose romaji, furigana, or both for Japanese lyrics.");
   const showKoreanRomanization = matches(query, "Korean Romanization", "Choose letter-by-letter Hangul romanization or pronunciation-aware romanization.");
   const showCyrillicRomanization = matches(query, "Cyrillic Language", "Choose Russian or Ukrainian Cyrillic romanization rules.");
@@ -104,6 +107,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
     showSimpleRenderingStyle ||
     showMinimalLyricsMode ||
     showChineseTransliteration ||
+    showChineseTones ||
     showJapaneseReadingDisplay ||
     showKoreanRomanization ||
     showCyrillicRomanization ||
@@ -157,6 +161,12 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
             options={CHINESE_TRANSLIT_OPTIONS}
             onChange={(v) => $chineseTranslitMode.set(v as "pinyin" | "jyutping")}
           />
+        </Row>
+      )}
+
+      {showChineseTones && (
+        <Row label="Chinese Tones" description="Show Mandarin tone marks and Cantonese jyutping tone numbers.">
+          <Toggle checked={chineseTones} onChange={(v) => $chineseTones.set(v)} />
         </Row>
       )}
 

@@ -71,7 +71,8 @@ const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.leng
 export async function romanizeCantonese(
   text: string,
   primaryLanguage: string,
-  skipTextTests: boolean
+  skipTextTests: boolean,
+  tones = true
 ): Promise<string | undefined> {
   if (primaryLanguage !== "cmn" && primaryLanguage !== "yue" && !skipTextTests && !ChineseTextTest.test(text)) {
     return undefined;
@@ -93,7 +94,19 @@ export async function romanizeCantonese(
     index += char.length;
   }
 
-  return parts.join(" ").replace(/\s+/g, " ").trim() || undefined;
+  const result = parts.join(" ").replace(/\s+/g, " ").trim();
+  return (tones ? result : stripJyutpingTones(result)) || undefined;
+}
+
+export function stripJyutpingTones(text: string): string {
+  return text.replace(/(?<=[a-zA-Z])[1-6]/g, "");
+}
+
+export function pinyinOptionsForToneMode(pinyin: any, tones: boolean): Record<string, any> {
+  const options: Record<string, any> = { segment: false, group: true };
+  const style = tones ? pinyin?.STYLE_TONE : pinyin?.STYLE_NORMAL;
+  if (style !== undefined) options.style = style;
+  return options;
 }
 
 // ─── Cyrillic (BGN/PCGN) ──────────────────────────────────────────────────────

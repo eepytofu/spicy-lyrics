@@ -1,5 +1,6 @@
 import { $lyricsContainerExists, $minimalLyricsMode } from "../stores.ts";
 import {
+  $chineseTones,
   $chineseTranslitMode,
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
@@ -360,6 +361,11 @@ export const setChineseTranslitMode = (val: ChineseTranslitMode) => {
   chineseTranslitMode = val;
   $chineseTranslitMode.set(val);
 };
+
+export let chineseTones = $chineseTones.get();
+$chineseTones.listen((val) => {
+  chineseTones = val;
+});
 
 export type KoreanRomanizationMode = "spelling" | "pronunciation";
 export let koreanRomanizationMode: KoreanRomanizationMode = $koreanRomanizationMode.get();

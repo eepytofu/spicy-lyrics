@@ -5,7 +5,7 @@ import { RetrievePackage } from "../ImportPackage.ts";
 import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
 import { PageContainer } from "../../components/Pages/PageView.ts";
 import Logger from "../Logger.ts";
-import { chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanRomanizationMode } from "./lyrics.ts";
+import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanRomanizationMode } from "./lyrics.ts";
 import {
   ChineseTextTest,
   JapaneseTextTest,
@@ -14,7 +14,7 @@ import {
   GreekTextTest,
   isCyrillicLanguage,
 } from "./Fork/index.ts";
-import { buildRomajiFromTokens, romanizeCantonese, romanizeCyrillic, romanizeKorean } from "./Fork/Romanization.ts";
+import { buildRomajiFromTokens, pinyinOptionsForToneMode, romanizeCantonese, romanizeCyrillic, romanizeKorean } from "./Fork/Romanization.ts";
 import {
   annotateJapaneseTextTarget,
   applyJapaneseReadingToSyllables,
@@ -24,7 +24,7 @@ import {
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 
 export { clearTranslationCache };
-export const LYRICS_PROCESSING_VERSION = 5;
+export const LYRICS_PROCESSING_VERSION = 6;
 
 // Constants
 const RomajiConverter = new Kuroshiro();
@@ -103,10 +103,10 @@ const romanizeChineseText = async (
   primaryLanguage: string
 ): Promise<string> => {
   if (chineseTranslitMode === "jyutping") {
-    return (await romanizeCantonese(text, primaryLanguage, true)) ?? text;
+    return (await romanizeCantonese(text, primaryLanguage, true, chineseTones)) ?? text;
   }
   if (!pinyin) return text;
-  const result = pinyin.pinyin(text, { segment: false, group: true });
+  const result = pinyin.pinyin(text, pinyinOptionsForToneMode(pinyin, chineseTones));
   return result.join(" ");
 };
 

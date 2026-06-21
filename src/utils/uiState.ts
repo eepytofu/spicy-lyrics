@@ -61,6 +61,7 @@ export const $nowBarSide = persistAtom<"left" | "right">("nowBarSide", "left");
 export const $forceCompactMode = persistAtom<boolean>("forceCompactMode", false);
 export const $romanization = persistAtom<boolean>("romanization", false);
 export const $chineseTranslitMode = persistAtom<"pinyin" | "jyutping">("chineseTranslitMode", "pinyin");
+export const $chineseTones = persistAtom<boolean>("chineseTones", false);
 export const $japaneseReadingMode = persistAtom<"romaji" | "furigana" | "both">("japaneseReadingMode", "romaji");
 export const $koreanRomanizationMode = persistAtom<"spelling" | "pronunciation">("koreanRomanizationMode", "spelling");
 export const $cyrillicRomanizationMode = persistAtom<"Russian" | "Ukrainian">("cyrillicRomanizationMode", "Russian");
