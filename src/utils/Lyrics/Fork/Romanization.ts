@@ -128,7 +128,11 @@ export function stripJyutpingTones(text: string): string {
 }
 
 export function pinyinOptionsForToneMode(pinyin: any, tones: boolean): Record<string, any> {
-  const options: Record<string, any> = { segment: false, group: true };
+  // segment:true resolves polyphones via the package's word segmentation
+  // (音乐→yuè, 银行→háng, 一切→qiè); group:false keeps one syllable per Han
+  // char so karaoke syllable alignment survives. Verified against the CDN
+  // artifact pkgs.spikerko.org/pinyin/pinyin@4.0.0.mjs (2026-07-06).
+  const options: Record<string, any> = { segment: true, group: false };
   const style = tones ? pinyin?.STYLE_TONE : pinyin?.STYLE_NORMAL;
   if (style !== undefined) options.style = style;
   return options;
