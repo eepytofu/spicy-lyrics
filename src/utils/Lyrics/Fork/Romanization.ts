@@ -64,9 +64,13 @@ const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.leng
 
 // ─── Cantonese (Jyutping) ─────────────────────────────────────────────────────
 
+function isChineseHanChar(char: string): boolean {
+  return ChineseTextTest.test(char);
+}
+
 /**
  * Romanize Chinese text using Cantonese Jyutping.
- * Uses the to-jyutping library for character-by-character conversion.
+ * Uses phrase overrides before falling back to to-jyutping for Han characters.
  */
 export async function romanizeCantonese(
   text: string,
@@ -88,6 +92,21 @@ export async function romanizeCantonese(
     }
 
     const char = Array.from(text.slice(index))[0];
+    if (!isChineseHanChar(char)) {
+      let end = index + char.length;
+      while (end < text.length) {
+        const nextPhrase = JYUTPING_PHRASE_KEYS.some((key) => text.startsWith(key, end));
+        const nextChar = Array.from(text.slice(end))[0];
+        if (nextPhrase || isChineseHanChar(nextChar)) break;
+        end += nextChar.length;
+      }
+
+      const span = text.slice(index, end).trim();
+      if (span) parts.push(span);
+      index = end;
+      continue;
+    }
+
     const list = getJyutpingList(char);
     const reading = list?.[0]?.[1] || char;
     if (reading.trim()) parts.push(reading);

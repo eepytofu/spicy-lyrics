@@ -76,3 +76,33 @@ test("Cyrillic corpus", () => {
   assert.equal(romanizeCyrillic("день", "Russian", true), "denʹ");
   assert.equal(romanizeCyrillic("объект", "Russian", true), "obʺyekt");
 });
+
+// Real-song Cantonese corpus: G.E.M. - Where Did U Go (traditional script, mixed English).
+// See SpotifyPlus-mobilelyrics/docs/ROMANIZATION_REAL_CORPUS.md for the full categorized corpus.
+test("Cantonese real-line corpus (Han-only lines)", async () => {
+  assert.equal(await romanizeCantonese("難 藏 淚 印", "yue", true, true), "naan4 cong4 leoi6 jan3");
+  assert.equal(
+    await romanizeCantonese("這秒鐘 很掛牽 你 卻 不 可 感 覺 到", "yue", true, true),
+    "ze5 miu5 zung1 han2 gwaa3 hin1 nei5 koek3 bat1 ho2 gam2 gok3 dou3"
+  );
+  // Pre-spaced source characters must not double-space the output.
+  assert.equal(
+    await romanizeCantonese("曾看著 同 星 空 閒 聊 吹 風", "yue", true, true),
+    "cang4 hon3 zoek6 tung4 sing1 hung1 haan4 liu4 ceoi1 fung1"
+  );
+});
+
+test("Cantonese mixed Latin lines keep English words intact", async () => {
+  assert.equal(
+    await romanizeCantonese("Where did you go 數數 多久 不 碰 到", "yue", true, true),
+    "Where did you go sou3 sou3 do1 gau2 bat1 pung3 dou3"
+  );
+  assert.equal(
+    await romanizeCantonese("Whoa, whoa 我在每 夜 徹 夜 狂 想", "yue", true, true),
+    "Whoa, whoa ngo5 zoi6 mui5 je6 cit3 je6 kwong4 soeng2"
+  );
+});
+
+test("Cantonese polyphone gaps", { todo: "aspect-marker 著 should be zyu6, verb 數 should be sou2; needs phrase entries" }, async () => {
+  assert.equal(await romanizeCantonese("看著電話中短訊", "yue", true, true), "hon3 zyu6 din6 waa6 zung1 dyun2 seon3");
+});
