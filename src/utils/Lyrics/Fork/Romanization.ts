@@ -150,6 +150,30 @@ function ukrainianLetter(char: string): string | undefined {
   }
 }
 
+function centralAsianCyrillicLetter(char: string): string | undefined {
+  switch (char) {
+    case "ң": return "ng";
+    case "Ң": return "Ng";
+    case "ө": return "o";
+    case "Ө": return "O";
+    case "ү": return "u";
+    case "Ү": return "U";
+    case "ә": return "a";
+    case "Ә": return "A";
+    case "ғ": return "gh";
+    case "Ғ": return "Gh";
+    case "қ": return "q";
+    case "Қ": return "Q";
+    case "ұ": return "u";
+    case "Ұ": return "U";
+    case "һ": return "h";
+    case "Һ": return "H";
+    case "ѳ": return "f";
+    case "Ѳ": return "F";
+    default: return undefined;
+  }
+}
+
 function isCyrillicSource(char: string): boolean {
   const cp = char.codePointAt(0) ?? 0;
   return (cp >= 0x0400 && cp <= 0x04FF) || (cp >= 0x0500 && cp <= 0x052F);
@@ -174,6 +198,9 @@ function normalizeCyrillicAscii(value: string): string {
 function mapCyrillic(char: string, prevCyrillic: string | null, mode: CyrillicMode, keepSigns: boolean): string {
   if (char === "ъ" || char === "Ъ") return keepSigns ? "ʺ" : "";
   if (char === "ь" || char === "Ь") return keepSigns ? "ʹ" : "";
+
+  const centralAsianMapped = centralAsianCyrillicLetter(char);
+  if (centralAsianMapped) return centralAsianMapped;
 
   if (mode === "Ukrainian") {
     const mapped = ukrainianLetter(char);

@@ -77,6 +77,14 @@ test("Cyrillic corpus", () => {
   assert.equal(romanizeCyrillic("объект", "Russian", true), "obʺyekt");
 });
 
+test("Central-Asian Cyrillic letters (Kyrgyz/Kazakh)", () => {
+  assert.equal(romanizeCyrillic("Алдадыңбы"), "Aldadyngby");
+  assert.equal(romanizeCyrillic("Чалбадыңбы"), "Chalbadyngby");
+  assert.equal(romanizeCyrillic("Калбадыңбы жанымда"), "Kalbadyngby zhanymda");
+  assert.equal(romanizeCyrillic("көңүл"), "kongul");
+  assert.equal(romanizeCyrillic("Өмүр"), "Omur");
+});
+
 // Real-song Cantonese corpus: G.E.M. - Where Did U Go (traditional script, mixed English).
 // See SpotifyPlus-mobilelyrics/docs/ROMANIZATION_REAL_CORPUS.md for the full categorized corpus.
 test("Cantonese real-line corpus (Han-only lines)", async () => {
