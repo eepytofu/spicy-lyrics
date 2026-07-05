@@ -11,6 +11,7 @@
 import { franc } from "franc-all";
 import langs from "langs";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
+import { romanizeCyrillic, romanizeKorean } from "./Romanization.ts";
 import {
   BengaliTextTest,
   DevanagariTextTest,
@@ -109,6 +110,72 @@ function extractGoogleTranslation(data: any): string {
     }
   }
   return translated.trim();
+}
+
+export function normalizeCompare(value: string | undefined | null): string {
+  if (!value) return "";
+  return value
+    .normalize("NFKC")
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLocaleLowerCase()
+    .replace(/ң/g, "n")
+    .replace(/ŋ/g, "n")
+    .replace(/[‘’]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sameComparableText(left: string | undefined | null, right: string | undefined | null): boolean {
+  return normalizeCompare(left) === normalizeCompare(right);
+}
+
+function foldCentralAsianToRussianBase(value: string): string {
+  return value
+    .replace(/ң/g, "н").replace(/Ң/g, "Н")
+    .replace(/ө/g, "о").replace(/Ө/g, "О")
+    .replace(/ү/g, "у").replace(/Ү/g, "У")
+    .replace(/ә/g, "а").replace(/Ә/g, "А")
+    .replace(/ғ/g, "г").replace(/Ғ/g, "Г")
+    .replace(/қ/g, "к").replace(/Қ/g, "К")
+    .replace(/ұ/g, "у").replace(/Ұ/g, "У")
+    .replace(/һ/g, "х").replace(/Һ/g, "Х");
+}
+
+export function romanizationCandidates(source: string): string[] {
+  const out: string[] = [];
+  if (SCRIPT_TESTS.cyrillic.test(source)) {
+    out.push(romanizeCyrillic(source, "Russian", false));
+    out.push(romanizeCyrillic(source, "Ukrainian", false));
+    const folded = foldCentralAsianToRussianBase(source);
+    if (folded !== source) out.push(romanizeCyrillic(folded, "Russian", false));
+  }
+  if (SCRIPT_TESTS.hangul.test(source)) {
+    out.push(romanizeKorean(source, "spelling"));
+    out.push(romanizeKorean(source, "pronunciation"));
+  }
+  // Chinese/Japanese romanizers are async/lazy-loaded on desktop; skip those
+  // candidates here so echo filtering stays synchronous in translation flow.
+  return out;
+}
+
+export function looksLikeRomanizationEcho(source: string, translated: string): boolean {
+  if (!source.trim() || !translated.trim()) return false;
+  const output = normalizeCompare(translated);
+  if (!output) return false;
+  return romanizationCandidates(source).some((candidate) =>
+    candidate.trim() && output === normalizeCompare(candidate)
+  );
+}
+
+export function shouldDisplayTranslation(source: string, translated: string): boolean {
+  return !!translated.trim()
+    && !sameComparableText(source, translated)
+    && !looksLikeRomanizationEcho(source, translated);
 }
 
 function batchMarker(index: number): string {
@@ -247,6 +314,11 @@ function lineLooksNonTargetLatin(text: string, targetLang: string): boolean {
   return !!detectedISO2 && detectedISO2 !== targetLang;
 }
 
+function looksLikeLatinLyricLine(text: string): boolean {
+  const compact = text.replace(/[^\p{L}\s']/gu, " ").replace(/\s+/g, " ").trim();
+  return compact.length >= 12 && compact.includes(" ");
+}
+
 export function shouldTranslateLine(text: string, sourceLang: string, targetLang: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || trimmed === "♪") return false;
@@ -256,6 +328,7 @@ export function shouldTranslateLine(text: string, sourceLang: string, targetLang
 
   if (!sourceMatchesTarget) return true;
   if (hasObviousNonTargetScript(trimmed, targetLang)) return true;
+  if (targetLang.toLowerCase() === "en" && looksLikeLatinLyricLine(trimmed)) return true;
   return lineLooksNonTargetLatin(trimmed, targetLang);
 }
 
@@ -300,7 +373,14 @@ export async function batchTranslate(
     }
     const key = translationCacheKey(text, targetLang);
     if (cache[key]) {
-      results[i] = cache[key];
+      if (shouldDisplayTranslation(text, cache[key])) {
+        results[i] = cache[key];
+      } else {
+        delete cache[key];
+        _cacheCount = Math.max(0, _cacheCount - 1);
+        uncachedIndices.push(i);
+        uncachedTexts.push(text);
+      }
     } else {
       uncachedIndices.push(i);
       uncachedTexts.push(text);
@@ -328,11 +408,15 @@ export async function batchTranslate(
 
       for (let j = 0; j < chunkIndices.length; j++) {
         const idx = chunkIndices[j];
+        const originalText = lines[idx].trim();
         const translated = stripMarkerEcho(translatedLines.get(j) || "", j);
+        if (!shouldDisplayTranslation(originalText, translated)) {
+          results[idx] = "";
+          continue;
+        }
         results[idx] = translated;
         // Cache the result
-        const originalText = lines[idx].trim();
-        if (translated && originalText) {
+        if (originalText) {
           const key = translationCacheKey(originalText, targetLang);
           if (!cache[key]) {
             _cacheCount++;
@@ -354,7 +438,7 @@ export async function batchTranslate(
       try {
         const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(slCode)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(originalText)}`;
         const translated = await requestGoogleTranslation(url);
-        if (translated) {
+        if (shouldDisplayTranslation(originalText, translated)) {
           results[idx] = translated;
           const key = translationCacheKey(originalText, targetLang);
           if (!cache[key]) _cacheCount++;

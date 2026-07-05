@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  batchTranslate,
   buildBatchChunks,
   buildBatchQuery,
+  looksLikeRomanizationEcho,
   parseBatchTranslation,
+  shouldTranslateLine,
   stripMarkerEcho,
   TRANSLATION_BATCH_MAX_CHARS,
   TRANSLATION_BATCH_MAX_LINES,
@@ -41,4 +44,40 @@ test("batch chunking respects line and character limits", () => {
 test("marker echoes are stripped from parsed output", () => {
   assert.equal(stripMarkerEcho("[[SPX_003]] translated line", 3), "translated line");
   assert.equal(stripMarkerEcho("translated [[ spx _ 0 0 3 ]] line", 3), "translated  line");
+});
+
+test("translation guard rejects Cyrillic romanization echoes", () => {
+  assert.equal(looksLikeRomanizationEcho("Алдадыңбы,", "Aldadynby,"), true);
+  assert.equal(looksLikeRomanizationEcho("Алдадыңбы,", "did you cheat"), false);
+});
+
+test("translation guard rejects Korean romanization echoes", () => {
+  assert.equal(looksLikeRomanizationEcho("사랑", "sarang"), true);
+});
+
+test("English target translates short Latin lyric-looking lines", () => {
+  assert.equal(shouldTranslateLine("Apna bana le piya", "eng", "en"), true);
+  assert.equal(shouldTranslateLine("yeah", "eng", "en"), false);
+});
+
+test("batch translation retries romanization echoes once individually", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (url: URL | RequestInfo) => {
+    requests.push(String(url));
+    const translated = requests.length === 1
+      ? "[[SPX_000]] Aldadynby,"
+      : "did you cheat";
+    return {
+      ok: true,
+      json: async () => [[[translated]]],
+    } as Response;
+  };
+
+  try {
+    assert.deepEqual(await batchTranslate(["Алдадыңбы,"], "und", "en"), ["did you cheat"]);
+    assert.equal(requests.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
