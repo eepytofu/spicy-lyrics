@@ -256,6 +256,18 @@ const HANGUL_INITIAL = ["g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss
 const HANGUL_VOWEL = ["a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i"];
 const HANGUL_FINAL = ["", "k", "k", "ks", "n", "nj", "nh", "t", "l", "lk", "lm", "lb", "ls", "lt", "lp", "lh", "m", "p", "ps", "t", "t", "ng", "t", "t", "k", "t", "p", "t"];
 
+const KOREAN_READABILITY_MIN_RUN_LENGTH = 4;
+const KOREAN_FIXED_PHRASES = [
+  ["안녕하세요", "안녕", "하세요"],
+  ["안녕하십니까", "안녕", "하십니까"],
+  ["감사합니다", "감사", "합니다"],
+] as const;
+const KOREAN_SPLIT_SUFFIXES = [
+  "싶어요", "싶어", "싶다", "싶은", "싶고",
+  "합니다", "하세요", "하십니까", "해요", "해서", "하고", "하면", "하니", "하지", "하죠", "하는", "하게", "하자",
+  "거예요", "거에요", "거야", "거죠",
+] as const;
+
 const ONSET = HANGUL_INITIAL;
 const VOWEL = HANGUL_VOWEL;
 const CODA_ROMAN: Record<number, string> = { 0: "", 1: "k", 4: "n", 7: "t", 8: "l", 16: "m", 17: "p", 21: "ng" };
@@ -293,6 +305,62 @@ function decomposeHangul(char: string): HangulSyllable | null {
   if (cp < 0xAC00 || cp > 0xD7A3) return null;
   const s = cp - 0xAC00;
   return [Math.floor(s / 588), Math.floor((s % 588) / 28), s % 28];
+}
+
+function isHangulSyllable(char: string): boolean {
+  return decomposeHangul(char) !== null;
+}
+
+function splitKoreanReadableRunInto(run: string, out: string[]): void {
+  if (!run) return;
+  for (const phrase of KOREAN_FIXED_PHRASES) {
+    if (run === phrase[0]) {
+      out.push(phrase[1], phrase[2]);
+      return;
+    }
+    if (run.startsWith(phrase[0]) && run.length > phrase[0].length) {
+      out.push(phrase[1], phrase[2]);
+      splitKoreanReadableRunInto(run.slice(phrase[0].length), out);
+      return;
+    }
+  }
+  for (const suffix of KOREAN_SPLIT_SUFFIXES) {
+    if (!run.endsWith(suffix)) continue;
+    const split = run.length - suffix.length;
+    if (split < 2) continue;
+    splitKoreanReadableRunInto(run.slice(0, split), out);
+    out.push(suffix);
+    return;
+  }
+  out.push(run);
+}
+
+function splitKoreanReadableRun(run: string): string[] {
+  if (run.length < KOREAN_READABILITY_MIN_RUN_LENGTH) return [run];
+  const out: string[] = [];
+  splitKoreanReadableRunInto(run, out);
+  return out;
+}
+
+function applyKoreanReadabilitySpacing(text: string): string {
+  let out = "";
+  let run = "";
+  const flush = () => {
+    if (!run) return;
+    out += splitKoreanReadableRun(run).join(" ");
+    run = "";
+  };
+
+  for (const char of text) {
+    if (isHangulSyllable(char)) {
+      run += char;
+    } else {
+      flush();
+      out += char;
+    }
+  }
+  flush();
+  return out;
 }
 
 function romanizeKoreanSpelling(text: string): string {
@@ -436,7 +504,8 @@ function romanizeKoreanPronunciation(text: string): string {
 }
 
 export function romanizeKorean(text: string, mode: KoreanMode = "spelling"): string {
-  return mode === "pronunciation" ? romanizeKoreanPronunciation(text) : romanizeKoreanSpelling(text);
+  const readable = applyKoreanReadabilitySpacing(text);
+  return mode === "pronunciation" ? romanizeKoreanPronunciation(readable) : romanizeKoreanSpelling(readable);
 }
 
 // ─── Japanese Romaji Fallback ─────────────────────────────────────────────────

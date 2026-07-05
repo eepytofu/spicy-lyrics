@@ -81,7 +81,7 @@ test("Korean spelling-mode corpus", () => {
   assert.equal(romanizeKorean("한국어", "spelling"), "hangukeo");
   assert.equal(romanizeKorean("학교", "spelling"), "hakgyo");
   assert.equal(romanizeKorean("백마", "spelling"), "baekma");
-  assert.equal(romanizeKorean("안녕하세요", "spelling"), "annyeonghaseyo");
+  assert.equal(romanizeKorean("안녕하세요", "spelling"), "annyeong haseyo");
   assert.equal(romanizeKorean("사랑", "spelling"), "sarang");
   assert.equal(romanizeKorean("BTS feat. IU", "spelling"), "BTS feat. IU");
 });
@@ -100,6 +100,13 @@ test("Korean pronunciation-mode corpus", () => {
   assert.equal(romanizeKorean("좋고", "pronunciation"), "joko");
   assert.equal(romanizeKorean("좋아", "pronunciation"), "joa");
   assert.equal(romanizeKorean("음악 rock", "pronunciation"), "eumak rock");
+});
+
+test("Korean readability spacing", () => {
+  assert.equal(romanizeKorean("안녕하세요", "spelling"), "annyeong haseyo");
+  assert.equal(romanizeKorean("안녕하세요", "pronunciation"), "annyeong haseyo");
+  assert.equal(romanizeKorean("텅 빈 말 더는 늘어놓지 말고", "spelling"), "teong bin mal deoneun neuleonotji malgo");
+  assert.equal(romanizeKorean("감사합니다", "spelling"), "gamsa hapnida");
 });
 
 test("Cyrillic corpus", () => {
