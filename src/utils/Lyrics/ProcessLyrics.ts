@@ -13,8 +13,14 @@ import {
   CyrillicTextTest,
   GreekTextTest,
   cleanInvisibles,
-  isCyrillicLanguage,
 } from "./Fork/index.ts";
+import {
+  romanizationBranchFromLanguage,
+  scriptBranchForLine,
+  SCRIPT_PRIORITY,
+  type RomanizationBranch,
+  type ScriptBranchDocContext,
+} from "./Fork/TextDetection.ts";
 import { buildRomajiFromTokens, pinyinOptionsForToneMode, romanizeCantonese, romanizeCyrillic, romanizeKorean } from "./Fork/Romanization.ts";
 import {
   annotateJapaneseTextTarget,
@@ -48,31 +54,9 @@ const ResidualScriptTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-�
 RetrievePackage("pinyin", "4.0.0", "mjs").catch(() => {});
 RetrievePackage("GreekRomanization", "1.0.0", "js").catch(() => {});
 
-type RomanizationBranch = "Japanese" | "Chinese" | "Korean" | "Cyrillic" | "Greek";
-
-const SCRIPT_PRIORITY: RomanizationBranch[] = [
-  "Japanese",
-  "Chinese",
-  "Korean",
-  "Cyrillic",
-  "Greek",
-];
-
 type RomanizationPackages = {
   pinyin?: any;
   greekRomanization?: any;
-};
-
-const romanizationBranchFromFranc = (
-  primaryLanguage: string,
-  iso2Language: string | undefined
-): RomanizationBranch | undefined => {
-  if (primaryLanguage === "jpn") return "Japanese";
-  if (primaryLanguage === "cmn" || primaryLanguage === "yue") return "Chinese";
-  if (primaryLanguage === "kor") return "Korean";
-  if (isCyrillicLanguage(primaryLanguage, iso2Language)) return "Cyrillic";
-  if (primaryLanguage === "ell") return "Greek";
-  return undefined;
 };
 
 const loadPackagesForScripts = async (
@@ -122,7 +106,7 @@ const romanizeGreekText = (text: string, greekRomanization: any): string => {
   return result != null ? result : text;
 };
 
-type RomanizeEntry = { target: any; line: any };
+type RomanizeEntry = { target: any; line: any; lineText: string };
 
 const normalizeLyricsText = (target: any): string => {
   if (typeof target?.Text !== "string") return "";
@@ -139,14 +123,16 @@ const gatherText = (
 
   if (lyrics.Type === "Static") {
     for (const line of lyrics.Lines) {
-      entries.push({ target: line, line });
-      textLines.push(normalizeLyricsText(line));
+      const lineText = normalizeLyricsText(line);
+      entries.push({ target: line, line, lineText });
+      textLines.push(lineText);
     }
   } else if (lyrics.Type === "Line") {
     for (const vocalGroup of lyrics.Content) {
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
-        entries.push({ target: vocalGroup, line: vocalGroup });
-        textLines.push(normalizeLyricsText(vocalGroup));
+        const lineText = normalizeLyricsText(vocalGroup);
+        entries.push({ target: vocalGroup, line: vocalGroup, lineText });
+        textLines.push(lineText);
       }
     }
   } else if (lyrics.Type === "Syllable") {
@@ -156,21 +142,29 @@ const gatherText = (
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
         let text = normalizeLyricsText(syllables[0]);
-        entries.push({ target: syllables[0], line: vocalGroup });
+        const lineEntries: RomanizeEntry[] = [{ target: syllables[0], line: vocalGroup, lineText: "" }];
         for (let index = 1; index < syllables.length; index += 1) {
           const syllable = syllables[index];
           text += `${syllable.IsPartOfWord ? "" : " "}${normalizeLyricsText(syllable)}`;
-          entries.push({ target: syllable, line: vocalGroup });
+          lineEntries.push({ target: syllable, line: vocalGroup, lineText: "" });
         }
+        for (const entry of lineEntries) entry.lineText = text;
+        entries.push(...lineEntries);
         textLines.push(text);
       }
 
       if (vocalGroup.Background !== undefined) {
         for (const bg of vocalGroup.Background) {
+          const bgEntries: RomanizeEntry[] = [];
+          const bgText: string[] = [];
           for (const syllable of bg.Syllables) {
-            entries.push({ target: syllable, line: vocalGroup });
-            bgTextLines.push(normalizeLyricsText(syllable));
+            bgText.push(normalizeLyricsText(syllable));
+            bgEntries.push({ target: syllable, line: vocalGroup, lineText: "" });
           }
+          const lineText = bgText.join(" ");
+          for (const entry of bgEntries) entry.lineText = lineText;
+          entries.push(...bgEntries);
+          bgTextLines.push(lineText);
         }
       }
     }
@@ -197,7 +191,7 @@ const detectPresentScripts = (
   if (CyrillicTextTest.test(scriptText)) present.add("Cyrillic");
   if (GreekTextTest.test(scriptText)) present.add("Greek");
 
-  const hint = romanizationBranchFromFranc(language, iso2Language);
+  const hint = romanizationBranchFromLanguage(language, iso2Language);
   if (hint && !present.has(hint)) {
     if (hint === "Japanese" || hint === "Chinese") {
       if (!present.has("Japanese") && !present.has("Chinese")) present.add(hint);
@@ -251,18 +245,18 @@ const joinSyllables = (syllables: any[], compact = false): string => {
 
 const romanizeLineText = async (
   text: string,
-  presentScripts: RomanizationBranch[],
+  docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
   language: string
 ): Promise<string | undefined> => {
-  const entry: RomanizeEntry = { target: { Text: text }, line: {} };
-  const changed = await romanizeEntry(entry, presentScripts, packages, language, false);
+  const entry: RomanizeEntry = { target: { Text: text }, line: {}, lineText: text };
+  const changed = await romanizeEntry(entry, docContext, packages, language, false);
   return changed ? entry.target.TransliteratedText : undefined;
 };
 
 const postProcessSyllableRomanization = async (
   lyrics: any,
-  presentScripts: RomanizationBranch[],
+  docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
   language: string
 ) => {
@@ -288,7 +282,7 @@ const postProcessSyllableRomanization = async (
       if (!Array.isArray(syllables) || syllables.length === 0) return;
 
       const lineText = joinSyllables(syllables, isJapaneseSong);
-      const fullRomaji = await romanizeLineText(lineText, presentScripts, packages, language);
+      const fullRomaji = await romanizeLineText(lineText, docContext, packages, language);
       if (!fullRomaji) return;
 
       group.TransliteratedText = fullRomaji;
@@ -332,7 +326,7 @@ const postProcessSyllableRomanization = async (
 
 const romanizeEntry = async (
   entry: RomanizeEntry,
-  presentScripts: RomanizationBranch[],
+  docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
   primaryLanguage: string,
   annotateJapanese: boolean = true
@@ -340,9 +334,10 @@ const romanizeEntry = async (
   const { target, line } = entry;
 
   if (target.Text) target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
+  const lineScripts = scriptBranchForLine(entry.lineText || target.Text || "", docContext);
 
   if (hasTransliteration(target)) {
-    if (annotateJapanese && ItemJapaneseTest.test(target.Text || "")) {
+    if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
       // Provider romaji can leak Chinese readings for kanji or mishandle particles.
       // If provider furigana is kept, derive romaji from that same ruby so the
       // visible readings cannot disagree.
@@ -370,7 +365,7 @@ const romanizeEntry = async (
   let text: string = target.Text;
   let changed = false;
 
-  for (const script of presentScripts) {
+  for (const script of lineScripts) {
     if (script === "Japanese") {
       if (ItemJapaneseTest.test(text)) {
         text = await romanizeJapaneseText(text);
@@ -431,24 +426,33 @@ export const ProcessLyrics = async (
   lyrics.LanguageISO2 = languageISO2;
 
   const presentScripts = detectPresentScripts(scriptText, language, languageISO2);
+  const docContext: ScriptBranchDocContext = {
+    presentScripts,
+    primaryLanguage: language,
+    iso2Language: languageISO2,
+  };
 
   let appliedRomanization = false;
   let packages: RomanizationPackages = {};
   const needsRomanizationOrJapaneseReading = entries.some((entry) =>
     !hasTransliteration(entry.target) ||
-    (presentScripts.includes("Japanese") && ItemJapaneseTest.test(entry.target.Text || "") && !entry.target.JapaneseReading)
+    (
+      scriptBranchForLine(entry.lineText, docContext).includes("Japanese") &&
+      ItemJapaneseTest.test(entry.target.Text || "") &&
+      !entry.target.JapaneseReading
+    )
   );
   if (presentScripts.length > 0 && needsRomanizationOrJapaneseReading) {
     packages = await loadPackagesForScripts(presentScripts);
     const results = await Promise.all(
-      entries.map((entry) => romanizeEntry(entry, presentScripts, packages, language, lyrics.Type !== "Syllable"))
+      entries.map((entry) => romanizeEntry(entry, docContext, packages, language, lyrics.Type !== "Syllable"))
     );
     appliedRomanization = results.some(Boolean);
   }
 
   if (presentScripts.length > 0) {
     if (Object.keys(packages).length === 0) packages = await loadPackagesForScripts(presentScripts);
-    await postProcessSyllableRomanization(lyrics, presentScripts, packages, language);
+    await postProcessSyllableRomanization(lyrics, docContext, packages, language);
   }
 
   const hasAnyTransliteration = lyricsHaveAnyTransliteration(lyrics);

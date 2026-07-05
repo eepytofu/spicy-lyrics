@@ -7,13 +7,48 @@ import {
   romanizeKorean,
   stripJyutpingTones,
 } from "../src/utils/Lyrics/Fork/Romanization.ts";
-import { cleanInvisibles } from "../src/utils/Lyrics/Fork/TextDetection.ts";
+import { cleanInvisibles, scriptBranchForLine } from "../src/utils/Lyrics/Fork/TextDetection.ts";
 
 test("invisible lyric markers are cleaned before processing", () => {
   assert.equal(cleanInvisibles("This \u200Bis \u200Ba test"), "This is a test");
   assert.equal(cleanInvisibles("tell \u200Bme"), "tell me");
   assert.equal(cleanInvisibles("\uFEFFhello\u00A0world"), "hello world");
   assert.equal(cleanInvisibles("\u0915\u094D\u200D\u0937"), "\u0915\u094D\u200D\u0937");
+});
+
+test("romanization branch selection is line-scoped", () => {
+  assert.deepEqual(
+    scriptBranchForLine("Алдадыңбы", {
+      presentScripts: ["Cyrillic"],
+      primaryLanguage: "eng",
+      iso2Language: "en",
+    }),
+    ["Cyrillic"]
+  );
+  assert.deepEqual(
+    scriptBranchForLine("Let's go!", {
+      presentScripts: ["Japanese"],
+      primaryLanguage: "jpn",
+      iso2Language: "ja",
+    }),
+    []
+  );
+  assert.deepEqual(
+    scriptBranchForLine("全宇宙全世界", {
+      presentScripts: ["Japanese"],
+      primaryLanguage: "jpn",
+      iso2Language: "ja",
+    }),
+    ["Japanese"]
+  );
+  assert.deepEqual(
+    scriptBranchForLine("텅 빈 말 더는 늘어놓지 말고", {
+      presentScripts: ["Korean"],
+      primaryLanguage: "kor",
+      iso2Language: "ko",
+    }),
+    ["Korean"]
+  );
 });
 
 test("Cantonese Jyutping phrase corpus", async () => {

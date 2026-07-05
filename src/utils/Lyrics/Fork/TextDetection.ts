@@ -41,6 +41,16 @@ export function cleanInvisibles(text: string): string {
  */
 export type ScriptType = "japanese" | "chinese" | "korean" | "cyrillic" | "greek" | "latin" | "unknown";
 
+export type RomanizationBranch = "Japanese" | "Chinese" | "Korean" | "Cyrillic" | "Greek";
+
+export const SCRIPT_PRIORITY: RomanizationBranch[] = [
+  "Japanese",
+  "Chinese",
+  "Korean",
+  "Cyrillic",
+  "Greek",
+];
+
 export function detectScript(text: string): ScriptType {
   if (JapaneseTextTest.test(text)) return "japanese";
   if (ChineseTextTest.test(text)) return "chinese";
@@ -103,4 +113,54 @@ export function isCyrillicLanguage(iso3: string, iso2?: string): boolean {
     (CYRILLIC_LANGUAGES as readonly string[]).includes(iso3) ||
     (iso2 !== undefined && (CYRILLIC_LANGUAGES_ISO2 as readonly string[]).includes(iso2))
   );
+}
+
+export function romanizationBranchFromLanguage(
+  primaryLanguage: string,
+  iso2Language?: string
+): RomanizationBranch | undefined {
+  if (primaryLanguage === "jpn") return "Japanese";
+  if (primaryLanguage === "cmn" || primaryLanguage === "yue") return "Chinese";
+  if (primaryLanguage === "kor") return "Korean";
+  if (isCyrillicLanguage(primaryLanguage, iso2Language)) return "Cyrillic";
+  if (primaryLanguage === "ell") return "Greek";
+  return undefined;
+}
+
+export type ScriptBranchDocContext = {
+  presentScripts: readonly RomanizationBranch[];
+  primaryLanguage: string;
+  iso2Language?: string;
+};
+
+const hanBranchForLine = (docContext: ScriptBranchDocContext): RomanizationBranch => {
+  const hasDocJapanese = docContext.presentScripts.includes("Japanese");
+  const hasDocChinese = docContext.presentScripts.includes("Chinese");
+
+  if (hasDocJapanese && !hasDocChinese) return "Japanese";
+  if (hasDocChinese && !hasDocJapanese) return "Chinese";
+
+  const languageBranch = romanizationBranchFromLanguage(docContext.primaryLanguage, docContext.iso2Language);
+  if (languageBranch === "Japanese" || languageBranch === "Chinese") return languageBranch;
+
+  return hasDocJapanese ? "Japanese" : "Chinese";
+};
+
+export function scriptBranchForLine(
+  lineText: string,
+  docContext: ScriptBranchDocContext
+): RomanizationBranch[] {
+  const text = cleanInvisibles(lineText.normalize("NFKC"));
+  const present = new Set<RomanizationBranch>();
+
+  if (JapaneseTextTest.test(text)) {
+    present.add("Japanese");
+  } else if (ChineseTextTest.test(text)) {
+    present.add(hanBranchForLine(docContext));
+  }
+  if (KoreanTextTest.test(text)) present.add("Korean");
+  if (CyrillicTextTest.test(text)) present.add("Cyrillic");
+  if (GreekTextTest.test(text)) present.add("Greek");
+
+  return SCRIPT_PRIORITY.filter((script) => present.has(script));
 }
