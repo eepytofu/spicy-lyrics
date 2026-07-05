@@ -9,6 +9,24 @@ import {
 } from "../src/utils/Lyrics/Fork/Romanization.ts";
 import { cleanInvisibles, scriptBranchForLine } from "../src/utils/Lyrics/Fork/TextDetection.ts";
 
+const japaneseSongContext = {
+  presentScripts: ["Japanese"] as const,
+  primaryLanguage: "jpn",
+  iso2Language: "ja",
+};
+
+const chineseSongContext = {
+  presentScripts: ["Chinese"] as const,
+  primaryLanguage: "zho",
+  iso2Language: "zh",
+};
+
+const koreanSongContext = {
+  presentScripts: ["Korean"] as const,
+  primaryLanguage: "kor",
+  iso2Language: "ko",
+};
+
 test("invisible lyric markers are cleaned before processing", () => {
   assert.equal(cleanInvisibles("This \u200Bis \u200Ba test"), "This is a test");
   assert.equal(cleanInvisibles("tell \u200Bme"), "tell me");
@@ -49,6 +67,18 @@ test("romanization branch selection is line-scoped", () => {
     }),
     ["Korean"]
   );
+});
+
+test("real mixed and glued lyric lines select per-line romanization branches", () => {
+  assert.deepEqual(scriptBranchForLine("だんだん剥がれてく Fake のゴールドメッキ", japaneseSongContext), ["Japanese"]);
+  assert.deepEqual(scriptBranchForLine("说不出的sorry", chineseSongContext), ["Chinese"]);
+  assert.deepEqual(scriptBranchForLine("Tonight 이제 너를 놓아줄게", koreanSongContext), ["Korean"]);
+});
+
+test("Latin apostrophe and vocable lines do not select a romanization branch", () => {
+  assert.deepEqual(scriptBranchForLine("It's fxxking hard to say it, goodbye", japaneseSongContext), []);
+  assert.deepEqual(scriptBranchForLine("Hoo, ah, ah", chineseSongContext), []);
+  assert.deepEqual(scriptBranchForLine("Whoa, whoa 我在每 夜 徹 夜 狂 想", chineseSongContext), ["Chinese"]);
 });
 
 test("Cantonese Jyutping phrase corpus", async () => {
@@ -109,6 +139,15 @@ test("Korean readability spacing", () => {
   assert.equal(romanizeKorean("감사합니다", "spelling"), "gamsa hapnida");
 });
 
+test("Korean real-line corpus", () => {
+  assert.equal(romanizeKorean("더 이상 기댈 곳은 필요 없어", "spelling"), "deo isang gidael goteun pilyo eopseo");
+  assert.equal(romanizeKorean("더 이상 기댈 곳은 필요 없어", "pronunciation"), "deo isang gidael goseun piryo eopseo");
+
+  const repeated = "Had enough? Had enough? Oh";
+  assert.equal(romanizeKorean(repeated, "spelling"), "Had enough? Had enough? Oh");
+  assert.equal(romanizeKorean(repeated, "spelling"), romanizeKorean(repeated, "spelling"));
+});
+
 test("Cyrillic corpus", () => {
   assert.equal(romanizeCyrillic("Елена"), "Yelena");
   assert.equal(romanizeCyrillic("Достоевский"), "Dostoyevskiy");
@@ -125,6 +164,21 @@ test("Cyrillic corpus", () => {
   assert.equal(romanizeCyrillic("день", "Russian", false), "den");
   assert.equal(romanizeCyrillic("день", "Russian", true), "denʹ");
   assert.equal(romanizeCyrillic("объект", "Russian", true), "obʺyekt");
+});
+
+test("Cyrillic real-line corpus", () => {
+  assert.equal(
+    romanizeCyrillic("Я помню каждый миг, что было когда-то между нами,"),
+    "Ya pomnyu kazhdyy mig, chto bylo kogda-to mezhdu nami,"
+  );
+  assert.equal(romanizeCyrillic("Ты, ты, ты, ты, ты, ты, ты, ты —"), "Ty, ty, ty, ty, ty, ty, ty, ty —");
+  assert.equal(
+    romanizeCyrillic("Ты, ты, ты, ты, ты, ты, ты, ты —"),
+    romanizeCyrillic("Ты, ты, ты, ты, ты, ты, ты, ты —")
+  );
+  assert.equal(romanizeCyrillic("упрёков"), "upryokov");
+  assert.equal(romanizeCyrillic("Чёрно-белый"), "Chyorno-belyy");
+  assert.equal(romanizeCyrillic("Знаю — временно,"), "Znayu — vremenno,");
 });
 
 test("Central-Asian Cyrillic letters (Kyrgyz/Kazakh)", () => {
@@ -159,6 +213,10 @@ test("Cantonese mixed Latin lines keep English words intact", async () => {
     await romanizeCantonese("Whoa, whoa 我在每 夜 徹 夜 狂 想", "yue", true, true),
     "Whoa, whoa ngo5 zoi6 mui5 je6 cit3 je6 kwong4 soeng2"
   );
+});
+
+test("Cantonese fullwidth punctuation real-line corpus", async () => {
+  assert.equal(await romanizeCantonese("這秒鐘、很掛牽", "yue", true, true), "ze5 miu5 zung1 、 han2 gwaa3 hin1");
 });
 
 test("Cantonese polyphone gaps", async () => {
