@@ -10,7 +10,6 @@
 
 import { franc } from "franc-all";
 import langs from "langs";
-import { translationEnabled, translationTargetLang } from "../lyrics.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
 
 // ─── Cache Configuration ──────────────────────────────────────────────────────
@@ -19,6 +18,9 @@ const TRANSLATION_CACHE_KEY = "spicy-lyrics:translationCache";
 const TRANSLATION_CACHE_MAX_ENTRIES = 5000;
 const GOOGLE_INITIAL_BACKOFF_MS = 900;
 const GOOGLE_MAX_BACKOFF_MS = 8000;
+export const TRANSLATION_BATCH_MAX_LINES = 100;
+export const TRANSLATION_BATCH_MAX_CHARS = 4500;
+export const BATCH_MARKER_PATTERN = /\[\[\s*SPX\s*_\s*(\d\s*\d\s*\d)\s*\]\]/gi;
 
 // In-memory mirror – loaded once from localStorage
 let _translationCache: Record<string, string> | null = null;
@@ -102,6 +104,72 @@ function extractGoogleTranslation(data: any): string {
     }
   }
   return translated.trim();
+}
+
+function batchMarker(index: number): string {
+  return `[[SPX_${String(index).padStart(3, "0")}]]`;
+}
+
+export function buildBatchQuery(lines: string[]): string {
+  return lines.map((line, index) => `${batchMarker(index)} ${line}`).join("\n");
+}
+
+export function buildBatchChunks(lines: string[]): Array<{ start: number; lines: string[]; query: string }> {
+  const chunks: Array<{ start: number; lines: string[]; query: string }> = [];
+  let current: string[] = [];
+  let currentStart = 0;
+  let currentChars = 0;
+
+  for (let index = 0; index < lines.length; index++) {
+    const lineChars = lines[index].length + 14;
+    if (
+      current.length > 0
+      && (current.length >= TRANSLATION_BATCH_MAX_LINES
+        || currentChars + lineChars > TRANSLATION_BATCH_MAX_CHARS)
+    ) {
+      chunks.push({ start: currentStart, lines: current, query: buildBatchQuery(current) });
+      current = [];
+      currentStart = index;
+      currentChars = 0;
+    }
+    current.push(lines[index]);
+    currentChars += lineChars;
+  }
+
+  if (current.length > 0) {
+    chunks.push({ start: currentStart, lines: current, query: buildBatchQuery(current) });
+  }
+  return chunks;
+}
+
+export function parseBatchTranslation(translated: string): Map<number, string> {
+  const result = new Map<number, string>();
+  if (!translated.trim()) return result;
+
+  const pattern = new RegExp(BATCH_MARKER_PATTERN.source, BATCH_MARKER_PATTERN.flags);
+  let current = -1;
+  let textStart = -1;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(translated)) !== null) {
+    if (current >= 0 && textStart >= 0) {
+      const value = translated.slice(textStart, match.index).trim();
+      if (value) result.set(current, value);
+    }
+    current = Number.parseInt(match[1].replace(/\s+/g, ""), 10);
+    textStart = pattern.lastIndex;
+  }
+
+  if (current >= 0 && textStart >= 0) {
+    const value = translated.slice(textStart).trim();
+    if (value) result.set(current, value);
+  }
+  return result;
+}
+
+export function stripMarkerEcho(text: string, index: number): string {
+  const digits = String(index).padStart(3, "0").split("").join("\\s*");
+  const markerPattern = new RegExp(`\\[\\[\\s*SPX\\s*_\\s*${digits}\\s*\\]\\]`, "gi");
+  return text.replace(markerPattern, "").trim();
 }
 
 async function requestGoogleTranslation(url: string): Promise<string> {
@@ -238,26 +306,17 @@ export async function batchTranslate(
   const slCode = sourceLang === "und" ? "auto"
     : (langs.where("3", sourceLang)?.["1"] || "auto");
 
-  // 2. Translate one lyric line per request. Google newline-batch responses can
-  // merge/drop/reorder line boundaries, which assigns neighboring translations to
-  // short repeated lines (e.g. "yeah") and bypasses duplicate suppression.
-  const CHUNK_SIZE = 1;
-  for (let ci = 0; ci < uncachedTexts.length; ci += CHUNK_SIZE) {
-    const chunk = uncachedTexts.slice(ci, ci + CHUNK_SIZE);
-    const chunkIndices = uncachedIndices.slice(ci, ci + CHUNK_SIZE);
-
-    // Join with newline separator for batch translation
-    const joined = chunk.join("\n");
-
+  // 2. Translate marked batches. Markers survive Google's line merging/reordering
+  // well enough to map each translated segment back to its source line.
+  for (const batch of buildBatchChunks(uncachedTexts)) {
+    const chunkIndices = uncachedIndices.slice(batch.start, batch.start + batch.lines.length);
     try {
-      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(slCode)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(joined)}`;
-      const translatedLines = (await requestGoogleTranslation(url)).split("\n");
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(slCode)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(batch.query)}`;
+      const translatedLines = parseBatchTranslation(await requestGoogleTranslation(url));
 
-      // Map back to results and cache. Google sometimes drops/merges newline
-      // boundaries inside batch responses; empty slots get retried individually below.
       for (let j = 0; j < chunkIndices.length; j++) {
         const idx = chunkIndices[j];
-        const translated = (translatedLines[j] || "").trim();
+        const translated = stripMarkerEcho(translatedLines.get(j) || "", j);
         results[idx] = translated;
         // Cache the result
         const originalText = lines[idx].trim();
@@ -308,6 +367,7 @@ export async function batchTranslate(
  * Called after romanization is complete.
  */
 export async function translateLyrics(lyrics: any): Promise<void> {
+  const { translationEnabled, translationTargetLang } = await import("../lyrics.ts");
   if (!translationEnabled || !translationTargetLang) return;
 
   const sourceLang = lyrics.Language || "und";

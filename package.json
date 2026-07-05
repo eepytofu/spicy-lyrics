@@ -6,6 +6,7 @@
     "dev": "spicetify-creator dev",
     "build": "spicetify-creator build",
     "test:romanization": "node --experimental-strip-types --test tests/romanization-corpus.test.ts",
+    "test:translation": "node --experimental-strip-types --test tests/translation-batch.test.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt"
