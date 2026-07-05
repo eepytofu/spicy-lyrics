@@ -22,6 +22,7 @@ import {
   type ScriptBranchDocContext,
 } from "./Fork/TextDetection.ts";
 import { buildRomajiFromTokens, pinyinOptionsForToneMode, romanizeCantonese, romanizeCyrillic, romanizeKorean } from "./Fork/Romanization.ts";
+import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
 import {
   annotateJapaneseTextTarget,
   applyJapaneseReadingToSyllables,
@@ -31,6 +32,7 @@ import {
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 
 export { clearTranslationCache };
+export { acceptRomanization };
 export const LYRICS_PROCESSING_VERSION = 6;
 
 // Constants
@@ -46,6 +48,13 @@ const ItemChineseTest = /[一-鿿]/;
 const ItemKoreanTest = KoreanTextTest;
 const ItemCyrillicTest = /[Ѐ-ӿԀ-ԯⷠ-ⷿꙀ-ꚟ]/;
 const ItemGreekTest = GreekTextTest;
+const ScriptResidualTests: Record<RomanizationBranch, RegExp> = {
+  Japanese: ItemJapaneseTest,
+  Chinese: ItemChineseTest,
+  Korean: ItemKoreanTest,
+  Cyrillic: ItemCyrillicTest,
+  Greek: ItemGreekTest,
+};
 
 // Any original (non-Latin) romanizable script — used in dev to flag residue.
 const ResidualScriptTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
@@ -369,7 +378,6 @@ const romanizeEntry = async (
     if (script === "Japanese") {
       if (ItemJapaneseTest.test(text)) {
         text = await romanizeJapaneseText(text);
-        if (annotateJapanese) await annotateJapaneseTextTarget(target, text, RomajiPromise);
         changed = true;
       }
     } else if (script === "Chinese") {
@@ -396,14 +404,20 @@ const romanizeEntry = async (
   }
 
   if (changed) {
-    target.TransliteratedText = text;
-    target.RomanizedText = text;
-    line.HasTransliterations = true;
     if (ResidualScriptTest.test(text)) {
       romanizationLogger.warn("Incomplete romanization (original-script characters remain)", {
         original: target.Text,
         romanized: text,
       });
+    }
+    if (!acceptRomanization(target.Text || "", text, lineScripts.map((script) => ScriptResidualTests[script]))) {
+      return false;
+    }
+    target.TransliteratedText = text;
+    target.RomanizedText = text;
+    line.HasTransliterations = true;
+    if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
+      await annotateJapaneseTextTarget(target, text, RomajiPromise);
     }
   }
 

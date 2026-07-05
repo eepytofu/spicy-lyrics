@@ -305,6 +305,7 @@ export async function romanizeJapaneseFromFurigana(
   const context = await buildJapaneseTokenContext(sourceText);
   const KUtil = (Kuroshiro as any).Util;
   applyProviderFuriganaOverrides(sourceText, context.entries, furigana);
+  applyContextualReadingOverrides(context.entries, context.tokens);
   for (let i = 0; i < context.entries.length; i += 1) {
     context.entries[i].romaji = entryRomaji(context.entries[i], context.tokens[i], (kana) => KUtil.kanaToRomaji(kana));
   }
