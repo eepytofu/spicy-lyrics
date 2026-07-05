@@ -23,6 +23,15 @@ export const CyrillicTextTest = /[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-
 // Greek (Basic + Extended)
 export const GreekTextTest = /[\u0370-\u03FF\u1F00-\u1FFF]/;
 
+// Devanagari
+export const DevanagariTextTest = /[\u0900-\u097F]/;
+
+// Gurmukhi
+export const GurmukhiTextTest = /[\u0A00-\u0A7F]/;
+
+// Bengali
+export const BengaliTextTest = /[\u0980-\u09FF]/;
+
 // CJK Ideographs remaining after romanization (indicates failed conversion)
 // Includes: CJK Unified, CJK Extension A, iteration mark 々
 export const CJKIdeographTest = /[\u4E00-\u9FFF\u3400-\u4DBF\u3005]/;
@@ -66,6 +75,13 @@ export function detectScript(text: string): ScriptType {
  */
 export function hasCJK(text: string): boolean {
   return ChineseTextTest.test(text);
+}
+
+/**
+ * Check if text contains Indic scripts used by translation gating.
+ */
+export function hasIndicScript(text: string): boolean {
+  return DevanagariTextTest.test(text) || GurmukhiTextTest.test(text) || BengaliTextTest.test(text);
 }
 
 /**

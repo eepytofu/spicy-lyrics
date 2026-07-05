@@ -11,6 +11,11 @@
 import { franc } from "franc-all";
 import langs from "langs";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
+import {
+  BengaliTextTest,
+  DevanagariTextTest,
+  GurmukhiTextTest,
+} from "./TextDetection.ts";
 
 // ─── Cache Configuration ──────────────────────────────────────────────────────
 
@@ -204,6 +209,9 @@ const SCRIPT_TESTS = {
   hangul: /[\uAC00-\uD7AF]/,
   cyrillic: /[\u0400-\u04FF]/,
   greek: /[\u0370-\u03FF]/,
+  devanagari: DevanagariTextTest,
+  gurmukhi: GurmukhiTextTest,
+  bengali: BengaliTextTest,
 };
 
 const latinTargetLanguages = new Set([
@@ -216,12 +224,16 @@ function targetAllowsScript(targetLang: string, script: keyof typeof SCRIPT_TEST
   if (script === "hangul") return targetLang === "ko";
   if (script === "cyrillic") return ["ru", "uk", "bg", "sr", "mk", "be"].includes(targetLang);
   if (script === "greek") return targetLang === "el";
+  if (script === "devanagari") return ["hi", "mr", "ne", "sa"].includes(targetLang);
+  if (script === "gurmukhi") return targetLang === "pa";
+  if (script === "bengali") return ["bn", "as"].includes(targetLang);
   return false;
 }
 
-function hasObviousNonTargetScript(text: string, targetLang: string): boolean {
+export function hasObviousNonTargetScript(text: string, targetLang: string): boolean {
+  const target = targetLang.toLowerCase();
   return (Object.keys(SCRIPT_TESTS) as Array<keyof typeof SCRIPT_TESTS>).some((script) =>
-    SCRIPT_TESTS[script].test(text) && !targetAllowsScript(targetLang, script)
+    SCRIPT_TESTS[script].test(text) && !targetAllowsScript(target, script)
   );
 }
 
@@ -235,7 +247,7 @@ function lineLooksNonTargetLatin(text: string, targetLang: string): boolean {
   return !!detectedISO2 && detectedISO2 !== targetLang;
 }
 
-function shouldTranslateLine(text: string, sourceLang: string, targetLang: string): boolean {
+export function shouldTranslateLine(text: string, sourceLang: string, targetLang: string): boolean {
   const trimmed = text.trim();
   if (!trimmed || trimmed === "♪") return false;
 
