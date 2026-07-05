@@ -12,6 +12,7 @@ import {
   KoreanTextTest,
   CyrillicTextTest,
   GreekTextTest,
+  cleanInvisibles,
   isCyrillicLanguage,
 } from "./Fork/index.ts";
 import { buildRomajiFromTokens, pinyinOptionsForToneMode, romanizeCantonese, romanizeCyrillic, romanizeKorean } from "./Fork/Romanization.ts";
@@ -123,6 +124,12 @@ const romanizeGreekText = (text: string, greekRomanization: any): string => {
 
 type RomanizeEntry = { target: any; line: any };
 
+const normalizeLyricsText = (target: any): string => {
+  if (typeof target?.Text !== "string") return "";
+  target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
+  return target.Text;
+};
+
 const gatherText = (
   lyrics: any
 ): { francText: string; scriptText: string; entries: RomanizeEntry[] } => {
@@ -133,13 +140,13 @@ const gatherText = (
   if (lyrics.Type === "Static") {
     for (const line of lyrics.Lines) {
       entries.push({ target: line, line });
-      textLines.push(line.Text);
+      textLines.push(normalizeLyricsText(line));
     }
   } else if (lyrics.Type === "Line") {
     for (const vocalGroup of lyrics.Content) {
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
         entries.push({ target: vocalGroup, line: vocalGroup });
-        textLines.push(vocalGroup.Text);
+        textLines.push(normalizeLyricsText(vocalGroup));
       }
     }
   } else if (lyrics.Type === "Syllable") {
@@ -148,11 +155,11 @@ const gatherText = (
 
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
-        let text = syllables[0].Text;
+        let text = normalizeLyricsText(syllables[0]);
         entries.push({ target: syllables[0], line: vocalGroup });
         for (let index = 1; index < syllables.length; index += 1) {
           const syllable = syllables[index];
-          text += `${syllable.IsPartOfWord ? "" : " "}${syllable.Text}`;
+          text += `${syllable.IsPartOfWord ? "" : " "}${normalizeLyricsText(syllable)}`;
           entries.push({ target: syllable, line: vocalGroup });
         }
         textLines.push(text);
@@ -162,7 +169,7 @@ const gatherText = (
         for (const bg of vocalGroup.Background) {
           for (const syllable of bg.Syllables) {
             entries.push({ target: syllable, line: vocalGroup });
-            bgTextLines.push(syllable.Text);
+            bgTextLines.push(normalizeLyricsText(syllable));
           }
         }
       }
@@ -248,7 +255,7 @@ const romanizeLineText = async (
   packages: RomanizationPackages,
   language: string
 ): Promise<string | undefined> => {
-  const entry = { target: { Text: text }, line: {} };
+  const entry: RomanizeEntry = { target: { Text: text }, line: {} };
   const changed = await romanizeEntry(entry, presentScripts, packages, language, false);
   return changed ? entry.target.TransliteratedText : undefined;
 };
@@ -332,7 +339,7 @@ const romanizeEntry = async (
 ): Promise<boolean> => {
   const { target, line } = entry;
 
-  if (target.Text) target.Text = target.Text.normalize("NFKC");
+  if (target.Text) target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
 
   if (hasTransliteration(target)) {
     if (annotateJapanese && ItemJapaneseTest.test(target.Text || "")) {

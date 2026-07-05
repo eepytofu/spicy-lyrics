@@ -27,6 +27,14 @@ export const GreekTextTest = /[\u0370-\u03FF\u1F00-\u1FFF]/;
 // Includes: CJK Unified, CJK Extension A, iteration mark 々
 export const CJKIdeographTest = /[\u4E00-\u9FFF\u3400-\u4DBF\u3005]/;
 
+export function cleanInvisibles(text: string): string {
+  return text
+    .replace(/[\u200B\uFEFF]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 /**
  * Detect the primary script type in text.
  * Returns the first matching script type found.

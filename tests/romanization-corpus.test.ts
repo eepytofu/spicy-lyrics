@@ -7,6 +7,14 @@ import {
   romanizeKorean,
   stripJyutpingTones,
 } from "../src/utils/Lyrics/Fork/Romanization.ts";
+import { cleanInvisibles } from "../src/utils/Lyrics/Fork/TextDetection.ts";
+
+test("invisible lyric markers are cleaned before processing", () => {
+  assert.equal(cleanInvisibles("This \u200Bis \u200Ba test"), "This is a test");
+  assert.equal(cleanInvisibles("tell \u200Bme"), "tell me");
+  assert.equal(cleanInvisibles("\uFEFFhello\u00A0world"), "hello world");
+  assert.equal(cleanInvisibles("\u0915\u094D\u200D\u0937"), "\u0915\u094D\u200D\u0937");
+});
 
 test("Cantonese Jyutping phrase corpus", async () => {
   assert.equal(

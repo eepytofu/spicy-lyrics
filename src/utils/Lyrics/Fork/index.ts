@@ -23,6 +23,7 @@ export {
   CyrillicTextTest,
   GreekTextTest,
   CJKIdeographTest,
+  cleanInvisibles,
   detectScript,
   hasCJK,
   hasUnromanizedKanji,
