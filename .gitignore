@@ -189,4 +189,4 @@ AGENTS.md
 project/*.md
 
 # Release/build artifacts
-builds/
+builds/tools/.cache/
