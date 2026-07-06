@@ -7,13 +7,23 @@ import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
 import { Query } from "../API/Query.ts";
 import { LYRICS_PROCESSING_VERSION, ProcessLyrics } from "./ProcessLyrics.ts";
-import { translationEnabled, translationTargetLang } from "./lyrics.ts";
+import {
+  chineseTones,
+  chineseTranslitMode,
+  cyrillicKeepSigns,
+  cyrillicRomanizationMode,
+  koreanRomanizationMode,
+  translationEnabled,
+  translationTargetLang,
+} from "./lyrics.ts";
 import Logger from "../Logger.ts";
 import { LocalLyricsManager } from "./manager/index.ts";
 import { LyricsQueueRetry } from "./LyricsQueueRetry.ts";
 import { GetExpireStore } from "../../modules/Store.ts";
 import { SLObjPack } from "../objpack.ts";
 import { translateLyrics } from "./Fork/Translation.ts";
+import { $japaneseReadingMode } from "../uiState.ts";
+import { buildProcessingContextKey } from "./ProcessingContext.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -27,6 +37,24 @@ export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 1, 
 }, isDev as true);
 
 const lyricsPacker = new SLObjPack();
+
+function currentProcessingContextKey(): string {
+  return buildProcessingContextKey({
+    translationEnabled,
+    translationTargetLang,
+    chineseTranslitMode,
+    chineseTones,
+    koreanRomanizationMode,
+    cyrillicRomanizationMode,
+    cyrillicKeepSigns,
+    japaneseReadingMode: $japaneseReadingMode.get(),
+  });
+}
+
+async function setProcessedLyricsStoreItem(trackId: string, lyrics: any): Promise<void> {
+  lyrics.ProcessingContextKey = currentProcessingContextKey();
+  await LyricsStore.SetItem(trackId, lyrics);
+}
 
 function setRomanizationClass(hasTransliterations: boolean | undefined): void {
   if (hasTransliterations) {
@@ -60,7 +88,7 @@ async function finishProcessingInBackground(trackId: string, lyrics: any): Promi
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
     lyrics.TranslationPending = shouldTranslate;
-    await LyricsStore.SetItem(trackId, lyrics);
+    await setProcessedLyricsStoreItem(trackId, lyrics);
     if (shouldRerenderAfterRomanization) dispatchProcessingReady(trackId, lyrics);
   } catch (error) {
     lyrics.ProcessingPending = false;
@@ -78,7 +106,7 @@ async function finishProcessingInBackground(trackId: string, lyrics: any): Promi
     lyricsCacheLogger.error("Background lyrics translation failed", error);
   } finally {
     lyrics.TranslationPending = false;
-    await LyricsStore.SetItem(trackId, lyrics);
+    await setProcessedLyricsStoreItem(trackId, lyrics);
     dispatchProcessingReady(trackId, lyrics);
   }
 }
@@ -160,14 +188,23 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
     lyrics.id = lyrics.id || trackId;
   }
 
-  if (!lyrics || lyrics.ProcessingPending === true || lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION) {
+  const processingContextKey = currentProcessingContextKey();
+
+  if (
+    !lyrics
+    || lyrics.ProcessingPending === true
+    || (
+      lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
+      && lyrics.ProcessingContextKey === processingContextKey
+    )
+  ) {
     return lyrics;
   }
 
   if (!hasRomanizationWorkQuick(lyrics) && !hasTranslationWorkQuick(lyrics)) {
     markProcessedWithoutBackground(lyrics);
     lyrics.id = lyrics.id || trackId;
-    await LyricsStore.SetItem(trackId, lyrics);
+    await setProcessedLyricsStoreItem(trackId, lyrics);
     return lyrics;
   }
 
@@ -175,12 +212,14 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
     trackId,
     fromVersion: lyrics.ProcessingVersion,
     toVersion: LYRICS_PROCESSING_VERSION,
+    fromContext: lyrics.ProcessingContextKey,
+    toContext: processingContextKey,
   });
   await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: true });
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
   lyrics.TranslationPending = false;
-  await LyricsStore.SetItem(trackId, lyrics);
+  await setProcessedLyricsStoreItem(trackId, lyrics);
   return lyrics;
 }
 
@@ -194,7 +233,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     if (cached) return;
     const localLyric = await LocalLyricsManager.get(uri);
     if (localLyric) {
-      await LyricsStore.SetItem(trackId, { ...localLyric, id: trackId });
+      await setProcessedLyricsStoreItem(trackId, { ...localLyric, id: trackId });
       return;
     }
   } catch (error) {
@@ -231,7 +270,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     } else {
       markProcessedWithoutBackground(lyrics);
     }
-    await LyricsStore.SetItem(trackId, lyrics);
+    await setProcessedLyricsStoreItem(trackId, lyrics);
     lyricsPrefetchLogger.debug("Prefetched next lyrics", { trackId, uri });
   } catch (error) {
     lyricsPrefetchLogger.debug("Prefetch failed", error);
@@ -453,7 +492,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
 
     if (!needsRomanization && !needsTranslation) {
       markProcessedWithoutBackground(lyrics);
-      await LyricsStore.SetItem(trackId, lyrics);
+      await setProcessedLyricsStoreItem(trackId, lyrics);
       $currentLyricsData.set(JSON.stringify(lyrics));
       presentLyrics(lyrics);
       return [{ ...lyrics, fromCache: false }, 200];

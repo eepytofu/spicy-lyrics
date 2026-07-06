@@ -8,6 +8,8 @@
     "test:romanization": "node --experimental-strip-types --test tests/romanization-acceptance.test.ts tests/romanization-corpus.test.ts tests/japanese-reading.test.ts",
     "test:indic": "node --experimental-strip-types --test tests/indic-gating.test.ts",
     "test:translation": "node --experimental-strip-types --test tests/translation-batch.test.ts",
+    "test:processing-context": "node --experimental-strip-types --test tests/processing-context.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt"
