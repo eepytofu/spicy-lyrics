@@ -189,4 +189,7 @@ AGENTS.md
 project/*.md
 
 # Release/build artifacts
-builds/tools/.cache/
+builds/
+tools/.cache/
+
+skills-lock.json
