@@ -5,7 +5,7 @@
     "sc": "spicetify-creator",
     "dev": "spicetify-creator dev",
     "build": "spicetify-creator build",
-    "test:romanization": "node --experimental-strip-types --test tests/romanization-acceptance.test.ts tests/romanization-corpus.test.ts",
+    "test:romanization": "node --experimental-strip-types --test tests/romanization-acceptance.test.ts tests/romanization-corpus.test.ts tests/japanese-reading.test.ts",
     "test:indic": "node --experimental-strip-types --test tests/indic-gating.test.ts",
     "test:translation": "node --experimental-strip-types --test tests/translation-batch.test.ts",
     "lint": "oxlint",

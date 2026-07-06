@@ -64,6 +64,7 @@ export const JapaneseKanaTextTest = /[ぁ-んァ-ン]/;
 export const KanjiTextTest = /[一-鿿々]/;
 const KanjiLikeCharTest = /[一-鿿々]/;
 const KanjiLikeSequenceTest = /^[一-鿿々]+$/;
+const KanaCharTest = /[ぁ-んァ-ンー]/;
 
 const HIRAGANA_VOWEL: Record<string, string> = {
   あ: "あ", か: "あ", が: "あ", さ: "あ", ざ: "あ", た: "あ", だ: "あ", な: "あ", は: "あ", ば: "あ", ぱ: "あ", ま: "あ", や: "あ", ら: "あ", わ: "あ", ぁ: "あ", ゃ: "あ",
@@ -118,6 +119,21 @@ function contextualKanaReading(surface: string, reading: string): string {
   return kataToHira(reading || "");
 }
 
+export function okuriganaAnchoredKanjiRunReading(kana: string, kanaCursor: number, trailingOkurigana: string): string {
+  const normalizedKana = kataToHira(kana);
+  const normalizedOkurigana = kataToHira(trailingOkurigana);
+  if (!normalizedKana || !normalizedOkurigana) return "";
+
+  const safeCursor = Math.max(0, Math.min(kanaCursor, normalizedKana.length));
+  const remaining = normalizedKana.slice(safeCursor);
+  if (remaining.endsWith(normalizedOkurigana)) {
+    return normalizedKana.slice(safeCursor, normalizedKana.length - normalizedOkurigana.length);
+  }
+
+  const fallback = normalizedKana.lastIndexOf(normalizedOkurigana, normalizedKana.length - normalizedOkurigana.length);
+  return fallback >= safeCursor ? normalizedKana.slice(safeCursor, fallback) : normalizedKana.slice(safeCursor);
+}
+
 function kanaReadingSegments(surface: string, reading: string): TokenFuriganaReading[] {
   const kana = contextualKanaReading(surface, reading);
   if (!kana || kana === "*") return [];
@@ -140,7 +156,7 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
   while (charIndex < chars.length) {
     const char = chars[charIndex];
 
-    if (/[ぁ-んァ-ンー]/.test(char)) {
+    if (KanaCharTest.test(char)) {
       if (kana[kanaCursor] === char) kanaCursor += 1;
       charIndex += 1;
       continue;
@@ -154,12 +170,15 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
     const start = charIndex;
     while (charIndex < chars.length && KanjiLikeCharTest.test(chars[charIndex])) charIndex += 1;
     const end = charIndex;
-    const nextKana = chars.slice(charIndex).find((c) => /[ぁ-んー]/.test(c));
+    const followingKana: string[] = [];
+    for (let i = charIndex; i < chars.length && KanaCharTest.test(chars[i]); i += 1) {
+      followingKana.push(chars[i]);
+    }
     const readingStart = kanaCursor;
 
-    if (nextKana) {
-      const nextIndex = kana.indexOf(nextKana, kanaCursor);
-      kanaCursor = nextIndex >= 0 ? nextIndex : kana.length;
+    if (followingKana.length > 0) {
+      const text = okuriganaAnchoredKanjiRunReading(kana, kanaCursor, followingKana.join(""));
+      kanaCursor = Math.min(kana.length, kanaCursor + text.length);
     } else {
       kanaCursor = kana.length;
     }
@@ -260,14 +279,15 @@ async function buildJapaneseTokenContext(lineText: string, _fullSpacedRomaji?: s
   for (let ti = 0; ti < tokens.length; ti += 1) {
     const surface: string = tokens[ti].surface_form || "";
     const reading: string = tokens[ti].reading || tokens[ti].pronunciation || "";
-    const readingKana = contextualKanaReading(surface, reading);
+    const hasJapaneseScript = JapaneseSourceTextTest.test(surface);
+    const readingKana = hasJapaneseScript ? contextualKanaReading(surface, reading) : "";
     const entry: JapaneseTokenEntry = {
       start: charPos,
       end: charPos + surface.length,
       romaji: surface,
       surface,
       readingKana,
-      furigana: kanaReadingForToken(surface, reading),
+      furigana: hasJapaneseScript ? kanaReadingForToken(surface, reading) : undefined,
       consumed: false,
     };
     entry.romaji = entryRomaji(entry, tokens[ti], (kana) => KUtil.kanaToRomaji(kana));

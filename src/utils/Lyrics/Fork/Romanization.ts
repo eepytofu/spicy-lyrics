@@ -14,7 +14,7 @@ import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
 import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
-import { analyzeJapaneseLine } from "../Reading/JapaneseReading.ts";
+import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
 
 const JYUTPING_PHRASES: Record<string, string> = {
   上堂: "soeng5 tong4",
@@ -67,6 +67,7 @@ const JYUTPING_PHRASES: Record<string, string> = {
 };
 
 const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.length - a.length);
+const LatinTextTest = /[A-Za-z]/;
 
 // ─── Cantonese (Jyutping) ─────────────────────────────────────────────────────
 
@@ -537,8 +538,8 @@ export async function romanizeJapaneseWithFallback(
     mode: "spaced",
   });
 
-  // Fallback: if kuroshiro still left kanji un-romanized, rebuild from kuromoji tokens
-  if (hasUnromanizedKanji(result)) {
+  // Fallback: rebuild when Kuroshiro leaves kanji or romanizes Latin inside Japanese lines.
+  if (hasUnromanizedKanji(result) || (JapaneseSourceTextTest.test(text) && LatinTextTest.test(text))) {
     const rebuilt = await buildRomajiFromTokens(text);
     if (rebuilt) {
       result = rebuilt;
