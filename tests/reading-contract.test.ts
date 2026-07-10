@@ -9,7 +9,15 @@ import {
   isValidCodePointRange,
   utf16IndexToCodePointOffset,
 } from "../src/utils/Lyrics/Processing/CodePoint.ts";
-import type { ParsedDocument } from "../src/utils/Lyrics/Processing/Model.ts";
+import {
+  DefaultCanonicalLineBuilder,
+  DefaultScriptPartitioner,
+} from "../src/utils/Lyrics/Processing/Canonical.ts";
+import {
+  annotateKoreanLine,
+  joinReadingUnits,
+} from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
+import type { ParsedDocument, ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 
 test("reading contract uses Unicode code-point coordinates", () => {
   const text = "A😀한국";
@@ -37,18 +45,76 @@ test("parsed contract represents unavailable paragraph provenance explicitly", (
   assert.equal(document.lines[0].paragraphProvenance, "unavailable");
 });
 
-test("shared reading fixtures expose provider spans and semantic expectations", () => {
-  const path = fileURLToPath(new URL("./fixtures/lyrics-reading/v1/camouflage-provider.json", import.meta.url));
+function parsedLine(raw: any): ParsedLine {
+  return {
+    id: raw.id,
+    displayText: raw.expected.canonicalText,
+    paragraphProvenance: "unavailable",
+    spans: raw.spans.map((span: [string, boolean, number, number], index: number) => ({
+      id: `${raw.id}-s${index}`,
+      rawText: span[0],
+      cleanText: span[0],
+      providerPartOfWord: span[1],
+      startMs: span[2],
+      endMs: span[3],
+    })),
+  };
+}
+
+// The cross-platform contract: for every fixture line, this platform's pipeline must
+// reproduce the shared expected values exactly. The Android repo asserts the same
+// fixtures (byte-identical copies) through its own pipeline (ReadingContractTest.java).
+function assertFixtureSemantics(name: string) {
+  const path = fileURLToPath(new URL(`./fixtures/lyrics-reading/v1/${name}`, import.meta.url));
   const fixture = JSON.parse(readFileSync(path, "utf8"));
   assert.equal(fixture.schemaVersion, 1);
-  assert.equal(fixture.lines.length, 7);
-  assert.deepEqual(fixture.capture.spanTuple, ["rawText", "providerPartOfWord", "startMs", "endMs"]);
-  const mixed = fixture.lines.find((line: any) => line.id === "camouflage-29");
-  assert.equal(mixed.expected.canonicalText, "주저 없이 다, Probably delete it");
-  assert.deepEqual(mixed.spans.at(-1), ["it", false, 74437, 75002]);
-  for (const line of fixture.lines) {
-    for (const field of ["boundaries", "spanMappings", "scriptRuns", "readingUnits", "timedReadingUnits"]) {
-      assert.ok(Array.isArray(line.expected[field]), `${line.id}.${field}`);
+  const builder = new DefaultCanonicalLineBuilder();
+  const partitioner = new DefaultScriptPartitioner();
+  for (const raw of fixture.lines) {
+    const expected = raw.expected;
+    const canonical = builder.build(parsedLine(raw));
+    assert.equal(canonical.text, expected.canonicalText, raw.id);
+    assert.deepEqual(
+      canonical.boundaries.map((b: any) => [b.offsetCp, b.kind]),
+      expected.boundaries,
+      `${raw.id} boundaries`
+    );
+    assert.deepEqual(
+      canonical.spanMappings.map((m: any) => [m.canonicalRange.startCp, m.canonicalRange.endCp]),
+      expected.spanMappings,
+      `${raw.id} spanMappings`
+    );
+    const runs = partitioner.partition(canonical, { language: fixture.language });
+    assert.deepEqual(
+      runs.map((r: any) => [r.canonicalRange.startCp, r.canonicalRange.endCp, r.script]),
+      expected.scriptRuns,
+      `${raw.id} scriptRuns`
+    );
+    if (expected.readingMode) {
+      const annotation = annotateKoreanLine(canonical, expected.readingMode);
+      assert.deepEqual(
+        annotation.units.map((u) => ({
+          text: u.text,
+          kind: u.kind,
+          startCp: u.canonicalRange.startCp,
+          endCp: u.canonicalRange.endCp,
+        })),
+        expected.readingUnits,
+        `${raw.id} readingUnits`
+      );
+      annotation.units.forEach((u, index) => {
+        assert.deepEqual(u.timingRefs, [`${raw.id}-s${expected.timedReadingUnits[index][0]}`], raw.id);
+        assert.equal(u.text, expected.timedReadingUnits[index][1], raw.id);
+      });
+      assert.equal(joinReadingUnits(annotation), expected.joinedDisplayText, raw.id);
     }
   }
+}
+
+test("camouflage fixture semantics match shared expectations", () => {
+  assertFixtureSemantics("camouflage-provider.json");
+});
+
+test("script corpus fixture semantics match shared expectations", () => {
+  assertFixtureSemantics("script-corpus.json");
 });
