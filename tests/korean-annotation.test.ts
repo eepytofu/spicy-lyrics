@@ -36,7 +36,7 @@ test("Korean annotation derives joined display from timed units in all modes", (
 test("mixed English is typed passthrough and remains source ordered", () => {
   const raw = fixture.lines.find((line: any) => line.id === "camouflage-29");
   const annotation = annotateKoreanLine(new DefaultCanonicalLineBuilder().build(parsedLine(raw)), "vnPronunciation");
-  assert.equal(joinReadingUnits(annotation), "jujo op-ssi da, Probably delete it");
+  assert.equal(joinReadingUnits(annotation), "jujo opssi da, Probably delete it");
   assert.deepEqual(annotation.units.slice(-3).map((unit) => [unit.kind, unit.text.trim()]), [
     ["passthrough", "Probably"], ["passthrough", "delete"], ["passthrough", "it"],
   ]);

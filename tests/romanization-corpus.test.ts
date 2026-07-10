@@ -217,7 +217,7 @@ test("Korean Vietnamese-style output uses post-G2P jamo state", () => {
   assert.equal(romanizeKorean("닫히다", "pronunciation", "vn"), "dachida");
   assert.equal(romanizeKorean("맞히다", "pronunciation", "vn"), "machida");
   assert.equal(romanizeKorean("없이", "pronunciation", "vn"), "opssi");
-  assert.equal(romanizeKorean("낮의", "pronunciation", "vn", true), "na-jê");
+  assert.equal(romanizeKorean("낮의", "pronunciation", "vn", true), "najê");
   assert.equal(romanizeKorean("내 네 개 게", "pronunciation", "vn", true), "nê nê gê gê");
   assert.equal(romanizeKorean("왜 외 웨", "pronunciation", "vn", true), "wê wê wê");
 });
@@ -225,8 +225,8 @@ test("Korean Vietnamese-style output uses post-G2P jamo state", () => {
 test("Korean display modes map to expected extra-line output", () => {
   assert.equal(romanizeKoreanForDisplay("한국어", "wordTranslit").display, "han-guk-eo");
   assert.equal(romanizeKoreanForDisplay("눈빛", "rrStandard").display, "nunbit");
-  assert.equal(romanizeKoreanForDisplay("감출 수 있게", "rrPronunciation").display, "gamchul-ssu it-kke");
-  assert.equal(romanizeKoreanForDisplay("주저 없이 다, Probably delete it", "vnPronunciation").display, "jujo op-ssi da, Probably delete it");
+  assert.equal(romanizeKoreanForDisplay("감출 수 있게", "rrPronunciation").display, "gamchul-ssu itkke");
+  assert.equal(romanizeKoreanForDisplay("주저 없이 다, Probably delete it", "vnPronunciation").display, "jujo opssi da, Probably delete it");
 });
 
 test("Korean TTML word-level spans preserve eojeol spacing for display romanization", () => {
@@ -248,7 +248,7 @@ test("Korean TTML word-level spans preserve eojeol spacing for display romanizat
   for (const spans of [spansWithTextSpaces, spansWithContinuationMarkers]) {
     const source = buildKoreanLineTextFromSyllables(spans);
     assert.equal(source, "그대 아무런 말도 하지 마요");
-    assert.equal(romanizeKoreanForDisplay(source, "vnPronunciation").display, "gưdê amuron mal-dô haji ma-yô");
+    assert.equal(romanizeKoreanForDisplay(source, "vnPronunciation").display, "gưdê amuron maldô haji mayô");
 
     const pieces = romanizeKoreanSyllablePieces(source, "vn");
     const mapped = [];
@@ -279,13 +279,13 @@ test("Korean word-level synced spans recover spaces when IsPartOfWord is unrelia
     ["미련이", "아냐,", "그저", "Hard", "to", "see", "it"].map((Text) => ({ Text, IsPartOfWord: true }))
   );
   assert.equal(line, "미련이 아냐, 그저 Hard to see it");
-  assert.equal(romanizeKoreanForDisplay(line, "vnPronunciation").display, "miryo-ni anya, gưjo Hard to see it");
+  assert.equal(romanizeKoreanForDisplay(line, "vnPronunciation").display, "miryoni anya, gưjo Hard to see it");
 
   const secondLine = buildKoreanLineTextFromSyllables(
     ["처음부터", "잘못됐단", "걸"].map((Text) => ({ Text, IsPartOfWord: true }))
   );
   assert.equal(secondLine, "처음부터 잘못됐단 걸");
-  assert.equal(romanizeKoreanForDisplay(secondLine, "vnPronunciation").display, "choưm-buto jalmôt-ttwêt-ttan gol");
+  assert.equal(romanizeKoreanForDisplay(secondLine, "vnPronunciation").display, "choưmbuto jalmôt-ttwêt-ttan gol");
 });
 
 test("Korean TTML spans split across p blocks preserve missing eojeol space", () => {
@@ -293,7 +293,7 @@ test("Korean TTML spans split across p blocks preserve missing eojeol space", ()
     ["더 ", "이", "상 ", "기", "댈 ", "곳", "은", "필", "요 ", "없", "어"].map((Text) => ({ Text, IsPartOfWord: false }))
   );
   assert.equal(line, "더 이상 기댈 곳은 필요 없어");
-  assert.equal(romanizeKoreanForDisplay(line, "vnPronunciation").display, "do isang gidêl gô-sưn piryô op-sso");
+  assert.equal(romanizeKoreanForDisplay(line, "vnPronunciation").display, "do isang gidêl gôsưn piryô opsso");
 });
 
 test("Korean normalized source maps timed spans with code-point ranges", () => {
@@ -337,7 +337,7 @@ test("Korean reading plan separates logical groups from timed span assignments",
   }));
   const plan = buildKoreanReadingPlan(spans, "vnPronunciation");
 
-  assert.equal(plan.displayText, "gưdê amuron mal-dô haji ma-yô");
+  assert.equal(plan.displayText, "gưdê amuron maldô haji mayô");
   assert.deepEqual(plan.groups.map((group) => group.spanIds), [[0], [1], [2, 3], [4, 5], [6, 7]]);
   assert.deepEqual(plan.groups.map((group) => group.spaceBefore), [false, true, true, true, true]);
   assert.deepEqual(plan.spanReadings.map((reading) => reading.text), ["gưdê", "amuron", "mal", "dô", "ha", "ji", "ma", "yô"]);
@@ -352,7 +352,7 @@ test("Korean reading plan keeps mixed English spans aligned after eojeol rejoin"
   const plan = buildKoreanReadingPlan(spans, "vnPronunciation");
 
   assert.equal(plan.normalized.text, "주저 없이 다, Probably delete it");
-  assert.equal(plan.displayText, "jujo op-ssi da, Probably delete it");
+  assert.equal(plan.displayText, "jujo opssi da, Probably delete it");
   assert.deepEqual(plan.groups.map((group) => group.spanIds), [[0, 1], [2, 3], [4], [5], [6], [7]]);
   assert.deepEqual(plan.spanReadings.map((reading) => reading.text), [
     "ju", "jo", "op", "ssi", "da,", "Probably", "delete", "it",
@@ -366,7 +366,7 @@ test("Korean reading plan does not shift a trailing English sentence", () => {
   const plan = buildKoreanReadingPlan(spans, "vnPronunciation");
 
   assert.equal(plan.normalized.text, "더 이상 기댈 곳은 필요 없어 When you hold me tight");
-  assert.equal(plan.displayText, "do isang gidêl gô-sưn piryô op-sso When you hold me tight");
+  assert.equal(plan.displayText, "do isang gidêl gôsưn piryô opsso When you hold me tight");
   assert.deepEqual(plan.spanReadings.slice(-5).map((reading) => reading.text), ["When", "you", "hold", "me", "tight"]);
 });
 
@@ -460,16 +460,51 @@ test("Korean VN renderer maps pronounced Hangul independently of G2P", () => {
 test("Korean separator policy stays separate from G2P", () => {
   const cases = [
     ["돌아갈 수", "dôragal-ssu"],
-    ["감출 수 있게", "gamchul-ssu it-kkê"],
+    ["감출 수 있게", "gamchul-ssu itkkê"],
     ["먹을 게", "mogưl-kkê"],
     ["볼 거야", "bôl kkoya"],
     ["갈 곳", "gal-kkôt"],
-    ["눈동자", "nun-ttôngja"],
-    ["아침밥", "achim-ppap"],
+    ["눈동자", "nunttôngja"],
+    ["아침밥", "achimppap"],
   ] as const;
 
   for (const [input, expected] of cases) {
     assert.equal(romanizeKorean(input, "pronunciation", "vn", true), expected, input);
+  }
+});
+
+// Junction hyphen policy goldens (approved 2026-07-12): hyphen only for
+// sound-ambiguous n|g / ng|vowel-glide junctions, RR vowel-digraph junctions,
+// and triple same-letter collisions. Doubles stay joined; sound-identical
+// liaisons (miryeoni) stay joined.
+const koreanJunctionPolicyCorpus = [
+  // [hangul, rr, vn]
+  ["마요", "mayo", "mayô"],
+  ["같이", "gachi", "gachi"],
+  ["먹어", "meogeo", "mogo"],
+  ["없어", "eopsseo", "opsso"],
+  ["없지", "eopjji", "opjji"],
+  ["좋다", "jota", "jôta"],
+  ["축하", "chuka", "chuka"],
+  ["미련이", "miryeoni", "miryoni"],
+  ["아무런", "amureon", "amuron"],
+  ["말이", "mari", "mari"],
+  ["종로", "jongno", "jôngnô"],
+  ["생각", "saenggak", "sênggak"],
+  ["강원", "gang-won", "gang-won"],
+  ["한국말", "han-gungmal", "han-gungmal"],
+  ["한국", "han-guk", "han-guk"],
+  ["해운대", "hae-undae", "hêundê"],
+  ["처음", "cheo-eum", "choưm"],
+  ["악기", "ak-kki", "ak-kki"],
+  ["신라", "silla", "silla"],
+  ["잘못됐단", "jalmot-ttwaet-ttan", "jalmôt-ttwêt-ttan"],
+] as const;
+
+test("Korean junction hyphen policy corpus", () => {
+  for (const [hangul, rr, vn] of koreanJunctionPolicyCorpus) {
+    assert.equal(romanizeKorean(hangul, "pronunciation", "rr", true), rr, `${hangul} rr`);
+    assert.equal(romanizeKorean(hangul, "pronunciation", "vn", true), vn, `${hangul} vn`);
   }
 });
 
@@ -490,62 +525,62 @@ for (const [rule, input, expectedVn] of koreanRulesetKnownGaps) {
 test("Korean Vietnamese-style separators preserve lyric chunks", () => {
   assert.equal(
     romanizeKorean("어떻게든 날 감출 수 있게", "pronunciation", "vn", true),
-    "ottokê-dưn nal gamchul-ssu it-kkê"
+    "ottokêdưn nal gamchul-ssu itkkê"
   );
   assert.equal(
     romanizeKorean("나로 다시 돌아갈 수 있게", "pronunciation", "vn", true),
-    "narô dasi dôragal-ssu it-kkê"
+    "narô dasi dôragal-ssu itkkê"
   );
   assert.equal(
     romanizeKorean("호기심은 위험하단 걸", "pronunciation", "vn", true),
-    "hôgisi-mưn wihomhadan gol"
+    "hôgisimưn wihomhadan gol"
   );
   assert.equal(
     romanizeKorean("점점 내 모습이 희미해져", "pronunciation", "vn", true),
-    "jomjom nê môsư-bi himihêjo"
+    "jomjom nê môsưbi himihêjo"
   );
   assert.equal(
     romanizeKorean("주저 없이 다, Probably delete it", "pronunciation", "vn", true),
-    "jujo op-ssi da, Probably delete it"
+    "jujo opssi da, Probably delete it"
   );
 });
 
 test("Korean separators normalize syllable-spaced tokenizer output", () => {
   assert.equal(
     romanizeKorean("어 떻 게 든 날 감 출 수 있 게", "pronunciation", "vn", true),
-    "ottokê-dưn nal gamchul-ssu it-kkê"
+    "ottokêdưn nal gamchul-ssu itkkê"
   );
   assert.equal(
     romanizeKorean("나 로 다 시 돌 아 갈 수 있 게", "pronunciation", "vn", true),
-    "narô dasi dôragal-ssu it-kkê"
+    "narô dasi dôragal-ssu itkkê"
   );
   assert.equal(
     romanizeKorean("호 기 심 은 위 험 하 단 걸", "pronunciation", "vn", true),
-    "hôgisi-mưn wihomhadan gol"
+    "hôgisimưn wihomhadan gol"
   );
   assert.equal(
     romanizeKorean("점 점 내 모 습 이 희 미 해 져", "pronunciation", "vn", true),
-    "jomjom nê môsư-bi himihêjo"
+    "jomjom nê môsưbi himihêjo"
   );
   assert.equal(
     romanizeKorean("뒤 돌 아 서 너 를 볼 수 없 게", "pronunciation", "vn", true),
-    "dwidôraso no-rưl bôl-ssu op-kkê"
+    "dwidôraso norưl bôl-ssu opkkê"
   );
   assert.equal(
     romanizeKorean("더 이 상 기 댈 곳 은 필 요 없 어 When you hold me tight", "pronunciation", "vn", true),
-    "do isang gidêl gô-sưn piryô op-sso When you hold me tight"
+    "do isang gidêl gôsưn piryô opsso When you hold me tight"
   );
   assert.equal(
     romanizeKorean("너 는 없 을 거 야", "pronunciation", "vn", true),
-    "no-nưn op-ssưl kkoya"
+    "nonưn opssưl kkoya"
   );
   assert.equal(
     romanizeKorean("늘 넌 없 을 거 야", "pronunciation", "vn", true),
-    "nưl non op-ssưl kkoya"
+    "nưl non opssưl kkoya"
   );
   assert.equal(
     romanizeKorean("주 저 없 이 다, Probably delete it", "pronunciation", "vn", true),
-    "jujo op-ssi da, Probably delete it"
+    "jujo opssi da, Probably delete it"
   );
   assert.equal(
     romanizeKorean("멀 리 날 아 가", "pronunciation", "vn", true),
@@ -567,7 +602,7 @@ test("Korean syllable pipeline preserves separators and mixed-script spacing", (
       "vn",
       true
     ),
-    "dwidôraso no-rưl bôl-ssu op-kkê"
+    "dwidôraso norưl bôl-ssu opkkê"
   );
   assert.equal(
     romanizeKoreanSyllableLine(
@@ -576,7 +611,7 @@ test("Korean syllable pipeline preserves separators and mixed-script spacing", (
       "vn",
       true
     ),
-    "jujo op-ssi da, Probably delete it"
+    "jujo opssi da, Probably delete it"
   );
   assert.equal(
     romanizeKoreanSyllableLine(
@@ -589,18 +624,18 @@ test("Korean syllable pipeline preserves separators and mixed-script spacing", (
       "vn",
       true
     ),
-    "do isang gidêl gô-sưn piryô op-sso, When you hold me tight"
+    "do isang gidêl gôsưn piryô opsso, When you hold me tight"
   );
 });
 
 test("Korean RR separators preserve lyric chunks", () => {
   assert.equal(
     romanizeKorean("어떻게든 날 감출 수 있게", "pronunciation", "rr", true),
-    "eotteoke-deun nal gamchul-ssu it-kke"
+    "eotteokedeun nal gamchul-ssu itkke"
   );
   assert.equal(
     romanizeKorean("나로 다시 돌아갈 수 있게", "pronunciation", "rr", true),
-    "naro dasi doragal-ssu it-kke"
+    "naro dasi doragal-ssu itkke"
   );
 });
 

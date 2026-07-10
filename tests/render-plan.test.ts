@@ -22,7 +22,7 @@ test("render plan gives every provider span one unique timing owner", () => {
   const line = parsed(raw);
   const canonical = new DefaultCanonicalLineBuilder().build(line);
   const plan = new DefaultRenderPlanBuilder().build(line, canonical, [annotateKoreanLine(canonical, "vnPronunciation")]);
-  assert.equal(plan.joinedDisplayText, "jujo op-ssi da, Probably delete it");
+  assert.equal(plan.joinedDisplayText, "jujo opssi da, Probably delete it");
   assert.equal(plan.timedReadingUnits.length, line.spans.length);
   assert.equal(new Set(plan.timedReadingUnits.map((unit) => unit.spanId)).size, line.spans.length);
   assert.equal(validateRenderPlan(plan).valid, true);

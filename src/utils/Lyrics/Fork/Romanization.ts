@@ -14,7 +14,6 @@ import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
 import { G2p } from "korean-pronunciation";
-import { tokenize, type KoreanToken } from "oktjs";
 import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
 import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
 
@@ -316,12 +315,9 @@ const CODA_G = 1;
 const CODA_L = 8;
 const ON_R = 5;
 const ON_NULL = 11;
-const KOREAN_BOUNDARY_POS = new Set(["Josa", "Eomi", "PreEomi", "Suffix"]);
-const KOREAN_TENSE_ONSETS = new Set([1, 4, 8, 10, 13]);
 const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
 let koreanG2p: G2p | undefined;
-const koreanOktTokenCache = new Map<string, KoreanToken[]>();
 
 type HangulSyllable = [number, number, number];
 type KoreanRomanizedSyllablePart = { onset: string; vowel: string; coda: string };
@@ -863,15 +859,6 @@ function endsWithHangulCoda(text: string, coda: number): boolean {
   return false;
 }
 
-function koreanOktTokens(word: string): KoreanToken[] {
-  const cached = koreanOktTokenCache.get(word);
-  if (cached) return cached;
-
-  const tokens = tokenize(word).filter((token) => token.pos !== "Space");
-  koreanOktTokenCache.set(word, tokens);
-  return tokens;
-}
-
 function romanizedPartLength(part: KoreanRomanizedSyllablePart): number {
   return part.onset.length + part.vowel.length + part.coda.length;
 }
@@ -882,36 +869,63 @@ function romanizedOffsetBeforeSyllable(parts: KoreanRomanizedSyllablePart[], syl
   return offset;
 }
 
+const ROMAJI_VOWEL_CHARS = new Set(["a", "e", "i", "o", "u", "ê", "ô", "ư"]);
+const ROMAJI_GLIDE_CHARS = new Set(["w", "y"]);
+// RR two-letter vowel digraphs a reader could mis-tokenize across a syllable
+// boundary (해운대 "haeundae" → hae-undae). VN vowels are single glyphs, so the
+// rule never applies there.
+const RR_VOWEL_DIGRAPHS = new Set(["ae", "eo", "eu", "oe", "ui"]);
+
+/**
+ * Syllable-junction hyphen policy (docs decision 2026-07-12): hyphenate only
+ * where the bare joined romanization is genuinely misreadable —
+ * 1. n|g / ng|vowel-glide junctions, where the two parses sound different
+ *    (han-guk vs hang-uk; gang-won vs gan-gwon);
+ * 2. RR vowel-digraph junctions (cheo-eum, hae-undae);
+ * 3. triple same-letter collisions (jalmot-ttwaet-ttan); doubles stay joined
+ *    (silla).
+ * Sound-identical ambiguities (miryeoni: n liaises either way) do NOT
+ * hyphenate — pronunciation is unaffected, per NIKL's readability argument.
+ */
+function koreanJunctionNeedsHyphen(left: string, right: string, style: KoreanOutputStyle): boolean {
+  if (!left || !right) return false;
+  const lastChar = left[left.length - 1];
+  const firstChar = right[0];
+
+  let trailing = 0;
+  for (let i = left.length - 1; i >= 0 && left[i] === lastChar; i -= 1) trailing += 1;
+  let leading = 0;
+  for (let i = 0; i < right.length && right[i] === lastChar; i += 1) leading += 1;
+  if (leading > 0 && trailing + leading >= 3) return true;
+
+  if (lastChar === "n" && firstChar === "g") return true;
+  if (left.endsWith("ng") && (ROMAJI_VOWEL_CHARS.has(firstChar) || ROMAJI_GLIDE_CHARS.has(firstChar))) return true;
+
+  if (style === "rr" && RR_VOWEL_DIGRAPHS.has(lastChar + firstChar)) return true;
+  return false;
+}
+
 function romanizeKoreanPronunciationWordWithSeparators(word: string, style: KoreanOutputStyle): string {
   const pronounced = convertKoreanWordToPronouncedHangul(word);
   const writtenChars = Array.from(word);
   const pronouncedChars = Array.from(pronounced);
   if (writtenChars.length !== pronouncedChars.length) return romanizePronouncedHangul(pronounced, style);
 
-  const writtenSyllables = writtenChars.map(decomposeHangul);
   const pronouncedSyllables = pronouncedChars.map(decomposeHangul);
-  if (writtenSyllables.some((syl) => !syl) || pronouncedSyllables.some((syl) => !syl)) {
+  if (writtenChars.map(decomposeHangul).some((syl) => !syl) || pronouncedSyllables.some((syl) => !syl)) {
     return romanizePronouncedHangul(pronounced, style);
   }
 
-  const written = writtenSyllables as HangulSyllable[];
   const pronouncedRun = pronouncedSyllables as HangulSyllable[];
   const parts = romanizeKoreanPronouncedSyllableParts(pronouncedRun, style);
   const hyphenOffsets = new Set<number>();
 
-  let boundary = 0;
-  const tokens = koreanOktTokens(word);
-  for (let index = 0; index < tokens.length - 1; index += 1) {
-    boundary += Array.from(tokens[index].text).length;
-    const nextPos = tokens[index + 1].pos;
-    if (!KOREAN_BOUNDARY_POS.has(nextPos) || boundary <= 0 || boundary >= written.length) continue;
-
-    hyphenOffsets.add(romanizedOffsetBeforeSyllable(parts, boundary));
-  }
-
-  for (let index = 1; index < pronouncedRun.length; index += 1) {
-    if (!KOREAN_TENSE_ONSETS.has(pronouncedRun[index][0]) || KOREAN_TENSE_ONSETS.has(written[index][0])) continue;
-    hyphenOffsets.add(romanizedOffsetBeforeSyllable(parts, index));
+  for (let index = 1; index < parts.length; index += 1) {
+    const left = parts[index - 1].onset + parts[index - 1].vowel + parts[index - 1].coda;
+    const right = parts[index].onset + parts[index].vowel + parts[index].coda;
+    if (koreanJunctionNeedsHyphen(left, right, style)) {
+      hyphenOffsets.add(romanizedOffsetBeforeSyllable(parts, index));
+    }
   }
 
   let out = "";
