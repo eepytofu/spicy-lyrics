@@ -6,13 +6,13 @@ import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
 import { Query } from "../API/Query.ts";
-import { LYRICS_PROCESSING_VERSION, ProcessLyrics } from "./ProcessLyrics.ts";
+import { LYRICS_PROCESSING_VERSION, ProcessLyrics, READING_PLAN_SCHEMA_VERSION } from "./ProcessLyrics.ts";
 import {
   chineseTones,
   chineseTranslitMode,
   cyrillicKeepSigns,
   cyrillicRomanizationMode,
-  koreanRomanizationMode,
+  koreanDisplayMode,
   translationEnabled,
   translationTargetLang,
 } from "./lyrics.ts";
@@ -44,7 +44,7 @@ function currentProcessingContextKey(): string {
     translationTargetLang,
     chineseTranslitMode,
     chineseTones,
-    koreanRomanizationMode,
+    koreanDisplayMode,
     cyrillicRomanizationMode,
     cyrillicKeepSigns,
     japaneseReadingMode: $japaneseReadingMode.get(),
@@ -53,6 +53,7 @@ function currentProcessingContextKey(): string {
 
 async function setProcessedLyricsStoreItem(trackId: string, lyrics: any): Promise<void> {
   lyrics.ProcessingContextKey = currentProcessingContextKey();
+  lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   await LyricsStore.SetItem(trackId, lyrics);
 }
 
@@ -160,6 +161,7 @@ function hasTranslationWorkQuick(lyrics: any): boolean {
 
 function markProcessedWithoutBackground(lyrics: any): void {
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
+  lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
   lyrics.TranslationPending = false;
@@ -195,6 +197,7 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
     || lyrics.ProcessingPending === true
     || (
       lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
+      && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
       && lyrics.ProcessingContextKey === processingContextKey
     )
   ) {

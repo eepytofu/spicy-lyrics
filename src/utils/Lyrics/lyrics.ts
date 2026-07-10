@@ -4,10 +4,11 @@ import {
   $chineseTranslitMode,
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
-  $koreanRomanizationMode,
+  $koreanDisplayMode,
   $romanization,
   $translationEnabled,
   $translationTargetLang,
+  type KoreanDisplayMode,
 } from "../uiState.ts";
 import Global from "../../components/Global/Global.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
@@ -367,10 +368,9 @@ $chineseTones.listen((val) => {
   chineseTones = val;
 });
 
-export type KoreanRomanizationMode = "spelling" | "pronunciation";
-export let koreanRomanizationMode: KoreanRomanizationMode = $koreanRomanizationMode.get();
-$koreanRomanizationMode.listen((val) => {
-  koreanRomanizationMode = val;
+export let koreanDisplayMode: KoreanDisplayMode = $koreanDisplayMode.get();
+$koreanDisplayMode.listen((val) => {
+  koreanDisplayMode = val;
 });
 
 export type CyrillicRomanizationMode = "Russian" | "Ukrainian";

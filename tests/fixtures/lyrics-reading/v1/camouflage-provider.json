@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "camouflage-provider-capture",
+  "language": "ko",
+  "capture": {
+    "kind": "desktop-provider-cache-whitelist",
+    "sourceSha256": "6d915f19c796c4bb7743f47fb9240518bc6b561f41029ea37ccfd5488d170003",
+    "paragraphDecision": "Provider rows merged raw TTML paragraphs. Provenance unavailable; no hard boundary fabricated.",
+    "spanTuple": ["rawText", "providerPartOfWord", "startMs", "endMs"]
+  },
+  "lines": [
+    {
+      "id": "camouflage-18",
+      "rawParagraphIndexes": [29, 30],
+      "spans": [["더", false, 49697, 50054], ["이", true, 50054, 50154], ["상", false, 50154, 50435], ["기", true, 50435, 50535], ["댈", false, 50535, 50661], ["곳", true, 50661, 50761], ["은", false, 50761, 50939], ["필", true, 50939, 51165], ["요", false, 51165, 51403], ["없", true, 51403, 51570], ["어", false, 51570, 52334]],
+      "expected": {"canonicalText": "더 이상 기댈 곳은 필요 없어", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-19",
+      "rawParagraphIndexes": [31, 32],
+      "spans": [["When", false, 52378, 52474], ["you", false, 52474, 52598], ["hold", false, 52598, 52702], ["me", false, 52702, 52842], ["tight", false, 52842, 53322]],
+      "expected": {"canonicalText": "When you hold me tight", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-25",
+      "rawParagraphIndexes": [41, 42],
+      "spans": [["더", false, 62458, 62665], ["속", true, 62665, 63016], ["아", true, 63016, 63243], ["줄", false, 63243, 63677], ["생", true, 63677, 63998], ["각", false, 63998, 64248], ["없", true, 64248, 64534], ["지,", false, 64534, 65082], ["네", true, 65082, 65266], ["게", true, 65266, 65445], ["서", false, 65445, 65760], ["Fly", false, 65760, 66310]],
+      "expected": {"canonicalText": "더 속아줄 생각 없지, 네게서 Fly", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-29",
+      "rawParagraphIndexes": [48, 49],
+      "spans": [["주", true, 72808, 72901], ["저", false, 72901, 73009], ["없", true, 73009, 73121], ["이", false, 73121, 73249], ["다,", false, 73249, 73481], ["Probably", false, 73481, 73957], ["delete", false, 73957, 74437], ["it", false, 74437, 75002]],
+      "expected": {"canonicalText": "주저 없이 다, Probably delete it", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-31",
+      "rawParagraphIndexes": [51, 52],
+      "spans": [["미", true, 76671, 76790], ["련", true, 76790, 76957], ["이", false, 76957, 77057], ["아", true, 77057, 77157], ["냐,", false, 77157, 77324], ["그", true, 77324, 77497], ["저", false, 77497, 77597], ["Hard", false, 77597, 77841], ["to", false, 77841, 78033], ["see", false, 78033, 78257], ["it", false, 78257, 78841]],
+      "expected": {"canonicalText": "미련이 아냐, 그저 Hard to see it", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-33",
+      "rawParagraphIndexes": [54],
+      "spans": [["처", true, 80440, 80761], ["음", true, 80761, 80862], ["부", true, 80862, 81053], ["터", false, 81053, 81153], ["잘", true, 81153, 81253], ["못", true, 81253, 81353], ["됐", true, 81353, 81588], ["단", false, 81588, 81850], ["걸", false, 81850, 82518]],
+      "expected": {"canonicalText": "처음부터 잘못됐단 걸", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    },
+    {
+      "id": "camouflage-46",
+      "rawParagraphIndexes": [75, 76, 77, 78],
+      "spans": [["더", false, 111119, 111512], ["이", true, 111512, 111678], ["상", false, 111678, 111970], ["기", true, 111970, 112083], ["댈", false, 112083, 112208], ["곳", true, 112208, 112315], ["은", false, 112315, 112415], ["필", true, 112344, 112444], ["요", false, 112444, 112544], ["없", true, 112544, 112921], ["어", false, 112921, 113591], ["When", false, 113791, 113896], ["you", false, 113896, 114027], ["hold", false, 114027, 114123], ["me", false, 114123, 114267], ["tight", false, 114267, 114759]],
+      "expected": {"canonicalText": "더 이상 기댈 곳은 필요 없어 When you hold me tight", "boundaries": [], "spanMappings": [], "scriptRuns": [], "readingUnits": [], "timedReadingUnits": [], "joinedDisplayText": ""}
+    }
+  ]
+}

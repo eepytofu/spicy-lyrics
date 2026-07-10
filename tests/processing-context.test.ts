@@ -10,7 +10,7 @@ const baseContext: ProcessingContext = {
   translationTargetLang: "en",
   chineseTranslitMode: "pinyin",
   chineseTones: false,
-  koreanRomanizationMode: "spelling",
+  koreanDisplayMode: "rrStandard",
   cyrillicRomanizationMode: "Russian",
   cyrillicKeepSigns: false,
   japaneseReadingMode: "romaji",
@@ -35,7 +35,9 @@ test("processing context key changes when processing modes change", () => {
     { ...baseContext, translationEnabled: false },
     { ...baseContext, chineseTranslitMode: "jyutping" },
     { ...baseContext, chineseTones: true },
-    { ...baseContext, koreanRomanizationMode: "pronunciation" },
+    { ...baseContext, koreanDisplayMode: "wordTranslit" },
+    { ...baseContext, koreanDisplayMode: "rrPronunciation" },
+    { ...baseContext, koreanDisplayMode: "vnPronunciation" },
     { ...baseContext, cyrillicRomanizationMode: "Ukrainian" },
     { ...baseContext, cyrillicKeepSigns: true },
     { ...baseContext, japaneseReadingMode: "furigana" },
@@ -59,5 +61,16 @@ test("disabled translation key ignores target language", () => {
       translationEnabled: false,
       translationTargetLang: "vi",
     })
+  );
+});
+
+test("Korean display mode is part of processing context key", () => {
+  assert.notEqual(
+    buildProcessingContextKey({ ...baseContext, koreanDisplayMode: "rrStandard" }),
+    buildProcessingContextKey({ ...baseContext, koreanDisplayMode: "wordTranslit" })
+  );
+  assert.notEqual(
+    buildProcessingContextKey({ ...baseContext, koreanDisplayMode: "rrPronunciation" }),
+    buildProcessingContextKey({ ...baseContext, koreanDisplayMode: "vnPronunciation" })
   );
 });

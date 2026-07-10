@@ -11,7 +11,7 @@ import {
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
   $japaneseReadingMode,
-  $koreanRomanizationMode,
+  $koreanDisplayMode,
   $lyricsCopyFormat,
   $showChineseTranslitButton,
   $translationEnabled,
@@ -24,8 +24,10 @@ const SECTION_NAME = "Lyrics Display";
 const SIMPLE_RENDERING_OPTIONS = ["calculate", "animate"];
 const CHINESE_TRANSLIT_OPTIONS = ["pinyin", "jyutping"];
 const KOREAN_ROMANIZATION_OPTIONS = [
-  { value: "spelling", label: "Letter-by-letter" },
-  { value: "pronunciation", label: "Pronunciation" },
+  { value: "wordTranslit", label: "Word-by-word transliteration" },
+  { value: "rrStandard", label: "Standard Korean RR" },
+  { value: "rrPronunciation", label: "Follow pronunciation (RR)" },
+  { value: "vnPronunciation", label: "Follow pronunciation (VN)" },
 ] as const;
 const CYRILLIC_ROMANIZATION_OPTIONS = ["Russian", "Ukrainian"];
 
@@ -78,7 +80,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const chineseTranslitMode = useStore($chineseTranslitMode);
   const chineseTones = useStore($chineseTones);
   const japaneseReadingMode = useStore($japaneseReadingMode);
-  const koreanRomanizationMode = useStore($koreanRomanizationMode);
+  const koreanDisplayMode = useStore($koreanDisplayMode);
   const cyrillicRomanizationMode = useStore($cyrillicRomanizationMode);
   const cyrillicKeepSigns = useStore($cyrillicKeepSigns);
   const translationEnabled = useStore($translationEnabled);
@@ -94,7 +96,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const showChineseTransliteration = matches(query, "Chinese Transliteration", "Choose Mandarin pinyin or Cantonese jyutping for Chinese lyrics.");
   const showChineseTones = matches(query, "Chinese Tones", "Show Mandarin tone marks and Cantonese jyutping tone numbers.");
   const showJapaneseReadingDisplay = matches(query, "Japanese Reading Display", "Choose romaji, furigana, or both for Japanese lyrics.");
-  const showKoreanRomanization = matches(query, "Korean Romanization", "Choose letter-by-letter Hangul romanization or pronunciation-aware romanization.");
+  const showKoreanDisplay = matches(query, "Korean Display", "Choose Korean transliteration mode for the extra romanized line.");
   const showCyrillicRomanization = matches(query, "Cyrillic Language", "Choose Russian or Ukrainian Cyrillic romanization rules.");
   const showCyrillicKeepSigns = matches(query, "Keep Cyrillic Signs", "Preserve Cyrillic hard and soft sign marks.");
   const showLyricsTranslation = matches(query, "Lyrics Translation", "Show translated lyrics under each line.");
@@ -109,7 +111,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
     showChineseTransliteration ||
     showChineseTones ||
     showJapaneseReadingDisplay ||
-    showKoreanRomanization ||
+    showKoreanDisplay ||
     showCyrillicRomanization ||
     showCyrillicKeepSigns ||
     showLyricsTranslation ||
@@ -181,13 +183,13 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
         </Row>
       )}
 
-      {showKoreanRomanization && (
-        <Row label="Korean Romanization" description="Choose letter-by-letter Hangul romanization or pronunciation-aware romanization.">
+      {showKoreanDisplay && (
+        <Row label="Korean Display" description="Choose Korean transliteration mode for the extra romanized line.">
           <Select
-            value={koreanRomanizationMode}
+            value={koreanDisplayMode}
             options={optionValues(KOREAN_ROMANIZATION_OPTIONS)}
             labels={optionLabels(KOREAN_ROMANIZATION_OPTIONS)}
-            onChange={(v) => $koreanRomanizationMode.set(v as "spelling" | "pronunciation")}
+            onChange={(v) => $koreanDisplayMode.set(v as "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation")}
           />
         </Row>
       )}

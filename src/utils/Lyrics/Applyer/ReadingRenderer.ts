@@ -13,6 +13,8 @@ import {
   type JapaneseReadable,
   type JapaneseReading,
 } from "../Reading/JapaneseReading.ts";
+import type { RenderPlan } from "../Processing/Model.ts";
+import { renderExperimentalReadingPlan } from "./ExperimentalReadingPlanRenderer.ts";
 
 export type ReadingRenderOptions = {
   useRomanized: boolean;
@@ -152,7 +154,7 @@ export function forceStackedLine(lineElem: HTMLElement, oppositeAligned?: boolea
 
 export function getRomanizedText(entry: JapaneseReadable | undefined): string | undefined {
   if (!entry) return undefined;
-  return entry.RomanizedText || entry.TransliteratedText || entry.JapaneseReading?.romaji;
+  return entry.ReadingRenderPlan?.joinedDisplayText || entry.RomanizedText || entry.TransliteratedText || entry.JapaneseReading?.romaji;
 }
 
 export function appendRomanizedBelow(
@@ -208,6 +210,7 @@ export function appendSyllableRomanizedBelow(
   groupRomanizedText: string | undefined,
   groupTranslatedText: string | undefined,
   animatorEntries: Array<{ RomajiElement?: HTMLElement }> | undefined,
+  readingPlan: RenderPlan | undefined,
   options: ReadingRenderOptions
 ): void {
   const groupEntry: JapaneseReadable = {
@@ -217,7 +220,13 @@ export function appendSyllableRomanizedBelow(
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
   };
 
-  if (shouldRenderRomanization(groupEntry, options)) {
+  if (options.useRomanized && readingPlan?.timedReadingUnits.length) {
+    forceStackedLine(lineElem, options.oppositeAligned);
+    renderExperimentalReadingPlan(lineElem, readingPlan, (spanId, element) => {
+      const index = Number(spanId);
+      if (Number.isInteger(index) && animatorEntries?.[index]) animatorEntries[index].RomajiElement = element;
+    });
+  } else if (shouldRenderRomanization(groupEntry, options)) {
     const hasDistinctRomanization = isMeaningfullyDifferent(groupRomanizedText, sourceText);
     if (hasDistinctRomanization || options.romanizationPending) {
       forceStackedLine(lineElem, options.oppositeAligned);

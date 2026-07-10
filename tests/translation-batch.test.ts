@@ -53,6 +53,7 @@ test("translation guard rejects Cyrillic romanization echoes", () => {
 
 test("translation guard rejects Korean romanization echoes", () => {
   assert.equal(looksLikeRomanizationEcho("사랑", "sarang"), true);
+  assert.equal(looksLikeRomanizationEcho("좋고", "jôkô"), true);
 });
 
 test("English target translates short Latin lyric-looking lines", () => {

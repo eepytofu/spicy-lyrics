@@ -13,6 +13,8 @@
 import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
+import { G2p } from "korean-pronunciation";
+import { tokenize, type KoreanToken } from "oktjs";
 import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
 import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
 
@@ -252,12 +254,29 @@ export function romanizeCyrillic(
 // ─── Korean (spelling + pronunciation) ────────────────────────────────────────
 
 export type KoreanMode = "spelling" | "pronunciation";
+export type KoreanOutputStyle = "rr" | "vn";
+export type KoreanDisplayMode = "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";
+export type KoreanSyllableLike = { Text?: string; IsPartOfWord?: boolean };
+export type KoreanRomanizeResult = {
+  source: string;
+  display: string;
+  pronouncedHangul?: string;
+  syllablePieces?: string[];
+};
 
 const HANGUL_INITIAL = ["g", "kk", "n", "d", "tt", "r", "m", "b", "pp", "s", "ss", "", "j", "jj", "ch", "k", "t", "p", "h"];
 const HANGUL_VOWEL = ["a", "ae", "ya", "yae", "eo", "e", "yeo", "ye", "o", "wa", "wae", "oe", "yo", "u", "wo", "we", "wi", "yu", "eu", "ui", "i"];
 const HANGUL_FINAL = ["", "k", "k", "ks", "n", "nj", "nh", "t", "l", "lk", "lm", "lb", "ls", "lt", "lp", "lh", "m", "p", "ps", "t", "t", "ng", "t", "t", "k", "t", "p", "t"];
+const HANGUL_VOWEL_VN = ["a", "ê", "ya", "yê", "o", "ê", "yo", "yê", "ô", "wa", "wê", "wê", "yô", "u", "wo", "wê", "wi", "yu", "ư", "ưi", "i"];
 
 const KOREAN_READABILITY_MIN_RUN_LENGTH = 4;
+const KOREAN_EOJEOL_REJOIN_WORDS = [
+  "뒤돌아서", "너를", "없게", "없어", "이상", "기댈", "곳은", "필요",
+  "어떻게든", "호기심은", "위험하단", "희미해져", "돌아갈",
+  "모습이", "없을", "없이", "거야", "너는", "주저", "감출", "있게", "날아가", "멀리", "나로", "다시", "점점", "날", "내", "수", "걸",
+  "말도", "하지", "마요", "미련이", "아냐", "그저", "처음부터", "잘못됐단",
+] as const;
+const KOREAN_EOJEOL_REJOIN_KEYS = [...KOREAN_EOJEOL_REJOIN_WORDS].sort((a, b) => b.length - a.length);
 const KOREAN_FIXED_PHRASES = [
   ["안녕하세요", "안녕", "하세요"],
   ["안녕하십니까", "안녕", "하십니까"],
@@ -268,38 +287,44 @@ const KOREAN_SPLIT_SUFFIXES = [
   "합니다", "하세요", "하십니까", "해요", "해서", "하고", "하면", "하니", "하지", "하죠", "하는", "하게", "하자",
   "거예요", "거에요", "거야", "거죠",
 ] as const;
+const KOREAN_DEPENDENT_NOUNS_AFTER_L = new Set(["수", "것", "곳", "때", "거", "거야", "게", "줄", "지", "데", "리", "만큼", "뻔", "적"]);
+const KOREAN_POST_G2P_EXCEPTIONS: Record<string, string> = {
+  앉다: "안따",
+  읽고: "일꼬",
+  맑게: "말께",
+  젊다: "점따",
+  밟다: "밥따",
+  핥다: "할따",
+  눈빛: "눈삗",
+  문법: "문뻡",
+  발달: "발딸",
+  뒷일: "뒨닐",
+};
+const KOREAN_POST_G2P_PHRASE_EXCEPTIONS: Record<string, string[]> = {
+  "갈 데가": ["갈", "떼가"],
+};
+const KOREAN_LEXICAL_UI_WORDS = new Set(["주의", "의미", "회의", "거의"]);
+const KOREAN_COMMON_RR_OVERRIDES: Record<string, string> = { 독립문: "dongnimmun" };
+const CODA_LIAISON_RR: Record<number, string> = { 1: "g", 2: "kk", 3: "ks", 4: "n", 5: "nj", 6: "nh", 7: "d", 8: "r", 9: "lg", 10: "lm", 11: "lb", 12: "ls", 13: "lt", 14: "lp", 15: "lh", 16: "m", 17: "b", 18: "bs", 19: "s", 20: "ss", 21: "ng", 22: "j", 23: "ch", 24: "k", 25: "t", 26: "p", 27: "h" };
 
-const ONSET = HANGUL_INITIAL;
-const VOWEL = HANGUL_VOWEL;
 const CODA_ROMAN: Record<number, string> = { 0: "", 1: "k", 4: "n", 7: "t", 8: "l", 16: "m", 17: "p", 21: "ng" };
 
 const NUC_I = 20;
+const NUC_UI = 19;
 const CODA_NONE = 0;
 const CODA_G = 1;
-const CODA_N = 4;
-const CODA_D = 7;
 const CODA_L = 8;
-const CODA_M = 16;
-const CODA_B = 17;
-const CODA_NG = 21;
-const CODA_H = 27;
-const ON_G = 0;
-const ON_N = 2;
-const ON_D = 3;
 const ON_R = 5;
-const ON_M = 6;
-const ON_B = 7;
-const ON_S = 9;
-const ON_SS = 10;
 const ON_NULL = 11;
-const ON_J = 12;
-const ON_CH = 14;
-const ON_K = 15;
-const ON_T = 16;
-const ON_P = 17;
-const ON_H = 18;
+const KOREAN_BOUNDARY_POS = new Set(["Josa", "Eomi", "PreEomi", "Suffix"]);
+const KOREAN_TENSE_ONSETS = new Set([1, 4, 8, 10, 13]);
+const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
+
+let koreanG2p: G2p | undefined;
+const koreanOktTokenCache = new Map<string, KoreanToken[]>();
 
 type HangulSyllable = [number, number, number];
+type KoreanRomanizedSyllablePart = { onset: string; vowel: string; coda: string };
 
 function decomposeHangul(char: string): HangulSyllable | null {
   const cp = char.codePointAt(0) ?? 0;
@@ -310,6 +335,190 @@ function decomposeHangul(char: string): HangulSyllable | null {
 
 function isHangulSyllable(char: string): boolean {
   return decomposeHangul(char) !== null;
+}
+
+function getKoreanG2p(): G2p {
+  koreanG2p ??= new G2p();
+  return koreanG2p;
+}
+
+function appendLineSpaceIfNeeded(lineText: string): string {
+  return lineText && !/\s$/.test(lineText) ? `${lineText} ` : lineText;
+}
+
+function isSingleHangulToken(token: string): boolean {
+  return Array.from(token).length === 1 && isHangulSyllable(token);
+}
+
+function isHangulToken(token: string): boolean {
+  return Array.from(token).every(isHangulSyllable);
+}
+
+function rejoinKnownKoreanWords(text: string): string {
+  let out = text;
+  for (const word of KOREAN_EOJEOL_REJOIN_KEYS) {
+    if (Array.from(word).length < 2) continue;
+    const pattern = new RegExp(Array.from(word).join("\\s+"), "g");
+    out = out.replace(pattern, word);
+  }
+  return out;
+}
+
+function normalizeKoreanTokenizerSpacing(text: string): string {
+  text = rejoinKnownKoreanWords(text);
+  const tokens = text.trim().split(/\s+/);
+  if (tokens.length < 2 || !tokens.some(isSingleHangulToken)) return text;
+
+  const out: string[] = [];
+  for (let index = 0; index < tokens.length;) {
+    if (!isHangulToken(tokens[index])) {
+      out.push(tokens[index]);
+      index += 1;
+      continue;
+    }
+
+    let match = "";
+    let consumed = 0;
+    for (const word of KOREAN_EOJEOL_REJOIN_KEYS) {
+      let combined = "";
+      for (let offset = 0; index + offset < tokens.length; offset += 1) {
+        const token = tokens[index + offset];
+        if (!isHangulToken(token)) break;
+        combined += token;
+        if (!word.startsWith(combined)) break;
+        if (combined === word) {
+          match = word;
+          consumed = offset + 1;
+          break;
+        }
+      }
+      if (match) break;
+    }
+
+    if (match) {
+      out.push(match);
+      index += consumed;
+      continue;
+    }
+
+    out.push(tokens[index]);
+    index += 1;
+  }
+
+  return out.join(" ");
+}
+
+function normalizeKoreanBuiltLineText(text: string): string {
+  return text
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .replace(/([,.;:!?])(?=\S)/g, "$1 ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function buildKoreanLineTextWithLeadingBoundaries(syllables: KoreanSyllableLike[]): string {
+  let lineText = "";
+  for (let index = 0; index < syllables.length; index += 1) {
+    const text = syllables[index]?.Text || "";
+    if (!text) continue;
+    if (lineText && syllables[index]?.IsPartOfWord !== true) lineText += " ";
+    lineText += text.trim();
+  }
+  return normalizeKoreanBuiltLineText(lineText);
+}
+
+function buildKoreanLineTextWithTrailingBoundaries(syllables: KoreanSyllableLike[]): string {
+  let lineText = "";
+  for (let index = 0; index < syllables.length; index += 1) {
+    const text = syllables[index]?.Text || "";
+    if (!text) continue;
+    lineText += text.trim();
+    if (index < syllables.length - 1 && syllables[index]?.IsPartOfWord !== true) lineText += " ";
+  }
+  return normalizeKoreanBuiltLineText(lineText);
+}
+
+function buildKoreanLineTextWithSmartBoundaries(syllables: KoreanSyllableLike[]): string {
+  const suffixLike = /^(?:이|가|은|는|을|를|도|에|의|로|와|과|만|뿐|요|죠|지|네|군|까|고|게|면서)$/;
+  let lineText = "";
+  let previous = "";
+
+  for (const syllable of syllables) {
+    const text = (syllable?.Text || "").trim();
+    if (!text) continue;
+
+    const previousIsLatin = LatinWordTextTest.test(previous);
+    const currentIsLatin = LatinWordTextTest.test(text);
+    const attachToPrevious =
+      !lineText ||
+      /^[,.;:!?]$/.test(text) ||
+      (isHangulToken(previous) && isHangulToken(text) && suffixLike.test(text));
+
+    if (!attachToPrevious || previousIsLatin || currentIsLatin) lineText = appendLineSpaceIfNeeded(lineText);
+    lineText += text;
+    previous = text;
+  }
+
+  return normalizeKoreanBuiltLineText(normalizeKoreanMixedScriptSpacing(lineText));
+}
+
+function scoreKoreanLineSpacing(text: string): number {
+  const suffixLike = /^(?:이|가|은|는|을|를|도|에|의|로|와|과|만|뿐|요|죠|지|네|군|까|고|게|면서)$/;
+  let score = 0;
+  for (const token of text.split(/\s+/)) {
+    if (!token) continue;
+    if (!isHangulToken(token)) continue;
+    const chars = Array.from(token);
+    if (chars.length === 1) score += 20;
+    if (suffixLike.test(token)) score += 12;
+  }
+  return score;
+}
+
+function normalizeKoreanMixedScriptSpacing(text: string): string {
+  return text
+    .replace(/([가-힯])([A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ])/g, "$1 $2")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ])([가-힯])/g, "$1 $2")
+    .replace(/([,.;:!?])(?=\S)/g, "$1 ");
+}
+
+export function buildKoreanLineTextFromSyllables(syllables: KoreanSyllableLike[]): string {
+  if (syllables.some((syllable) => /\s/.test(syllable?.Text || ""))) {
+    const rawJoined = normalizeKoreanBuiltLineText(normalizeKoreanMixedScriptSpacing(syllables.map((syllable) => syllable?.Text || "").join("")));
+    const spanSpaced = normalizeKoreanBuiltLineText(
+      syllables.map((syllable) => (syllable?.Text || "").trim()).filter(Boolean).join(" ")
+    );
+    const tokenizerSpaced = normalizeKoreanBuiltLineText(normalizeKoreanTokenizerSpacing(spanSpaced));
+    return scoreKoreanLineSpacing(tokenizerSpaced) <= scoreKoreanLineSpacing(rawJoined) ? tokenizerSpaced : rawJoined;
+  }
+
+  const leading = buildKoreanLineTextWithLeadingBoundaries(syllables);
+  const trailing = buildKoreanLineTextWithTrailingBoundaries(syllables);
+  const spaced = normalizeKoreanBuiltLineText(
+    syllables.map((syllable) => (syllable?.Text || "").trim()).filter(Boolean).join(" ")
+  );
+  const tokenizerSpaced = normalizeKoreanBuiltLineText(normalizeKoreanTokenizerSpacing(spaced));
+  const smart = buildKoreanLineTextWithSmartBoundaries(syllables);
+  const compactBest = scoreKoreanLineSpacing(trailing) < scoreKoreanLineSpacing(leading) ? trailing : leading;
+  const spanTexts = syllables.map((syllable) => (syllable?.Text || "").trim()).filter(Boolean);
+  const looksWordLevel = spanTexts.some((text) => LatinWordTextTest.test(text) || Array.from(text).length > 1);
+  if (tokenizerSpaced !== spaced && scoreKoreanLineSpacing(tokenizerSpaced) < scoreKoreanLineSpacing(compactBest)) return tokenizerSpaced;
+  if (looksWordLevel && /\s/.test(smart)) return smart;
+  return scoreKoreanLineSpacing(spaced) + 8 < scoreKoreanLineSpacing(compactBest) ? spaced : normalizeKoreanMixedScriptSpacing(compactBest);
+}
+
+export function normalizeKoreanDisplaySource(text: string): string {
+  const source = buildKoreanLineTextFromSyllables([{ Text: text, IsPartOfWord: false }]);
+  return applyKoreanReadabilitySpacing(normalizeKoreanTokenizerSpacing(source));
+}
+
+export function romanizeKoreanSyllableLine(
+  syllables: KoreanSyllableLike[],
+  mode: KoreanMode = "spelling",
+  style: KoreanOutputStyle = "rr",
+  separators = false
+): string {
+  return romanizeKorean(buildKoreanLineTextFromSyllables(syllables), mode, style, separators);
 }
 
 function splitKoreanReadableRunInto(run: string, out: string[]): void {
@@ -364,149 +573,448 @@ function applyKoreanReadabilitySpacing(text: string): string {
   return out;
 }
 
-function romanizeKoreanSpelling(text: string): string {
+function koreanVowel(syllable: HangulSyllable, style: KoreanOutputStyle): string {
+  return style === "vn" ? HANGUL_VOWEL_VN[syllable[1]] : HANGUL_VOWEL[syllable[1]];
+}
+
+function koreanSpellingCoda(syllable: HangulSyllable, next: HangulSyllable | null, style: KoreanOutputStyle): string {
+  if (style === "vn" && syllable[2] === CODA_G && next?.[0] === ON_NULL) return "g";
+  return HANGUL_FINAL[syllable[2]];
+}
+
+function romanizeKoreanSpelling(text: string, style: KoreanOutputStyle): string {
   let out = "";
-  for (const char of text) {
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
     const syl = decomposeHangul(char);
-    out += syl ? HANGUL_INITIAL[syl[0]] + HANGUL_VOWEL[syl[1]] + HANGUL_FINAL[syl[2]] : char;
+    const next = chars[index + 1] ? decomposeHangul(chars[index + 1]) : null;
+    out += syl ? HANGUL_INITIAL[syl[0]] + koreanVowel(syl, style) + koreanSpellingCoda(syl, next, style) : char;
   }
   return out;
 }
 
-function liaisonSplit(coda: number): [number, number] {
-  switch (coda) {
-    case 1: return [CODA_NONE, ON_G];
-    case 2: return [CODA_NONE, 1];
-    case 3: return [CODA_G, ON_S];
-    case 4: return [CODA_NONE, ON_N];
-    case 5: return [CODA_N, ON_J];
-    case 6: return [CODA_NONE, ON_N];
-    case 7: return [CODA_NONE, ON_D];
-    case 8: return [CODA_NONE, ON_R];
-    case 9: return [CODA_L, ON_G];
-    case 10: return [CODA_L, ON_M];
-    case 11: return [CODA_L, ON_B];
-    case 12: return [CODA_L, ON_S];
-    case 13: return [CODA_L, ON_T];
-    case 14: return [CODA_L, ON_P];
-    case 15: return [CODA_NONE, ON_R];
-    case 16: return [CODA_NONE, ON_M];
-    case 17: return [CODA_NONE, ON_B];
-    case 18: return [CODA_B, ON_S];
-    case 19: return [CODA_NONE, ON_S];
-    case 20: return [CODA_NONE, ON_SS];
-    case 21: return [CODA_NG, ON_NULL];
-    case 22: return [CODA_NONE, ON_J];
-    case 23: return [CODA_NONE, ON_CH];
-    case 24: return [CODA_NONE, ON_K];
-    case 25: return [CODA_NONE, ON_T];
-    case 26: return [CODA_NONE, ON_P];
-    default: return [CODA_NONE, ON_NULL];
-  }
-}
-
-function codaRepresentative(coda: number): number {
-  if ([1, 2, 9, 24].includes(coda)) return CODA_G;
-  if ([4, 5, 6].includes(coda)) return CODA_N;
-  if ([7, 19, 20, 22, 23, 25, 27].includes(coda)) return CODA_D;
-  if ([8, 11, 12, 13, 15].includes(coda)) return CODA_L;
-  if ([10, 16].includes(coda)) return CODA_M;
-  if ([14, 17, 18, 26].includes(coda)) return CODA_B;
-  if (coda === 21) return CODA_NG;
-  return CODA_NONE;
-}
-
-function nasalizeStop(rep: number): number {
-  if (rep === CODA_G) return CODA_NG;
-  if (rep === CODA_D) return CODA_N;
-  if (rep === CODA_B) return CODA_M;
-  return rep;
-}
-
-function applyKoreanPronunciationRules(run: HangulSyllable[]): void {
-  for (let i = 0; i + 1 < run.length; i += 1) {
-    const cur = run[i];
-    const next = run[i + 1];
-    let coda = cur[2];
-    const onset = next[0];
-    const nucleus = next[1];
-    if (coda === CODA_NONE) continue;
-
-    if (onset === ON_NULL) {
-      if (coda === CODA_H) {
-        cur[2] = CODA_NONE;
-        continue;
-      }
-      const [left, movedOnset] = liaisonSplit(coda);
-      let moved = movedOnset;
-      if (nucleus === NUC_I && moved === ON_D) moved = ON_J;
-      else if (nucleus === NUC_I && moved === ON_T) moved = ON_CH;
-      cur[2] = left;
-      next[0] = moved;
+export function romanizeKoreanCommonRr(text: string): string {
+  let out = "";
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index += 1) {
+    const remaining = chars.slice(index).join("");
+    const override = Object.entries(KOREAN_COMMON_RR_OVERRIDES).find(([word]) => remaining.startsWith(word));
+    if (override) {
+      out += override[1];
+      index += Array.from(override[0]).length - 1;
       continue;
     }
 
-    let rep = codaRepresentative(coda);
-    if (coda === CODA_H) {
-      if (onset === ON_G) { next[0] = ON_K; cur[2] = CODA_NONE; continue; }
-      if (onset === ON_D) { next[0] = ON_T; cur[2] = CODA_NONE; continue; }
-      if (onset === ON_B) { next[0] = ON_P; cur[2] = CODA_NONE; continue; }
-      if (onset === ON_J) { next[0] = ON_CH; cur[2] = CODA_NONE; continue; }
-      if (onset === ON_S) { next[0] = ON_SS; cur[2] = CODA_NONE; continue; }
-      rep = CODA_D;
-    } else if (onset === ON_H) {
-      if (rep === CODA_G) { next[0] = ON_K; cur[2] = CODA_NONE; continue; }
-      if (rep === CODA_D) { next[0] = ON_T; cur[2] = CODA_NONE; continue; }
-      if (rep === CODA_B) { next[0] = ON_P; cur[2] = CODA_NONE; continue; }
+    const syl = decomposeHangul(chars[index]);
+    if (!syl) {
+      out += chars[index];
+      continue;
     }
 
-    cur[2] = rep;
-    if (onset === ON_N || onset === ON_M) cur[2] = nasalizeStop(rep);
-    if (onset === ON_R) {
-      if (cur[2] === CODA_N || cur[2] === CODA_L) {
-        cur[2] = CODA_L;
-      } else {
-        next[0] = ON_N;
-        cur[2] = nasalizeStop(cur[2]);
-      }
-    } else if (cur[2] === CODA_L && onset === ON_N) {
-      next[0] = ON_R;
+    const next = chars[index + 1] ? decomposeHangul(chars[index + 1]) : null;
+    if (syl[2] !== CODA_NONE && next?.[0] === ON_NULL) {
+      out += HANGUL_INITIAL[syl[0]] + HANGUL_VOWEL[syl[1]];
+      next[0] = -1;
+      out += (CODA_LIAISON_RR[syl[2]] ?? HANGUL_FINAL[syl[2]]) + HANGUL_VOWEL[next[1]] + HANGUL_FINAL[next[2]];
+      index += 1;
+      continue;
     }
-  }
-}
 
-function flushKoreanRun(run: HangulSyllable[]): string {
-  if (run.length === 0) return "";
-  applyKoreanPronunciationRules(run);
-  let out = "";
-  let prevCoda = CODA_NONE;
-  for (const syl of run) {
-    const onset = syl[0] === ON_R && prevCoda === CODA_L ? "l" : ONSET[syl[0]];
-    out += onset + VOWEL[syl[1]] + (CODA_ROMAN[syl[2]] ?? "");
-    prevCoda = syl[2];
+    out += HANGUL_INITIAL[syl[0]] + HANGUL_VOWEL[syl[1]] + HANGUL_FINAL[syl[2]];
   }
-  run.length = 0;
   return out;
 }
 
-function romanizeKoreanPronunciation(text: string): string {
+function romanizeKoreanSpellingDisplay(text: string, style: KoreanOutputStyle): string {
+  // Learner block mode: one Latin chunk per written Hangul block, dash-joined
+  // within a word. Blocks are romanized in isolation so letters stay faithful
+  // to the written block (국 → guk even before a vowel).
   let out = "";
-  const run: HangulSyllable[] = [];
+  let pendingDash = false;
+  for (const char of Array.from(text)) {
+    const syl = decomposeHangul(char);
+    if (syl) {
+      if (pendingDash) out += "-";
+      out += HANGUL_INITIAL[syl[0]] + koreanVowel(syl, style) + HANGUL_FINAL[syl[2]];
+      pendingDash = true;
+    } else {
+      out += char;
+      pendingDash = false;
+    }
+  }
+  return out;
+}
+
+function applyKoreanUiPronunciation(run: HangulSyllable[]): void {
+  for (let i = 0; i < run.length; i += 1) {
+    const syl = run[i];
+    if (syl[1] !== NUC_UI) continue;
+    if (syl[0] !== ON_NULL || i > 0) syl[1] = NUC_I;
+  }
+}
+
+function isKoreanPossessiveUiWord(word: string): boolean {
+  return word.length > 1 && word.endsWith("의") && !KOREAN_LEXICAL_UI_WORDS.has(word);
+}
+
+function rewriteKoreanUiForG2p(word: string): string {
+  if (isKoreanPossessiveUiWord(word)) return `${word.slice(0, -1)}에`;
+  return word.replace(/(?<=.)의/g, "이");
+}
+
+function romanizeKoreanPronouncedRun(run: HangulSyllable[], style: KoreanOutputStyle): string {
+  applyKoreanUiPronunciation(run);
+  let out = "";
+  let prevCoda = CODA_NONE;
+  for (const syl of run) {
+    const onset = syl[0] === ON_R && prevCoda === CODA_L ? "l" : HANGUL_INITIAL[syl[0]];
+    out += onset + koreanVowel(syl, style) + (CODA_ROMAN[syl[2]] ?? "");
+    prevCoda = syl[2];
+  }
+  return out;
+}
+
+function romanizeKoreanPronouncedSyllableParts(run: HangulSyllable[], style: KoreanOutputStyle): KoreanRomanizedSyllablePart[] {
+  const adjusted = run.map((syl) => [...syl] as HangulSyllable);
+  applyKoreanUiPronunciation(adjusted);
+
+  const parts: KoreanRomanizedSyllablePart[] = [];
+  let prevCoda = CODA_NONE;
+  for (const syl of adjusted) {
+    parts.push({
+      onset: syl[0] === ON_R && prevCoda === CODA_L ? "l" : HANGUL_INITIAL[syl[0]],
+      vowel: koreanVowel(syl, style),
+      coda: CODA_ROMAN[syl[2]] ?? "",
+    });
+    prevCoda = syl[2];
+  }
+  return parts;
+}
+
+function romanizePronouncedHangul(text: string, style: KoreanOutputStyle): string {
+  let out = "";
+  let run: HangulSyllable[] = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    out += romanizeKoreanPronouncedRun(run, style);
+    run = [];
+  };
   for (const char of text) {
     const syl = decomposeHangul(char);
     if (syl) {
       run.push(syl);
     } else {
-      out += flushKoreanRun(run);
+      flush();
       out += char;
     }
   }
-  return out + flushKoreanRun(run);
+  flush();
+  return out;
 }
 
-export function romanizeKorean(text: string, mode: KoreanMode = "spelling"): string {
-  const readable = applyKoreanReadabilitySpacing(text);
-  return mode === "pronunciation" ? romanizeKoreanPronunciation(readable) : romanizeKoreanSpelling(readable);
+function romanizeKoreanPronouncedPieces(pronounced: string, style: KoreanOutputStyle): string[] {
+  const pieces: string[] = [];
+  let run: HangulSyllable[] = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    for (const part of romanizeKoreanPronouncedSyllableParts(run, style)) {
+      pieces.push(part.onset + part.vowel + part.coda);
+    }
+    run = [];
+  };
+
+  for (const char of pronounced) {
+    const syl = decomposeHangul(char);
+    if (syl) {
+      run.push(syl);
+    } else {
+      flush();
+      pieces.push(char);
+    }
+  }
+  flush();
+  return pieces;
+}
+
+export function romanizeKoreanSyllablePieces(text: string, style: KoreanOutputStyle = "rr"): string[] {
+  return romanizeKoreanPronouncedPieces(pronounceKoreanHangul(normalizeKoreanDisplaySource(text)), style);
+}
+
+function romanizeKoreanSpellingPieces(text: string, style: KoreanOutputStyle = "rr"): string[] {
+  const pieces: string[] = [];
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index += 1) {
+    const syl = decomposeHangul(chars[index]);
+    if (!syl) {
+      pieces.push(chars[index]);
+      continue;
+    }
+    const next = chars[index + 1] ? decomposeHangul(chars[index + 1]) : null;
+    pieces.push(HANGUL_INITIAL[syl[0]] + koreanVowel(syl, style) + koreanSpellingCoda(syl, next, style));
+  }
+  return pieces;
+}
+
+function romanizeKoreanCommonRrPieces(text: string): string[] {
+  const pieces: string[] = [];
+  const chars = Array.from(text);
+  for (let index = 0; index < chars.length; index += 1) {
+    const syl = decomposeHangul(chars[index]);
+    if (!syl) {
+      pieces.push(chars[index]);
+      continue;
+    }
+
+    const next = chars[index + 1] ? decomposeHangul(chars[index + 1]) : null;
+    if (syl[2] !== CODA_NONE && next?.[0] === ON_NULL) {
+      pieces.push(HANGUL_INITIAL[syl[0]] + HANGUL_VOWEL[syl[1]]);
+      pieces.push((CODA_LIAISON_RR[syl[2]] ?? HANGUL_FINAL[syl[2]]) + HANGUL_VOWEL[next[1]] + HANGUL_FINAL[next[2]]);
+      index += 1;
+      continue;
+    }
+
+    pieces.push(HANGUL_INITIAL[syl[0]] + HANGUL_VOWEL[syl[1]] + HANGUL_FINAL[syl[2]]);
+  }
+  return pieces;
+}
+
+export function romanizeKoreanDisplayPieces(text: string, mode: KoreanDisplayMode = "rrStandard"): string[] {
+  const source = normalizeKoreanDisplaySource(text);
+  if (mode === "wordTranslit") return romanizeKoreanSpellingPieces(source, "rr");
+  if (mode === "rrStandard") return romanizeKoreanCommonRrPieces(source);
+  return romanizeKoreanPronouncedPieces(pronounceKoreanHangul(source), koreanOutputStyleForDisplayMode(mode));
+}
+
+function convertKoreanWordToPronouncedHangul(word: string): string {
+  return KOREAN_POST_G2P_EXCEPTIONS[word] ?? getKoreanG2p().convert(rewriteKoreanUiForG2p(word));
+}
+
+function koreanDependentNounAfterL(word: string): string | undefined {
+  if (KOREAN_DEPENDENT_NOUNS_AFTER_L.has(word)) return word;
+  return undefined;
+}
+
+function shouldJoinKoreanG2pBigram(word: string, nextWord: string | undefined): boolean {
+  if (!nextWord || !koreanDependentNounAfterL(nextWord)) return false;
+  return endsWithHangulCoda(word, CODA_L);
+}
+
+function convertKoreanHangulRunToPronouncedHangul(run: string): string {
+  const words = run.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return run;
+
+  const converted: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index];
+    const nextWord = words[index + 1];
+    const phraseException = nextWord ? KOREAN_POST_G2P_PHRASE_EXCEPTIONS[`${word} ${nextWord}`] : undefined;
+    if (phraseException) {
+      converted.push(...phraseException);
+      index += 1;
+      continue;
+    }
+    if (shouldJoinKoreanG2pBigram(word, nextWord)) {
+      const pair = getKoreanG2p().convert(`${word} ${nextWord}`).split(/\s+/);
+      converted.push(pair[0] ?? convertKoreanWordToPronouncedHangul(word));
+      converted.push(pair[1] ?? convertKoreanWordToPronouncedHangul(nextWord));
+      index += 1;
+      continue;
+    }
+    converted.push(convertKoreanWordToPronouncedHangul(word));
+  }
+
+  const leading = run.match(/^\s*/)?.[0] ?? "";
+  const trailing = run.match(/\s*$/)?.[0] ?? "";
+  return `${leading}${converted.join(" ")}${trailing}`;
+}
+
+export function pronounceKoreanHangul(text: string): string {
+  let out = "";
+  let run = "";
+  const flush = () => {
+    if (!run) return;
+    out += convertKoreanHangulRunToPronouncedHangul(run);
+    run = "";
+  };
+
+  for (const char of text) {
+    if (isHangulSyllable(char) || (run && /\s/.test(char))) {
+      run += char;
+    } else {
+      flush();
+      out += char;
+    }
+  }
+  flush();
+  return out;
+}
+
+function romanizeKoreanPronunciation(text: string, style: KoreanOutputStyle): string {
+  return romanizePronouncedHangul(pronounceKoreanHangul(text), style);
+}
+
+function endsWithHangulCoda(text: string, coda: number): boolean {
+  for (let index = text.length - 1; index >= 0; index -= 1) {
+    const syl = decomposeHangul(text[index]);
+    if (syl) return syl[2] === coda;
+    if (!/\s/.test(text[index])) break;
+  }
+  return false;
+}
+
+function koreanOktTokens(word: string): KoreanToken[] {
+  const cached = koreanOktTokenCache.get(word);
+  if (cached) return cached;
+
+  const tokens = tokenize(word).filter((token) => token.pos !== "Space");
+  koreanOktTokenCache.set(word, tokens);
+  return tokens;
+}
+
+function romanizedPartLength(part: KoreanRomanizedSyllablePart): number {
+  return part.onset.length + part.vowel.length + part.coda.length;
+}
+
+function romanizedOffsetBeforeSyllable(parts: KoreanRomanizedSyllablePart[], syllableIndex: number): number {
+  let offset = 0;
+  for (let index = 0; index < syllableIndex; index += 1) offset += romanizedPartLength(parts[index]);
+  return offset;
+}
+
+function romanizeKoreanPronunciationWordWithSeparators(word: string, style: KoreanOutputStyle): string {
+  const pronounced = convertKoreanWordToPronouncedHangul(word);
+  const writtenChars = Array.from(word);
+  const pronouncedChars = Array.from(pronounced);
+  if (writtenChars.length !== pronouncedChars.length) return romanizePronouncedHangul(pronounced, style);
+
+  const writtenSyllables = writtenChars.map(decomposeHangul);
+  const pronouncedSyllables = pronouncedChars.map(decomposeHangul);
+  if (writtenSyllables.some((syl) => !syl) || pronouncedSyllables.some((syl) => !syl)) {
+    return romanizePronouncedHangul(pronounced, style);
+  }
+
+  const written = writtenSyllables as HangulSyllable[];
+  const pronouncedRun = pronouncedSyllables as HangulSyllable[];
+  const parts = romanizeKoreanPronouncedSyllableParts(pronouncedRun, style);
+  const hyphenOffsets = new Set<number>();
+
+  let boundary = 0;
+  const tokens = koreanOktTokens(word);
+  for (let index = 0; index < tokens.length - 1; index += 1) {
+    boundary += Array.from(tokens[index].text).length;
+    const nextPos = tokens[index + 1].pos;
+    if (!KOREAN_BOUNDARY_POS.has(nextPos) || boundary <= 0 || boundary >= written.length) continue;
+
+    hyphenOffsets.add(romanizedOffsetBeforeSyllable(parts, boundary));
+  }
+
+  for (let index = 1; index < pronouncedRun.length; index += 1) {
+    if (!KOREAN_TENSE_ONSETS.has(pronouncedRun[index][0]) || KOREAN_TENSE_ONSETS.has(written[index][0])) continue;
+    hyphenOffsets.add(romanizedOffsetBeforeSyllable(parts, index));
+  }
+
+  let out = "";
+  let offset = 0;
+  for (const part of parts) {
+    for (const piece of [part.onset, part.vowel, part.coda]) {
+      if (hyphenOffsets.has(offset) && !out.endsWith("-")) out += "-";
+      out += piece;
+      offset += piece.length;
+    }
+  }
+  if (hyphenOffsets.has(offset) && !out.endsWith("-")) out += "-";
+  return out;
+}
+
+function romanizeKoreanPronunciationTokenWithSeparators(token: string, style: KoreanOutputStyle): string {
+  let out = "";
+  let run = "";
+  const flush = () => {
+    if (!run) return;
+    out += romanizeKoreanPronunciationWordWithSeparators(run, style);
+    run = "";
+  };
+
+  for (const char of token) {
+    if (isHangulSyllable(char)) {
+      run += char;
+    } else {
+      flush();
+      out += char;
+    }
+  }
+  flush();
+  return out;
+}
+
+function pronouncedKoreanBigramSecondWord(word: string, nextWord: string): string {
+  return getKoreanG2p().convert(`${rewriteKoreanUiForG2p(word)} ${rewriteKoreanUiForG2p(nextWord)}`).split(/\s+/)[1] ?? convertKoreanWordToPronouncedHangul(nextWord);
+}
+
+function romanizeKoreanPronunciationDisplay(text: string, style: KoreanOutputStyle): string {
+  const tokens = text.split(/(\s+)/);
+  const out: string[] = [];
+  let previousSource = "";
+
+  for (const token of tokens) {
+    if (!token) continue;
+    if (/^\s+$/.test(token)) {
+      if (out.length > 0 && !out[out.length - 1].endsWith("-")) out.push(token);
+      continue;
+    }
+
+    let rendered = romanizeKoreanPronunciationTokenWithSeparators(token, style);
+    if (shouldJoinKoreanG2pBigram(previousSource, token)) {
+      const pronouncedSecondWord = pronouncedKoreanBigramSecondWord(previousSource, token);
+      rendered = romanizePronouncedHangul(pronouncedSecondWord, style);
+      if (Array.from(token).length === 1) {
+        while (out.length > 0 && /^\s+$/.test(out[out.length - 1])) out.pop();
+        rendered = `-${rendered}`;
+      }
+    }
+    out.push(rendered);
+    previousSource = token;
+  }
+
+  return out.join("").replace(/\s+/g, " ").trim();
+}
+
+export function romanizeKorean(text: string, mode: KoreanMode = "spelling", style: KoreanOutputStyle = "rr", separators = false): string {
+  const readable = normalizeKoreanDisplaySource(text);
+  if (mode === "pronunciation" && separators) return romanizeKoreanPronunciationDisplay(readable, style);
+  if (mode === "spelling" && separators) return romanizeKoreanSpellingDisplay(readable, style);
+  return mode === "pronunciation" ? romanizeKoreanPronunciation(readable, style) : romanizeKoreanSpelling(readable, style);
+}
+
+export function koreanOutputStyleForDisplayMode(mode: KoreanDisplayMode): KoreanOutputStyle {
+  return mode === "vnPronunciation" ? "vn" : "rr";
+}
+
+export function romanizeKoreanForDisplay(text: string, mode: KoreanDisplayMode = "rrStandard"): KoreanRomanizeResult {
+  const source = normalizeKoreanDisplaySource(text);
+  if (mode === "wordTranslit") {
+    return { source, display: romanizeKoreanSpellingDisplay(source, "rr") };
+  }
+  if (mode === "rrStandard") {
+    return { source, display: romanizeKoreanCommonRr(source) };
+  }
+
+  const style = koreanOutputStyleForDisplayMode(mode);
+  const pronouncedHangul = pronounceKoreanHangul(source);
+  return {
+    source,
+    display: romanizeKoreanPronunciationDisplay(source, style),
+    pronouncedHangul,
+    syllablePieces: romanizeKoreanPronouncedPieces(pronouncedHangul, style),
+  };
+}
+
+export function romanizeKoreanSyllableLineForDisplay(
+  syllables: KoreanSyllableLike[],
+  mode: KoreanDisplayMode = "rrStandard"
+): KoreanRomanizeResult {
+  return romanizeKoreanForDisplay(buildKoreanLineTextFromSyllables(syllables), mode);
 }
 
 // ─── Japanese Romaji Fallback ─────────────────────────────────────────────────

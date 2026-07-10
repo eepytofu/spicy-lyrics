@@ -307,7 +307,6 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
       line.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
       line.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
     );
-
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
@@ -372,6 +371,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
       leadRomanizedText,
       line.Lead.TranslatedText,
       leadEntries,
+      line.Lead.ReadingRenderPlan,
       lineRenderOptions
     );
 
@@ -422,6 +422,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
           bgRomanizedText,
           bg.TranslatedText,
           bgEntries,
+          bg.ReadingRenderPlan,
           bgRenderOptions
         );
       });

@@ -157,6 +157,10 @@ export function romanizationCandidates(source: string): string[] {
   if (SCRIPT_TESTS.hangul.test(source)) {
     out.push(romanizeKorean(source, "spelling"));
     out.push(romanizeKorean(source, "pronunciation"));
+    out.push(romanizeKorean(source, "spelling", "vn"));
+    out.push(romanizeKorean(source, "pronunciation", "vn"));
+    out.push(romanizeKorean(source, "pronunciation", "rr", true));
+    out.push(romanizeKorean(source, "pronunciation", "vn", true));
   }
   // Chinese/Japanese romanizers are async/lazy-loaded on desktop; skip those
   // candidates here so echo filtering stays synchronous in translation flow.

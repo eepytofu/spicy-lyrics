@@ -195,6 +195,11 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   display: inline-block;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-row,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-group {
+  display: inline;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below {
   display: block;
   width: 100%;

@@ -3,7 +3,7 @@ export type ProcessingContext = {
   translationTargetLang: string;
   chineseTranslitMode: "pinyin" | "jyutping";
   chineseTones: boolean;
-  koreanRomanizationMode: "spelling" | "pronunciation";
+  koreanDisplayMode: "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";
   cyrillicRomanizationMode: "Russian" | "Ukrainian";
   cyrillicKeepSigns: boolean;
   japaneseReadingMode: "romaji" | "furigana" | "both";
@@ -14,7 +14,7 @@ export function buildProcessingContextKey(context: ProcessingContext): string {
     translation: context.translationEnabled ? context.translationTargetLang || "" : false,
     chineseTranslitMode: context.chineseTranslitMode,
     chineseTones: context.chineseTones,
-    koreanRomanizationMode: context.koreanRomanizationMode,
+    koreanDisplayMode: context.koreanDisplayMode,
     cyrillicRomanizationMode: context.cyrillicRomanizationMode,
     cyrillicKeepSigns: context.cyrillicKeepSigns,
     japaneseReadingMode: context.japaneseReadingMode,
