@@ -220,7 +220,7 @@ export function appendSyllableRomanizedBelow(
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
   };
 
-  if (options.useRomanized && readingPlan?.timedReadingUnits.length) {
+  if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
     forceStackedLine(lineElem, options.oppositeAligned);
     renderExperimentalReadingPlan(lineElem, readingPlan, (spanId, element) => {
       const index = Number(spanId);

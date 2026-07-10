@@ -30,16 +30,14 @@ import {
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
 import {
   annotateJapaneseTextTarget,
-  applyJapaneseReadingToSyllables,
   buildJapaneseLineTextMap,
-  clearLegacyFuriganaFields,
   romanizeJapaneseFromFurigana,
 } from "./Reading/JapaneseReading.ts";
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 import { DefaultCanonicalLineBuilder } from "./Processing/Canonical.ts";
 import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/RenderPlan.ts";
-import { annotateJapaneseLine } from "./Processing/Japanese/JapaneseAnnotationProcessor.ts";
+import { processJapanesePackageLine } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
 import type { ParsedLine } from "./Processing/Model.ts";
 
@@ -348,52 +346,26 @@ const postProcessSyllableRomanization = async (
           return;
         }
       }
+      if (isJapaneseSong && !groupHasKorean && japaneseMap) {
+        const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables);
+        for (const syllable of syllables) {
+          delete syllable.RomanizedText;
+          delete syllable.TransliteratedText;
+          delete syllable.RomajiSpaceBefore;
+        }
+        group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.plan.furigana || [] };
+        group.ReadingRenderPlan = packageResult.plan;
+        delete group.RomanizedText;
+        delete group.TransliteratedText;
+        return;
+      }
       const fullRomaji = await romanizeLineText(effectiveLineText, docContext, packages, language);
       if (!fullRomaji) return;
 
       group.TransliteratedText = fullRomaji;
       group.RomanizedText = fullRomaji;
 
-      if (isJapaneseSong && !groupHasKorean) {
-        for (const syllable of syllables) {
-          delete syllable.RomanizedText;
-          delete syllable.TransliteratedText;
-          delete syllable.RomajiSpaceBefore;
-          clearLegacyFuriganaFields(syllable);
-          delete syllable.JapaneseReading;
-        }
-        group.JapaneseReading = await applyJapaneseReadingToSyllables(effectiveLineText, fullRomaji, syllables, RomajiPromise, japaneseMap?.spans);
-        for (const syllable of syllables) {
-          if (syllable.RomanizedText) {
-            syllable.TransliteratedText = syllable.RomanizedText;
-          } else {
-            delete syllable.TransliteratedText;
-          }
-        }
-        const parsed: ParsedLine = {
-          id: `japanese-${group.StartTime ?? 0}-${group.EndTime ?? 0}`,
-          displayText: effectiveLineText,
-          paragraphProvenance: "unavailable",
-          spans: syllables.map((syllable: any, index: number) => ({ id: String(index), rawText: syllable.Text || "",
-            cleanText: syllable.Text || "", startMs: Number(syllable.StartTime || 0),
-            endMs: Number(syllable.EndTime || 0), providerPartOfWord: syllable.IsPartOfWord === true })),
-        };
-        const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-        const annotation = await annotateJapaneseLine(canonical, fullRomaji, RomajiPromise);
-        if (annotation) {
-          const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
-          if (validateRenderPlan(plan).valid) {
-            group.ReadingRenderPlan = plan;
-            delete group.RomanizedText;
-            delete group.TransliteratedText;
-            for (const syllable of syllables) {
-              delete syllable.RomanizedText;
-              delete syllable.TransliteratedText;
-              delete syllable.RomajiSpaceBefore;
-            }
-          }
-        }
-      } else {
+      {
         for (let index = 0; index < syllables.length; index += 1) {
           const syllable = syllables[index];
           if (syllable.TransliteratedText && !syllable.RomanizedText) {
