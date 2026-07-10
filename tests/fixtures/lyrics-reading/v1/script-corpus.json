@@ -190,7 +190,11 @@
      ]
     ],
     "joinedDisplayText": "geudae amureon maldo haji mayo",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "geudae amureon maldo haji mayo",
+     "vnPronunciation": "gưdê amuron maldô haji mayô"
+    }
    }
   },
   {
@@ -488,7 +492,11 @@
      ]
     ],
     "joinedDisplayText": "😀 hanguk",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "😀 han-guk",
+     "vnPronunciation": "😀 han-guk"
+    }
    }
   }
  ]

@@ -330,7 +330,11 @@
      ]
     ],
     "joinedDisplayText": "deo isang gidael goseun piryo eobseo",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "deo isang gidael goseun piryo eopsseo",
+     "vnPronunciation": "do isang gidêl gôsưn piryô opsso"
+    }
    }
   },
   {
@@ -806,7 +810,11 @@
      ]
     ],
     "joinedDisplayText": "deo sogajul saenggak eopsji, negeseo Fly",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "deo sogajul saenggak eopjji, negeseo Fly",
+     "vnPronunciation": "do sôgajul sênggak opjji, nêgêso Fly"
+    }
    }
   },
   {
@@ -1070,7 +1078,11 @@
      ]
     ],
     "joinedDisplayText": "jujeo eobsi da, Probably delete it",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "jujeo eopssi da, Probably delete it",
+     "vnPronunciation": "jujo opssi da, Probably delete it"
+    }
    }
   },
   {
@@ -1408,7 +1420,11 @@
      ]
     ],
     "joinedDisplayText": "miryeoni anya, geujeo Hard to see it",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "miryeoni anya, geujeo Hard to see it",
+     "vnPronunciation": "miryoni anya, gưjo Hard to see it"
+    }
    }
   },
   {
@@ -1644,7 +1660,11 @@
      ]
     ],
     "joinedDisplayText": "cheoeumbuteo jalmotdwaetdan geol",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "cheo-eumbuteo jalmot-ttwaet-ttan geol",
+     "vnPronunciation": "choưmbuto jalmôt-ttwêt-ttan gol"
+    }
    }
   },
   {
@@ -2135,7 +2155,11 @@
      ]
     ],
     "joinedDisplayText": "deo isang gidael goseun piryo eobseo When you hold me tight",
-    "readingMode": "rrStandard"
+    "readingMode": "rrStandard",
+    "pronunciationDisplays": {
+     "rrPronunciation": "deo isang gidael goseun piryo eopsseo When you hold me tight",
+     "vnPronunciation": "do isang gidêl gôsưn piryô opsso When you hold me tight"
+    }
    }
   }
  ]

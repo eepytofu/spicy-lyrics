@@ -108,6 +108,12 @@ function assertFixtureSemantics(name: string) {
       });
       assert.equal(joinReadingUnits(annotation), expected.joinedDisplayText, raw.id);
     }
+    if (expected.pronunciationDisplays) {
+      for (const mode of ["rrPronunciation", "vnPronunciation"] as const) {
+        const annotation = annotateKoreanLine(canonical, mode);
+        assert.equal(joinReadingUnits(annotation), expected.pronunciationDisplays[mode], `${raw.id} ${mode}`);
+      }
+    }
   }
 }
 
