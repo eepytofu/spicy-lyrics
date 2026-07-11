@@ -13,6 +13,8 @@ import {
   type JapaneseReadable,
   type JapaneseReading,
 } from "../Reading/JapaneseReading.ts";
+import type { RenderPlan } from "../Processing/Model.ts";
+import { renderExperimentalReadingPlan } from "./ExperimentalReadingPlanRenderer.ts";
 
 export type ReadingRenderOptions = {
   useRomanized: boolean;
@@ -36,6 +38,21 @@ export function getJapaneseReading(entry: JapaneseReadable | undefined): Japanes
 
 export function hasFurigana(entry: JapaneseReadable | undefined): boolean {
   return (getJapaneseReading(entry)?.furigana.length || 0) > 0;
+}
+
+/**
+ * Ruby geometry belongs to the complete Japanese line, not karaoke fragments.
+ * A renderer can safely re-base only ruby fully contained by one timed source
+ * unit. Crossing ruby must use the whole-line path; otherwise its full reading
+ * is drawn once for every intersecting fragment.
+ */
+export function hasFuriganaCrossingTimedUnits(readingPlan: RenderPlan | undefined): boolean {
+  const ruby = (readingPlan?.furigana || []) as Array<{ start?: number; end?: number }>;
+  const sourceUnits = readingPlan?.sourceUnits || [];
+  return ruby.some((segment) =>
+    typeof segment.start === "number" && typeof segment.end === "number" &&
+    !sourceUnits.some((unit) => segment.start! >= unit.canonicalRange.startCp && segment.end! <= unit.canonicalRange.endCp)
+  );
 }
 
 export function isJapaneseEntry(entry: JapaneseReadable | undefined, isJapaneseLyrics?: boolean): boolean {
@@ -152,7 +169,7 @@ export function forceStackedLine(lineElem: HTMLElement, oppositeAligned?: boolea
 
 export function getRomanizedText(entry: JapaneseReadable | undefined): string | undefined {
   if (!entry) return undefined;
-  return entry.RomanizedText || entry.TransliteratedText || entry.JapaneseReading?.romaji;
+  return entry.ReadingRenderPlan?.joinedDisplayText || entry.RomanizedText || entry.TransliteratedText || entry.JapaneseReading?.romaji;
 }
 
 export function appendRomanizedBelow(
@@ -208,6 +225,7 @@ export function appendSyllableRomanizedBelow(
   groupRomanizedText: string | undefined,
   groupTranslatedText: string | undefined,
   animatorEntries: Array<{ RomajiElement?: HTMLElement }> | undefined,
+  readingPlan: RenderPlan | undefined,
   options: ReadingRenderOptions
 ): void {
   const groupEntry: JapaneseReadable = {
@@ -217,7 +235,13 @@ export function appendSyllableRomanizedBelow(
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
   };
 
-  if (shouldRenderRomanization(groupEntry, options)) {
+  if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
+    forceStackedLine(lineElem, options.oppositeAligned);
+    renderExperimentalReadingPlan(lineElem, readingPlan, (spanId, element) => {
+      const index = Number(spanId);
+      if (Number.isInteger(index) && animatorEntries?.[index]) animatorEntries[index].RomajiElement = element;
+    });
+  } else if (shouldRenderRomanization(groupEntry, options)) {
     const hasDistinctRomanization = isMeaningfullyDifferent(groupRomanizedText, sourceText);
     if (hasDistinctRomanization || options.romanizationPending) {
       forceStackedLine(lineElem, options.oppositeAligned);

@@ -44,6 +44,25 @@ if (_uiState.japaneseReadingMode === undefined) {
       : "furigana"
     : "romaji";
 }
+if (_uiState.koreanDisplayMode === undefined) {
+  if (_uiState.koreanSeparators === true && _uiState.koreanRomanizationMode !== "pronunciation") {
+    _uiState.koreanDisplayMode = "wordTranslit";
+  } else if (_uiState.koreanRomanizationMode === "pronunciation") {
+    _uiState.koreanDisplayMode = _uiState.koreanOutputStyle === "vn" ? "vnPronunciation" : "rrPronunciation";
+  } else {
+    _uiState.koreanDisplayMode = "rrStandard";
+  }
+  saveUiStateBlob(_uiState);
+} else if (["plain", "blocks", "pronunciation"].includes(_uiState.koreanDisplayMode)) {
+  if (_uiState.koreanDisplayMode === "blocks") {
+    _uiState.koreanDisplayMode = "wordTranslit";
+  } else if (_uiState.koreanDisplayMode === "pronunciation") {
+    _uiState.koreanDisplayMode = _uiState.koreanOutputStyle === "vn" ? "vnPronunciation" : "rrPronunciation";
+  } else {
+    _uiState.koreanDisplayMode = "rrStandard";
+  }
+  saveUiStateBlob(_uiState);
+}
 
 function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_uiState[key] !== undefined ? _uiState[key] : defaultValue);
@@ -63,7 +82,8 @@ export const $romanization = persistAtom<boolean>("romanization", false);
 export const $chineseTranslitMode = persistAtom<"pinyin" | "jyutping">("chineseTranslitMode", "pinyin");
 export const $chineseTones = persistAtom<boolean>("chineseTones", false);
 export const $japaneseReadingMode = persistAtom<"romaji" | "furigana" | "both">("japaneseReadingMode", "romaji");
-export const $koreanRomanizationMode = persistAtom<"spelling" | "pronunciation">("koreanRomanizationMode", "spelling");
+export type KoreanDisplayMode = "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";
+export const $koreanDisplayMode = persistAtom<KoreanDisplayMode>("koreanDisplayMode", "rrStandard");
 export const $cyrillicRomanizationMode = persistAtom<"Russian" | "Ukrainian">("cyrillicRomanizationMode", "Russian");
 export const $cyrillicKeepSigns = persistAtom<boolean>("cyrillicKeepSigns", false);
 export const $translationEnabled = persistAtom<boolean>("translationEnabled", false);

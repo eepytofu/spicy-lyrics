@@ -25,6 +25,10 @@
   --StrongTextGlowDef: rgba(255, 255, 255, 0.68) 0px 0px 16.4px;
   --StrongerTextGlowDef: rgba(255, 255, 255, 0.74) 0px 0px 16px;
   --DefaultLyricsSize: clamp(1.85rem, calc(1cqw * 7), 3.5rem);
+  --japanese-ruby-ratio: 0.46em;
+  --japanese-ruby-gap: 0.12em;
+  --japanese-romaji-ratio: 0.48;
+  --japanese-translation-ratio: 0.44;
   --amll-lyric-player-font-size: var(--DefaultLyricsSize);
   --Simplebar-Scrollbar-Color: rgba(255, 255, 255, 0.6);
   --vertical-gap: 0px;
@@ -134,8 +138,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .has-furigana {
-  --furigana-rt-size: 0.38em;
-  --furigana-rt-gap: 0.12em;
+  --furigana-rt-size: var(--japanese-ruby-ratio);
+  --furigana-rt-gap: var(--japanese-ruby-gap);
   overflow: visible;
 }
 
@@ -195,11 +199,32 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   display: inline-block;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
+/* Timed fragments inside one Japanese token are not provider word breaks. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group > .word:not(:last-child)::after {
+  margin-right: 0;
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-group {
+  display: inline-flex;
+  white-space: nowrap;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below {
   display: block;
   width: 100%;
   margin-top: 0.15em;
-  font-size: calc(var(--DefaultLyricsSize) * 0.42);
+  font-size: calc(var(--DefaultLyricsSize) * var(--japanese-romaji-ratio));
   font-weight: 400;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.55);
@@ -242,7 +267,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   display: block;
   width: 100%;
   margin-top: 0.12em;
-  font-size: calc(var(--DefaultLyricsSize) * 0.38);
+  font-size: calc(var(--DefaultLyricsSize) * var(--japanese-translation-ratio));
   font-weight: 400;
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.45);

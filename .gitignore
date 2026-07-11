@@ -187,6 +187,11 @@ CHANGELOG.md
 CLAUDE.md
 AGENTS.md
 project/*.md
+docs/
 
 # Release/build artifacts
 builds/
+tools/.cache/
+
+skills-lock.json
+docs/SPICETIFY_2440_REGRESSION.md
