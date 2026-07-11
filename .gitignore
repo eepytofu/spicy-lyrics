@@ -187,6 +187,7 @@ CHANGELOG.md
 CLAUDE.md
 AGENTS.md
 project/*.md
+docs/
 
 # Release/build artifacts
 builds/
