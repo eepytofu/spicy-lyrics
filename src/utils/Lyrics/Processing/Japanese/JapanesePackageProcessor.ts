@@ -24,6 +24,19 @@ function providerFurigana(text: string, syllables: JapaneseReadable[], spans: Ja
   return output;
 }
 
+export function furiganaContainedByTimingSpan(
+  displayText: string,
+  timingSpan: Pick<JapaneseTimedTextSpan, "start" | "end">,
+  furigana: PackageFuriganaSpan[]
+): Array<{ start: number; end: number; reading: string }> {
+  const sourceStartCp = cp(displayText, timingSpan.start); const sourceEndCp = cp(displayText, timingSpan.end);
+  return furigana.filter((item) => item.start >= sourceStartCp && item.end <= sourceEndCp).map((item) => ({
+    start: utf16(displayText, item.start) - timingSpan.start,
+    end: utf16(displayText, item.end) - timingSpan.start,
+    reading: item.reading,
+  }));
+}
+
 export async function processJapanesePackageLine(
   displayText: string,
   syllables: JapaneseReadable[],
@@ -38,12 +51,9 @@ export async function processJapanesePackageLine(
   const result = await processJapaneseLine({ displayText, spans: sourceSpans, providerFurigana: providerFurigana(displayText, syllables, spans) }, { tokenizer, jmdict });
   if (result.diagnostics.some((diagnostic) => diagnostic.severity === "error")) throw new Error(result.diagnostics.map((diagnostic) => diagnostic.message).join("; "));
   for (const span of spans) {
-    const sourceStartCp = cp(displayText, span.start); const sourceEndCp = cp(displayText, span.end);
-    const ruby = result.furigana.filter((item) => item.end > sourceStartCp && item.start < sourceEndCp).map((item) => ({
-      start: utf16(displayText, Math.max(item.start, sourceStartCp)) - span.start,
-      end: utf16(displayText, Math.min(item.end, sourceEndCp)) - span.start,
-      reading: item.reading,
-    }));
+    // Ruby is semantic token geometry. A timing fragment may bisect it, but must
+    // never receive a clipped range paired with the original full reading.
+    const ruby = furiganaContainedByTimingSpan(displayText, span, result.furigana);
     syllables[span.index].JapaneseReading = { sourceText: syllables[span.index].Text || "", romaji: result.timedReadingUnits.find((unit) => unit.ownerId === String(span.index))?.romaji || "", furigana: ruby };
   }
   const timedReadingUnits = result.timedReadingUnits.map((unit, index) => ({
@@ -55,4 +65,21 @@ export async function processJapanesePackageLine(
     romaji: result.romaji,
     plan: { lineId: `japanese-package-${times[0]?.StartTime || 0}`, sourceUnits: sourceSpans.map((span) => ({ spanId: span.ownerId!, canonicalRange: { startCp: span.start, endCp: span.end } })), readingUnits, timedReadingUnits, joinedDisplayText: result.romaji, furigana: result.furigana },
   };
+}
+
+export async function processJapanesePackageTextTarget(target: JapaneseReadable & { Text?: string }): Promise<string | undefined> {
+  const text = target.Text || "";
+  if (!text) return undefined;
+  const { tokenizer, jmdict } = await loadDependencies();
+  const provider = (target.JapaneseReading?.furigana || []).map((ruby) => ({ start: cp(text, ruby.start), end: cp(text, ruby.end), reading: ruby.reading, source: "provider" as const }));
+  const result = await processJapaneseLine({ displayText: text, providerFurigana: provider }, { tokenizer, jmdict });
+  target.JapaneseReading = { sourceText: text, romaji: result.romaji, furigana: result.furigana.map((ruby) => ({ start: utf16(text, ruby.start), end: utf16(text, ruby.end), reading: ruby.reading })) };
+  target.ReadingRenderPlan = {
+    lineId: "japanese-package-line", sourceUnits: [{ spanId: "line", canonicalRange: { startCp: 0, endCp: Array.from(text).length } }],
+    readingUnits: [{ canonicalRange: { startCp: 0, endCp: Array.from(text).length }, text: result.romaji, kind: "transformed", logicalGroupId: "jp-line", timingRefs: ["line"] }],
+    timedReadingUnits: [{ spanId: "line", canonicalRange: { startCp: 0, endCp: Array.from(text).length }, text: result.romaji, logicalGroupId: "jp-line" }],
+    joinedDisplayText: result.romaji, furigana: result.furigana,
+  };
+  target.RomanizedText = result.romaji; target.TransliteratedText = result.romaji;
+  return result.romaji;
 }

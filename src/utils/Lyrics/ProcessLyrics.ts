@@ -1,8 +1,6 @@
 import { franc } from "franc-all";
-import Kuroshiro from "kuroshiro";
 import langs from "langs";
 import { RetrievePackage } from "../ImportPackage.ts";
-import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
 import Logger from "../Logger.ts";
 import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanDisplayMode } from "./lyrics.ts";
 import {
@@ -21,35 +19,27 @@ import {
   type ScriptBranchDocContext,
 } from "./Fork/TextDetection.ts";
 import {
-  buildRomajiFromTokens,
   pinyinOptionsForToneMode,
   romanizeCantonese,
   romanizeCyrillic,
   romanizeKoreanForDisplay,
 } from "./Fork/Romanization.ts";
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
-import {
-  annotateJapaneseTextTarget,
-  buildJapaneseLineTextMap,
-  romanizeJapaneseFromFurigana,
-} from "./Reading/JapaneseReading.ts";
+import { buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 import { DefaultCanonicalLineBuilder } from "./Processing/Canonical.ts";
 import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/RenderPlan.ts";
-import { processJapanesePackageLine } from "./Processing/Japanese/JapanesePackageProcessor.ts";
+import { processJapanesePackageLine, processJapanesePackageTextTarget } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
 import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 24;
+export const LYRICS_PROCESSING_VERSION = 25;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
-const RomajiConverter = new Kuroshiro();
-const RomajiPromise = RomajiConverter.init(KuromojiAnalyzer);
-
 const romanizationLogger = new Logger("Lyrics Romanization");
 
 const getLyricsPageContainer = (): HTMLElement | null =>
@@ -87,22 +77,13 @@ const loadPackagesForScripts = async (
 ): Promise<RomanizationPackages> => {
   const packages: RomanizationPackages = {};
   for (const script of scripts) {
-    if (script === "Japanese") {
-      await RomajiPromise;
-    } else if (script === "Chinese" && chineseTranslitMode !== "jyutping") {
+    if (script === "Chinese" && chineseTranslitMode !== "jyutping") {
       packages.pinyin = await RetrievePackage("pinyin", "4.0.0", "mjs");
     } else if (script === "Greek") {
       packages.greekRomanization = await RetrievePackage("GreekRomanization", "1.0.0", "js");
     }
   }
   return packages;
-};
-
-const romanizeJapaneseText = async (text: string): Promise<string> => {
-  await RomajiPromise;
-  const normalized = text.normalize("NFKC");
-  return (await buildRomajiFromTokens(normalized)) ||
-    await RomajiConverter.convert(normalized, { to: "romaji", mode: "spaced" });
 };
 
 const romanizeChineseText = async (
@@ -411,25 +392,8 @@ const romanizeEntry = async (
 
   if (hasTransliteration(target) && !replaceKoreanTransliteration) {
     if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
-      // Provider romaji can leak Chinese readings for kanji or mishandle particles.
-      // If provider furigana is kept, derive romaji from that same ruby so the
-      // visible readings cannot disagree.
       const previousRomanized = target.RomanizedText || target.TransliteratedText;
-      const providerReading = target.JapaneseReading;
-      if (providerReading?.furigana?.length) {
-        const providerRomaji = await romanizeJapaneseFromFurigana(target.Text || "", providerReading.furigana, RomajiPromise);
-        if (providerRomaji) {
-          target.TransliteratedText = providerRomaji;
-          target.RomanizedText = providerRomaji;
-          providerReading.romaji = providerRomaji;
-          return providerRomaji !== previousRomanized;
-        }
-      }
-      const localReading = await annotateJapaneseTextTarget(target, undefined, RomajiPromise);
-      if (localReading?.romaji) {
-        target.TransliteratedText = localReading.romaji;
-        target.RomanizedText = localReading.romaji;
-      }
+      await processJapanesePackageTextTarget(target);
       return (target.RomanizedText || target.TransliteratedText) !== previousRomanized;
     }
     return true;
@@ -438,12 +402,17 @@ const romanizeEntry = async (
   let text: string = target.Text;
   let changed = false;
 
+  if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
+    const packageRomaji = await processJapanesePackageTextTarget(target);
+    if (packageRomaji && acceptRomanization(target.Text || "", packageRomaji, [ScriptResidualTests.Japanese])) {
+      line.HasTransliterations = true;
+      return true;
+    }
+  }
+
   for (const script of lineScripts) {
     if (script === "Japanese") {
-      if (ItemJapaneseTest.test(text)) {
-        text = await romanizeJapaneseText(text);
-        changed = true;
-      }
+      continue;
     } else if (script === "Chinese") {
       if (ItemChineseTest.test(text)) {
         text = await romanizeChineseText(text, packages.pinyin, primaryLanguage);
@@ -480,9 +449,6 @@ const romanizeEntry = async (
     target.TransliteratedText = text;
     target.RomanizedText = text;
     line.HasTransliterations = true;
-    if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
-      await annotateJapaneseTextTarget(target, text, RomajiPromise);
-    }
   }
 
   return changed;

@@ -31,12 +31,14 @@ import { IsLetterCapable } from "../Utils/IsLetterCapable.ts";
 import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
 import {
   appendSyllableRomanizedBelow,
+  hasFuriganaCrossingTimedUnits,
   isJapaneseEntry,
   renderBaseTextWithReadings,
   shouldRenderFurigana,
 } from "../ReadingRenderer.ts";
 import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
+import { timedLogicalGroupIds } from "../../Processing/Japanese/TimedGroupIds.ts";
 
 // Define the data structure for syllable lyrics
 type SyllableData = TimedSyllableEntry;
@@ -114,7 +116,9 @@ const createSyllableWord = (
   const letterLength = syllable.Text.split("").length;
   const hasFurigana = shouldRenderFurigana(syllable, renderOptions);
   const reservesFuriganaRow = hasFurigana || (renderOptions.reserveFurigana === true && useRomanized);
-  const letterCapable = IsLetterCapable(letterLength, totalDuration) && !isRtl(syllable.Text) && !reservesFuriganaRow;
+  // Package-backed Japanese words need a registered word element in every
+  // display mode. Letter emphasis returns before timing registration.
+  const letterCapable = IsLetterCapable(letterLength, totalDuration) && !isRtl(syllable.Text) && !reservesFuriganaRow && !syllable.JapaneseReading;
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
@@ -146,6 +150,31 @@ const createSyllableWord = (
   word.classList.add("word");
   applyWordPositionClasses(word, syllable, index, all);
   registerSyllableWord(word, syllable, totalDuration, isBackground);
+  return word;
+};
+
+const createLineLevelJapaneseWord = (
+  group: TimedSyllableGroup,
+  sourceText: string,
+  renderOptions: ReadingRenderOptions,
+  isBackground: boolean = false
+): HTMLElement => {
+  const word = document.createElement("span");
+  const totalDuration = ConvertTime(group.EndTime) - ConvertTime(group.StartTime);
+  const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
+  renderBaseTextWithReadings(word, { ...group, Text: sourceText }, renderOptions);
+
+  if (!$simpleLyricsMode.get()) {
+    word.style.setProperty("--gradient-position", isBackground ? "0%" : "-20%");
+    word.style.setProperty("--text-shadow-opacity", "0%");
+    word.style.setProperty("--text-shadow-blur-radius", "4px");
+    word.style.scale = IdleLyricsScale.toString();
+    word.style.transform = `translateY(calc(${sizeVar} * 0.01))`;
+  }
+
+  if (isBackground) word.classList.add("bg-word");
+  word.classList.add("word", "line-level-japanese-word");
+  registerSyllableWord(word, { Text: sourceText, StartTime: group.StartTime, EndTime: group.EndTime }, totalDuration, isBackground);
   return word;
 };
 
@@ -349,19 +378,36 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
     lineElements.push(lineElem);
 
     let currentWordGroup: HTMLSpanElement | null = null;
-    const leadHasFurigana = line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
+    let currentSemanticGroupId: string | undefined;
+    const leadHasFurigana = shouldRenderFurigana(line.Lead, lineRenderOptions) || line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
+    const leadUsesSemanticGroups = line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
     const leadRenderOptions = { ...lineRenderOptions, reserveFurigana: leadHasFurigana };
+    const leadSourceText = line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
+    const leadFuriganaCrossesTiming = leadHasFurigana && hasFuriganaCrossingTimedUnits(line.Lead.ReadingRenderPlan);
+    const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
 
-    line.Lead.Syllables.forEach((lead, iL, aL) => {
+    if (leadFuriganaCrossesTiming) {
+      lineElem.appendChild(createLineLevelJapaneseWord(line.Lead, leadSourceText, leadRenderOptions));
+    } else line.Lead.Syllables.forEach((lead, iL, aL) => {
       if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
         lineElem.classList.add("rtl");
       }
 
       const word = createSyllableWord(lead, iL, aL, leadRenderOptions, UseRomanized);
-      currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+      const semanticGroupId = leadLogicalGroupIds.get(String(iL));
+      if (leadUsesSemanticGroups && semanticGroupId) {
+        if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
+          currentWordGroup = document.createElement("span");
+          currentWordGroup.classList.add("word-group", "semantic-word-group");
+          lineElem.appendChild(currentWordGroup);
+          currentSemanticGroupId = semanticGroupId;
+        }
+        currentWordGroup.appendChild(word);
+      } else {
+        currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+      }
     });
 
-    const leadSourceText = joinSyllableDisplayText(line.Lead.Syllables);
     const leadRomanizedText = line.Lead.RomanizedText || line.Lead.TransliteratedText;
     const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
     appendSyllableRomanizedBelow(
@@ -399,19 +445,36 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
         lineElements.push(lineE);
 
         let currentBGWordGroup: HTMLSpanElement | null = null;
-        const bgHasFurigana = bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
+        let currentBGSemanticGroupId: string | undefined;
+        const bgHasFurigana = shouldRenderFurigana(bg, bgRenderOptions) || bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
+        const bgUsesSemanticGroups = bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
         const bgWordRenderOptions = { ...bgRenderOptions, reserveFurigana: bgHasFurigana };
+        const bgSourceText = bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
+        const bgFuriganaCrossesTiming = bgHasFurigana && hasFuriganaCrossingTimedUnits(bg.ReadingRenderPlan);
+        const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
 
-        bg.Syllables.forEach((bw, bI, bA) => {
+        if (bgFuriganaCrossesTiming) {
+          lineE.appendChild(createLineLevelJapaneseWord(bg, bgSourceText, bgWordRenderOptions, true));
+        } else bg.Syllables.forEach((bw, bI, bA) => {
           if (isRtl(bw.Text) && !lineE.classList.contains("rtl")) {
             lineE.classList.add("rtl");
           }
 
           const word = createSyllableWord(bw, bI, bA, bgWordRenderOptions, UseRomanized, true);
-          currentBGWordGroup = appendGroupedWord(lineE, word, bw, bA[bI - 1], currentBGWordGroup);
+          const semanticGroupId = bgLogicalGroupIds.get(String(bI));
+          if (bgUsesSemanticGroups && semanticGroupId) {
+            if (!currentBGWordGroup || semanticGroupId !== currentBGSemanticGroupId) {
+              currentBGWordGroup = document.createElement("span");
+              currentBGWordGroup.classList.add("word-group", "semantic-word-group");
+              lineE.appendChild(currentBGWordGroup);
+              currentBGSemanticGroupId = semanticGroupId;
+            }
+            currentBGWordGroup.appendChild(word);
+          } else {
+            currentBGWordGroup = appendGroupedWord(lineE, word, bw, bA[bI - 1], currentBGWordGroup);
+          }
         });
 
-        const bgSourceText = joinSyllableDisplayText(bg.Syllables);
         const bgRomanizedText = bg.RomanizedText || bg.TransliteratedText;
         const allEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
         const bgEntries = allEntries.filter((entry: any) => entry.BGWord);
