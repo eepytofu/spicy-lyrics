@@ -4,6 +4,7 @@ export const BUILT_IN_LYRICS_SOURCE_IDS = [
   "apple",
   "spotify",
   "lrclib",
+  "amlldb",
   "qq",
   "kugou",
   "netease",
@@ -21,11 +22,11 @@ export type CustomLyricsServer = {
 type LyricsSourceDefinition = { label: string; description: string };
 
 export const DEFAULT_LYRICS_SOURCE_ORDER: LyricsSourceProviderId[] = [
-  "spicy", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease",
+  "spicy", "musixmatch", "apple", "spotify", "lrclib", "amlldb", "qq", "kugou", "netease",
 ];
 
 export const DEFAULT_DISABLED_LYRICS_SOURCES: LyricsSourceProviderId[] = [
-  "lrclib", "qq", "kugou", "netease",
+  "lrclib", "amlldb", "qq", "kugou", "netease",
 ];
 
 export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, LyricsSourceDefinition> = {
@@ -34,6 +35,7 @@ export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, L
   apple: { label: "Apple Music", description: "Apple Music lyrics through the Spicy Lyrics backend." },
   spotify: { label: "Spotify", description: "Lyrics returned by Spotify's native lyrics endpoint." },
   lrclib: { label: "LRCLIB", description: "Open community synced and plain lyrics." },
+  amlldb: { label: "AMLL TTML DB", description: "Community TTML with word timing, duet, and background-vocal metadata." },
   qq: { label: "QQ Music", description: "QRC word-synced lyrics through your external Worker." },
   kugou: { label: "Kugou", description: "KRC word-synced lyrics through your external Worker." },
   netease: { label: "NetEase", description: "YRC/LRC lyrics through your external Worker." },
@@ -107,7 +109,7 @@ export function getLyricsSourceDefinition(id: LyricsSourceProviderId, customServ
 const SOURCE_LABELS: Record<string, string> = {
   spl: "Spicy Lyrics Community", spt: "Spotify", aml: "Apple Music",
   spicy: "Spicy Lyrics", musixmatch: "Musixmatch", apple: "Apple Music",
-  spotify: "Spotify", lrclib: "LRCLIB", qq: "QQ Music", kugou: "Kugou", netease: "NetEase",
+  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "Kugou", netease: "NetEase",
 };
 
 export function resolveLyricsSourceLabel(source?: string, displayName?: string, fetchProvider?: string): string | null {

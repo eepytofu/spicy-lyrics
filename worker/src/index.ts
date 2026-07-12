@@ -23,15 +23,20 @@ function metadata(url: URL, id: string): TrackMetadata | undefined {
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    const url = new URL(request.url); const match = /^\/v1\/lyrics\/(qq|kugou|netease)\/([^/]+)$/.exec(url.pathname);
+    const url = new URL(request.url); const match = /^\/v1\/lyrics\/(amlldb|qq|kugou|netease)\/([^/]+)$/.exec(url.pathname);
     if (request.method !== "GET" || !match) return new Response("Not found", { status: 404, headers: cors });
-    const provider = match[1] as ProviderId;
+    const provider = match[1] as ProviderId | "amlldb";
     let trackId: string;
     try { trackId = decodeURIComponent(match[2]); }
     catch { return new Response("Malformed track ID", { status: 400, headers: cors }); }
     const track = metadata(url, trackId);
     if (!track) return new Response("Missing title, artist_name/artist, or duration", { status: 400, headers: cors });
     try {
+      if (provider === "amlldb") {
+        const ttml = await amllDbProvider(track);
+        if (!ttml) return new Response("Lyrics not found", { status: 404, headers: cors });
+        return new Response(ttml, { status: 200, headers: { ...cors, "Content-Type": "application/ttml+xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+      }
       const lyrics = await providers[provider](track);
       if (!lyrics) return new Response("Lyrics not found", { status: 404, headers: cors });
       return new Response(JSON.stringify(lyrics), { status: 200, headers: { ...cors, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
@@ -41,3 +46,4 @@ export default {
     }
   },
 } satisfies ExportedHandler;
+import { amllDbProvider } from "./providers/amlldb";

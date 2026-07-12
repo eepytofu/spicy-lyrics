@@ -1,6 +1,6 @@
 # Spicy Lyrics external-source Worker
 
-One Cloudflare Worker serves QQ Music, Kugou, and NetEase lyrics in Spicy Lyrics' native JSON format. Word timings, provider translations, and provider romanization are preserved when the upstream service supplies them.
+One Cloudflare Worker serves AMLL TTML DB, QQ Music, Kugou, and NetEase lyrics. AMLL DB is returned as TTML for Spicy Lyrics' established TTML parser; the other providers return native JSON. Word timings, duet/background-vocal roles, translations, and romanization are preserved when the source supplies them.
 
 ## Deploy
 
@@ -28,11 +28,12 @@ To choose another Worker name, change `name` in `wrangler.toml` before deploying
 1. Open Spicy Lyrics settings.
 2. Open **Lyrics > Manage Sources**.
 3. Paste the Worker URL into **External Sources Worker URL**. Use only the origin; do not append `/v1/lyrics`.
-4. Enable QQ Music, Kugou, and NetEase, then arrange their priority with the arrow buttons.
+4. Enable AMLL TTML DB, QQ Music, Kugou, and NetEase, then arrange their priority with the arrow buttons.
 
 The three endpoints are:
 
 ```text
+GET /v1/lyrics/amlldb/:spotifyTrackId
 GET /v1/lyrics/qq/:spotifyTrackId
 GET /v1/lyrics/kugou/:spotifyTrackId
 GET /v1/lyrics/netease/:spotifyTrackId
@@ -44,7 +45,7 @@ Spicy Lyrics adds `title`, repeated `artist_name`, `album`, and `duration` (seco
 /v1/lyrics/qq/spotify-id?title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
-Responses are native `Static`, `Line`, or `Syllable` Spicy Lyrics JSON. A `404` means no sufficiently close match was found; a `502` means an upstream service failed.
+The AMLL DB route returns TTML; QQ, Kugou, and NetEase return native `Static`, `Line`, or `Syllable` Spicy Lyrics JSON. A `404` means no sufficiently close match was found; a `502` means an upstream service failed.
 
 ## Local development
 

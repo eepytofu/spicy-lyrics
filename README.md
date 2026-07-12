@@ -17,6 +17,7 @@ This fork keeps amarinne's lyrics processing and presentation pipeline while add
   - Apple Music
   - Spotify
   - LRCLIB
+  - AMLL TTML Database through the self-hosted Worker
   - QQ Music through the self-hosted Worker
   - Kugou through the self-hosted Worker
   - NetEase through the self-hosted Worker
@@ -25,7 +26,7 @@ This fork keeps amarinne's lyrics processing and presentation pipeline while add
 - Native Spicy Lyrics mapping for external results so word timing, provider translation, and romanization can be retained.
 - A source manager for changing priority, disabling providers, configuring Musixmatch/Apple options, and adding custom servers.
 
-The QQ, Kugou, and NetEase implementations in this repository are independent of iPixelGalaxy's NetEase implementation. Their provider-specific compatibility and parsing behavior is based primarily on ESLyric-LyricsSource and converted to Spicy Lyrics' native data model.
+The QQ, Kugou, and NetEase implementations in this repository are independent of iPixelGalaxy's NetEase implementation. Their provider-specific compatibility and parsing behavior is based primarily on ESLyric-LyricsSource and converted to Spicy Lyrics' native data model. AMLL DB results stay as TTML until they reach Spicy Lyrics, preserving the existing parser's word timing, duet, background-vocal, translation, and romanization behavior.
 
 ### Lyrics processing
 
@@ -84,7 +85,7 @@ The production bundle is written to `dist/spicy-lyrics.js`. Copy it to the Spice
 
 ## Self-host the external-source Worker
 
-This repository intentionally does **not** provide or embed a shared Worker URL. Anyone enabling QQ Music, Kugou, or NetEase must deploy their own Worker instance.
+This repository intentionally does **not** provide or embed a shared Worker URL. Anyone enabling AMLL TTML DB, QQ Music, Kugou, or NetEase must deploy their own Worker instance.
 
 You need a Cloudflare account and Node.js 20 or newer:
 
@@ -109,11 +110,12 @@ In Spotify, open:
 Spicy Lyrics Settings → Lyrics → Manage Sources
 ```
 
-Paste only the Worker origin into **External Sources Worker**, then enable and prioritize QQ Music, Kugou, and NetEase. Do not append `/v1/lyrics` to the configured origin.
+Paste only the Worker origin into **External Sources Worker**, then enable and prioritize AMLL TTML DB, QQ Music, Kugou, and NetEase. Do not append `/v1/lyrics` to the configured origin.
 
 The Worker exposes:
 
 ```text
+GET /v1/lyrics/amlldb/:spotifyTrackId
 GET /v1/lyrics/qq/:spotifyTrackId
 GET /v1/lyrics/kugou/:spotifyTrackId
 GET /v1/lyrics/netease/:spotifyTrackId
@@ -190,6 +192,7 @@ This fork exists because of work from multiple projects:
 - [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics) — primary fork base, processing pipeline, romanization, translation, and interface features.
 - [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics) — external-source orchestration, custom-server work, custom-font concepts, and source-manager interface reference.
 - [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource) — primary reference for QQ, Kugou, and NetEase provider compatibility and parsing behavior.
+- [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db) — community-maintained TTML database used by the optional AMLL DB source.
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC) — acknowledged by the retained upstream ESLyric compatibility module.
 - [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) — external lyrics-server architecture reference.
 - [surfbryce/beautiful-lyrics](https://github.com/surfbryce/beautiful-lyrics) — upstream Beautiful Lyrics project lineage.

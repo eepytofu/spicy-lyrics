@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { amllDbProvider } from "../src/providers/amlldb";
 import { kugouProvider } from "../src/providers/kugou";
 import { neteaseProvider } from "../src/providers/netease";
 import { decryptQrc, fetchQqLyric, parseQrc, qrcContent, qqProvider, searchQq } from "../src/providers/qq";
@@ -6,6 +7,13 @@ import { decryptQrc, fetchQqLyric, parseQrc, qrcContent, qqProvider, searchQq } 
 const live = process.env.LIVE_PROVIDER_TESTS === "1" ? it : it.skip;
 
 describe("live upstream providers", () => {
+  live("AMLL DB returns the personal TTML fixture with background vocals", async () => {
+    const ttml = await amllDbProvider({ id: "7aSXHJ8djFxfqKLuOs039d", title: "乐鸣东方", artists: ["洛天依"], album: "乐鸣东方", durationMs: 240_000 });
+    expect(ttml).toContain("<tt");
+    expect(ttml).toContain("x-bg");
+    expect(ttml).toContain("ttm:agent");
+  }, 30000);
+
   live("QQ returns native lyrics", async () => {
     const track = { id: "personal-fixture", title: "乐鸣东方", artists: ["洛天依"], album: "", durationMs: 240_000 };
     const songs = await searchQq(track);
