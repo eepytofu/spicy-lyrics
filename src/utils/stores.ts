@@ -54,6 +54,7 @@ export const $simpleLyricsModeRenderingType = persistAtom<string>(
 );
 export const $minimalLyricsMode = persistAtom<boolean>("minimalLyricsMode", false);
 export const $skipSpicyFont = persistAtom<boolean>("skipSpicyFont", false);
+export const $systemFontStack = persistAtom<string>("systemFontStack", "");
 export const $showNpvDynamicBg = persistAtom<boolean>("showNpvDynamicBg", true);
 export const $lockedMediaBox = persistAtom<boolean>("lockedMediaBox", false);
 // $popupLyricsAllowed: stored as actual boolean "popupLyricsAllowed" in the settings blob.
@@ -76,6 +77,19 @@ export const $timelineOutsideMediaContent = persistAtom<boolean>(
 );
 // Playback timing offset in milliseconds (bipolar: negative = earlier, positive = later)
 export const $playbackOffset = persistAtom<number>("playbackOffset", 0);
+export const $lyricsSourceOrder = persistAtom<string>(
+  "lyricsSourceOrder",
+  JSON.stringify(["spicy", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease"])
+);
+export const $disabledLyricsSources = persistAtom<string>(
+  "disabledLyricsSources",
+  JSON.stringify(["lrclib", "qq", "kugou", "netease"])
+);
+export const $ignoreMusixmatchWordSync = persistAtom<boolean>("ignoreMusixmatchWordSync", true);
+export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", true);
+export const $musixmatchToken = persistAtom<string>("musixmatchToken", "");
+export const $externalLyricsWorkerUrl = persistAtom<string>("externalLyricsWorkerUrl", "");
+export const $customLyricsServers = persistAtom<string>("customLyricsServers", "[]");
 
 // Version atom — NOT persisted, set once at startup
 export const $spicyLyricsVersion = atom<string>(

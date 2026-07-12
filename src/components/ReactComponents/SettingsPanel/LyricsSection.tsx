@@ -18,6 +18,7 @@ import {
   $translationTargetLang,
 } from "../../../utils/uiState.ts";
 import { matches, Row, Select, SectionTitle, Toggle } from "./components.tsx";
+import { OpenLyricsSourcesManager } from "../../../utils/openLyricsSourcesManager.tsx";
 
 const SECTION_NAME = "Lyrics Display";
 
@@ -103,6 +104,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const showTranslationTarget = matches(query, "Translation Target Language", "Language used for lyrics translation.");
   const showChineseQuickButton = matches(query, "Chinese Transliteration Quick Button", "Show the pinyin/jyutping toggle in lyrics controls when Chinese lyrics are detected.");
   const showCopyFormat = matches(query, "Copy Lyrics Format", "Choose what the lyrics copy button writes to clipboard.");
+  const showLyricsSources = matches(query, "Lyrics Sources", "Choose providers, priority, external Worker, and custom servers.");
 
   const hasVisibleRows =
     showSimpleLyricsMode ||
@@ -117,7 +119,8 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
     showLyricsTranslation ||
     showTranslationTarget ||
     showChineseQuickButton ||
-    showCopyFormat;
+    showCopyFormat ||
+    showLyricsSources;
 
   if (!hasVisibleRows) return null;
 
@@ -128,6 +131,12 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
       {showSimpleLyricsMode && (
         <Row label="Simple Lyrics Mode" description="Remove extra visual effects from lyrics">
           <Toggle checked={simpleLyricsMode} onChange={(v) => $simpleLyricsMode.set(v)} />
+        </Row>
+      )}
+
+      {showLyricsSources && (
+        <Row label="Lyrics Sources" description="Choose providers, priority, external Worker, and custom servers.">
+          <button className="sl-sp-btn" onClick={OpenLyricsSourcesManager}>Manage Sources</button>
         </Row>
       )}
 

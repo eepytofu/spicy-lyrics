@@ -1,7 +1,17 @@
 import { franc } from "franc-all";
 import langs from "langs";
 import { isDev } from "../../components/Global/Defaults.ts";
-import { $currentLyricsData, $currentLyricsType, $currentlyFetching } from "../stores.ts";
+import {
+  $currentLyricsData,
+  $currentLyricsType,
+  $currentlyFetching,
+  $customLyricsServers,
+  $disabledLyricsSources,
+  $externalLyricsWorkerUrl,
+  $ignoreMusixmatchWordSync,
+  $lyricsSourceOrder,
+  $prioritizeAppleMusicQuality,
+} from "../stores.ts";
 import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
@@ -24,6 +34,13 @@ import { SLObjPack } from "../objpack.ts";
 import { translateLyrics } from "./Fork/Translation.ts";
 import { $japaneseReadingMode } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
+import { fetchLyricsFromProviders } from "./ExternalSources.ts";
+import {
+  normalizeDisabledLyricsSourceIds,
+  normalizeLyricsSourceOrder,
+  parseCustomLyricsServers,
+  type LyricsSourceProviderId,
+} from "./LyricsSourcePreferences.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -37,6 +54,41 @@ export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 1, 
 }, isDev as true);
 
 const lyricsPacker = new SLObjPack();
+const LYRICS_SOURCE_CACHE_VERSION = 1;
+
+function getActiveLyricsSourceOrder(): LyricsSourceProviderId[] {
+  const custom = parseCustomLyricsServers($customLyricsServers.get());
+  const disabled = new Set(normalizeDisabledLyricsSourceIds($disabledLyricsSources.get(), custom));
+  return normalizeLyricsSourceOrder($lyricsSourceOrder.get(), custom).filter((provider) => !disabled.has(provider));
+}
+
+function lyricsSourceCacheSignature(): string {
+  return JSON.stringify({
+    version: LYRICS_SOURCE_CACHE_VERSION,
+    order: getActiveLyricsSourceOrder(),
+    worker: $externalLyricsWorkerUrl.get().trim().replace(/\/+$/, ""),
+    custom: parseCustomLyricsServers($customLyricsServers.get()),
+    ignoreMusixmatchWordSync: $ignoreMusixmatchWordSync.get(),
+    prioritizeAppleMusicQuality: $prioritizeAppleMusicQuality.get(),
+  });
+}
+
+function isExternalProviderLyrics(lyrics: any): boolean {
+  return !!lyrics && typeof lyrics === "object" && typeof lyrics.fetchProvider === "string";
+}
+
+function isSourceCacheCompatible(lyrics: any): boolean {
+  if (!lyrics || typeof lyrics !== "object") return false;
+  if (lyrics.source === "ldb") return true;
+  if (isExternalProviderLyrics(lyrics)) {
+    return lyrics.LyricsSourceCacheSignature === lyricsSourceCacheSignature();
+  }
+  // Cached payloads from before integrated providers used native source codes
+  // without fetchProvider/signature. They must be refreshed so disabled sources
+  // (especially aml) cannot leak through after preferences change.
+  if (["spl", "aml", "spt"].includes(lyrics.source)) return false;
+  return true;
+}
 
 function currentProcessingContextKey(): string {
   return buildProcessingContextKey({
@@ -233,7 +285,11 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
 
   try {
     const cached = await LyricsStore.GetItem(trackId);
-    if (cached) return;
+    if (cached?.Value === "NO_LYRICS" || (cached && !isSourceCacheCompatible(cached))) {
+      await LyricsStore.RemoveItem(trackId);
+    } else if (cached) {
+      return;
+    }
     const localLyric = await LocalLyricsManager.get(uri);
     if (localLyric) {
       await setProcessedLyricsStoreItem(trackId, { ...localLyric, id: trackId });
@@ -245,6 +301,14 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
 
   prefetchInFlight.add(trackId);
   try {
+    const firstProvider = getActiveLyricsSourceOrder()[0];
+    if (firstProvider !== "spicy" && firstProvider !== "apple") {
+      lyricsPrefetchLogger.debug("Skipping network prefetch without next-track provider metadata", {
+        trackId,
+        firstProvider,
+      });
+      return;
+    }
     const Token = await Platform.GetSpotifyAccessToken();
     const queries = await Query(
       [
@@ -264,9 +328,15 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     const lyricsQuery = queries.get("0");
     if (!lyricsQuery || lyricsQuery.httpStatus !== 200) return;
 
-    const lyrics = lyricsPacker.unpack(lyricsQuery.data);
+    const lyrics = lyricsPacker.unpack(lyricsQuery.data) as any;
     if (lyrics === null || lyrics === undefined || lyrics === "") return;
+    const expectedSource = firstProvider === "spicy" ? "spl" : "aml";
+    if (lyrics.source !== expectedSource) return;
     lyrics.id = trackId;
+    lyrics.uri = uri;
+    lyrics.fetchProvider = firstProvider;
+    lyrics.sourceDisplayName = firstProvider === "spicy" ? "Spicy Lyrics" : "Apple Music";
+    lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
 
     if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
       await ProcessLyrics(lyrics, { updatePageClasses: false });
@@ -347,15 +417,16 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         // so strip the prefix rather than splitting on ":".
         const savedUri = savedLyricsData.slice("NO_LYRICS:".length);
         if (savedUri === uri) {
-          $currentlyFetching.set(false);
-          return ["lyrics-not-found", 404];
+          // Legacy negative entries have no source signature. Retry so a newly
+          // enabled provider gets a chance to resolve the current track.
+          $currentLyricsData.set("");
         }
       } else {
         const lyricsData = JSON.parse(savedLyricsData);
         // Return stored lyrics only when they match the current track. Prefer the
         // URI guard; fall back to id only for pre-uri cache entries.
         const isCurrentTrack = lyricsData?.uri === uri || (!lyricsData?.uri && lyricsData?.id === trackId);
-        if (isCurrentTrack && lyricsData?.ProcessingPending !== true) {
+        if (isCurrentTrack && lyricsData?.ProcessingPending !== true && isSourceCacheCompatible(lyricsData)) {
           const processedLyrics = await ensureProcessingVersion(trackId, uri, lyricsData);
           $currentLyricsData.set(JSON.stringify(processedLyrics));
           presentLyrics(processedLyrics);
@@ -390,10 +461,9 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     try {
       const lyricsFromCacheRes = await LyricsStore.GetItem(trackId);
       if (lyricsFromCacheRes) {
-        if (lyricsFromCacheRes?.Value === "NO_LYRICS") {
-          $currentlyFetching.set(false);
-          return ["lyrics-not-found", 404];
-        }
+        if (lyricsFromCacheRes?.Value === "NO_LYRICS" || !isSourceCacheCompatible(lyricsFromCacheRes)) {
+          await LyricsStore.RemoveItem(trackId);
+        } else {
         // Tag the cached payload with the current uri so the saved-data and
         // re-fetch checks (which match on uri) recognise it — older cache
         // entries predate the uri field.
@@ -404,6 +474,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         $currentLyricsData.set(JSON.stringify(lyricsFromCache));
         presentLyrics(lyricsFromCache);
         return [{ ...lyricsFromCache, fromCache: true }, 200];
+        }
       }
     } catch (error) {
       lyricsCacheLogger.error("Error parsing cache entry", error);
@@ -425,37 +496,11 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     const lyricsAccessToken = storage.get("lyricsApiAccessToken") ?? Defaults.LyricsContent.api.accessToken; */
 
   try {
-    const Token = await Platform.GetSpotifyAccessToken();
+    const providers = getActiveLyricsSourceOrder();
+    lyricsLogger.debug("Provider lyrics query", { trackId, providers });
+    const providerResult = await fetchLyricsFromProviders(uri, providers);
 
-    let status = 0;
-
-    lyricsLogger.debug("API lyrics query", { trackId });
-    const queries = await Query(
-      [
-        {
-          operation: "lyrics",
-          variables: {
-            id: trackId,
-            auth: "SpicyLyrics-WebAuth",
-          },
-        },
-      ],
-      {
-        "SpicyLyrics-WebAuth": `Bearer ${Token}`,
-      }
-    );
-
-    const lyricsQuery = queries.get("0");
-    if (!lyricsQuery) {
-      lyricsLogger.error("Lyrics query not found");
-      HideLoaderContainer();
-      $currentlyFetching.set(false);
-      return ["lyrics-not-found", 404];
-    }
-
-    status = lyricsQuery.httpStatus;
-
-    if (status === 503) {
+    if (providerResult?.status === 503) {
       // The server accepted the request but hasn't processed it yet — it's
       // queued. Surface the queue loader immediately and hand off to the retry
       // loop, which keeps polling with backoff (and survives page close / view
@@ -466,18 +511,13 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
       return ["lyrics-queued", 503];
     }
 
-    if (status !== 200) {
-      if (status === 404) {
-        HideLoaderContainer();
-        $currentlyFetching.set(false);
-        return ["lyrics-not-found", 404];
-      }
+    if (!providerResult || providerResult.status !== 200) {
       HideLoaderContainer();
       $currentlyFetching.set(false);
-      return ["status-not-200", status];
+      return ["lyrics-not-found", 404];
     }
 
-    const lyrics = lyricsPacker.unpack(lyricsQuery.data) as any;
+    const lyrics = providerResult.lyrics as any;
 
     if (lyrics === null || lyrics === undefined || lyrics === "") {
       HideLoaderContainer();
@@ -489,6 +529,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     // keys off the stable uri instead of the API-supplied id.
     lyrics.uri = uri;
     lyrics.id = trackId;
+    lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
     lyrics.DetectedChinese = detectChineseQuick(lyrics);
     const needsRomanization = hasRomanizationWorkQuick(lyrics);
     const needsTranslation = hasTranslationWorkQuick(lyrics);

@@ -1,25 +1,16 @@
-const ProviderMap = {
-    "spt": "Spotify",
-    "aml": "Apple Music",
-    "spl": "Spicy Lyrics",
-    "ldb": "Local DB",
-}
+import { resolveLyricsSourceLabel } from "../../LyricsSourcePreferences.ts";
+
+const ProviderMap: Record<string, string> = { spt: "Spotify", aml: "Apple Music", spl: "Spicy Lyrics", ldb: "Local DB" };
 
 export function ApplyLyricsProvider(data: any, LyricsContainer: HTMLElement): void {
-  if (!data?.source || !LyricsContainer) return;
+  if ((!data?.source && !data?.fetchProvider && !data?.sourceDisplayName) || !LyricsContainer) return;
 
   const ProviderElement = document.createElement("div");
   ProviderElement.classList.add("LyricsProvider");
 
-  let providerLabel = "";
-  if (
-    typeof data.source === "string" &&
-    Object.prototype.hasOwnProperty.call(ProviderMap, data.source)
-  ) {
-    providerLabel = ProviderMap[data.source];
-  } else {
-    providerLabel = "Unknown";
-  }
+  const providerLabel = ProviderMap[data.source] ??
+    resolveLyricsSourceLabel(data.source, data.sourceDisplayName, data.fetchProvider) ??
+    "Unknown";
   ProviderElement.textContent = `Provided by: ${providerLabel}`;
   LyricsContainer.appendChild(ProviderElement);
 }

@@ -511,23 +511,37 @@ export async function translateLyrics(lyrics: any): Promise<void> {
 
   if (lineTexts.length === 0) return;
 
+  let providerTranslationCount = 0;
+  const hasProviderTranslation = lineRefs.map(() => false);
+  for (let index = 0; index < lineRefs.length; index++) {
+    const providerTranslation = lineRefs[index].obj.ProviderTranslatedText;
+    if (typeof providerTranslation === "string" && shouldDisplayTranslation(lineTexts[index], providerTranslation)) {
+      lineRefs[index].obj.TranslatedText = providerTranslation;
+      hasProviderTranslation[index] = true;
+      providerTranslationCount++;
+    }
+  }
+
   const candidateIndices = lineTexts
-    .map((text, index) => shouldTranslateLine(text, sourceLang, targetLang) ? index : -1)
+    .map((text, index) =>
+      !hasProviderTranslation[index] && shouldTranslateLine(text, sourceLang, targetLang)
+        ? index
+        : -1
+    )
     .filter((index) => index >= 0);
 
   if (candidateIndices.length === 0) {
-    for (const ref of lineRefs) delete ref.obj[ref.field];
-    lyrics.IncludesTranslation = false;
-    console.log("[SpicyLyrics:Translation] No mixed-language lines need translation");
+    lyrics.IncludesTranslation = providerTranslationCount > 0;
+    console.log("[SpicyLyrics:Translation] No additional lines need translation");
     return;
   }
 
   const candidateTexts = candidateIndices.map((index) => lineTexts[index]);
   const translations = await batchTranslate(candidateTexts, "und", targetLang);
 
-  let assignedCount = 0;
+  let assignedCount = providerTranslationCount;
   for (let i = 0; i < lineRefs.length; i++) {
-    delete lineRefs[i].obj[lineRefs[i].field];
+    if (!hasProviderTranslation[i]) delete lineRefs[i].obj[lineRefs[i].field];
   }
 
   // Assign translated text to candidate line objects

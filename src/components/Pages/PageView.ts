@@ -36,9 +36,11 @@ import {
   $minimalLyricsMode,
   $simpleLyricsMode,
   $skipSpicyFont,
+  $systemFontStack,
   $ttmlMakerMode,
   $viewControlsPosition,
 } from "../../utils/stores.ts";
+import { toCssFontFamilyStack } from "../../utils/cssFontFamily.ts";
 import Global from "../Global/Global.ts";
 import Session from "../Global/Session.ts";
 import { SpotifyPlayer } from "../Global/SpotifyPlayer.ts";
@@ -133,6 +135,15 @@ export const GetPageRoot = () =>
 let PageResizeListener: ResizeObserver | null = null;
 export let PageContainer: HTMLElement | null = null;
 
+function applySystemFontStack(targetDocument: Document = PageContainer?.ownerDocument ?? document): void {
+  const stack = toCssFontFamilyStack($systemFontStack.get());
+  if ($skipSpicyFont.get() && stack) {
+    targetDocument.documentElement.style.setProperty("--spicy-system-font", stack);
+  } else {
+    targetDocument.documentElement.style.removeProperty("--spicy-system-font");
+  }
+}
+
 async function OpenPage(
   AppendTo: HTMLElement | undefined = undefined,
   isSidebarMode: boolean = false
@@ -148,7 +159,8 @@ async function OpenPage(
   /* if (!HoverMode) {
         PageView.IsTippyCapable = false;
     } */
-  const elem = document.createElement("div");
+  const targetDocument = AppendTo?.ownerDocument ?? document;
+  const elem = targetDocument.createElement("div");
   elem.id = "SpicyLyricsPage";
 
   elem.classList.add("SpicyRenderer");
@@ -240,6 +252,7 @@ async function OpenPage(
   if (!$skipSpicyFont.get()) {
     elem.classList.add("UseSpicyFont");
   }
+  applySystemFontStack(targetDocument);
 
   if ($simpleLyricsMode.get()) {
     elem.classList.add("SimpleLyricsMode");
@@ -923,7 +936,10 @@ $minimalLyricsMode.listen((v) => {
 $skipSpicyFont.listen((v) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("UseSpicyFont", !v);
+  applySystemFontStack();
 });
+
+$systemFontStack.listen(() => applySystemFontStack());
 
 $viewControlsPosition.listen((v) => {
   if (!PageContainer) return;
