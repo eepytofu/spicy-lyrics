@@ -1,77 +1,42 @@
-# Spicy Lyrics — eepytofu fork
+# Spicy Lyrics (eepytofu fork)
 
-An experimental fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics), based primarily on [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics).
-
-This fork keeps amarinne's lyrics processing and presentation pipeline while adding configurable lyric providers, a self-hosted external-source Worker, custom system-font stacks, and the source-management interface adapted from iPixelGalaxy's fork.
+Experimental personal fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics), based mostly on [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics).
 
 > [!CAUTION]
-> **Experimental vibecoded slop.** I'm just a guy with way more ideas than coding experience, using this project to mess around, learn as I go, and hopefully turn some of those ideas into something real. This isn't polished or professionally maintained. A lot of the code is AI-assisted, so there may be questionable decisions, rough edges, regressions, or bugs nobody has found yet. Please read through the code before trusting it, deploying the Worker, or using it with an account or environment you actually care about. Issues, explanations, and cleanup contributions are welcome, but don't expect guaranteed stability or support.
+> Yes, it is vibecoded and might contain some slop. I'm just a guy with lots of ideas and barely any coding experience, so things may break. Read the code before relying on it or deploying the optional Worker.
 
-## What this fork adds
+## Fork stuff
 
-### Lyric sources
+Lyrics:
 
-- Ordered, individually enabled lyric providers:
-  - Spicy Lyrics community service
-  - Musixmatch
-  - Apple Music
-  - Spotify
-  - LRCLIB
-  - AMLL TTML Database through the self-hosted Worker
-  - QQ Music through the self-hosted Worker
-  - Kugou through the self-hosted Worker
-  - NetEase through the self-hosted Worker
-- Custom lyric-server entries compatible with native Spicy Lyrics JSON, TTML, LRC, and plain text responses.
-- Provider-aware caching, credits, timeouts, matching, and quality selection.
-- Native Spicy Lyrics mapping for external results so word timing, provider translation, and romanization can be retained.
-- A source manager for changing priority, disabling providers, configuring Musixmatch/Apple options, and adding custom servers.
-
-The QQ, Kugou, and NetEase implementations in this repository are independent of iPixelGalaxy's NetEase implementation. Their provider-specific compatibility and parsing behavior is based primarily on ESLyric-LyricsSource and converted to Spicy Lyrics' native data model. AMLL DB results stay as TTML until they reach Spicy Lyrics, preserving the existing parser's word timing, duet, background-vocal, translation, and romanization behavior.
-
-### Lyrics processing
-
-- Japanese furigana and romaji.
-- Japanese fallback based on the existing Kuroshiro + Kuromoji pipeline; no unpublished `japanese-lyrics-processor` package is required.
-- Chinese Pinyin and Jyutping.
-- Korean, Cyrillic, Greek, and Indic-script processing.
+- Source priority and per-provider toggles.
+- Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, AMLL TTML DB, QQ Music, Kugou, and NetEase.
+- Word-synced results beat line-synced results, which beat plain lyrics.
+- Self-hosted Worker for AMLL, QQ, Kugou, and NetEase.
+- Custom lyric servers.
+- Word timing, translations, duet roles, and background vocals are kept when the source provides them.
+- Japanese furigana, romaji, or both.
+- Chinese Pinyin/Jyutping, Korean, Cyrillic, Greek, and Indic-script processing.
 - Translation for static, line-synced, and syllable-synced lyrics.
-- Preservation of official provider translations and romanizations when available.
-- Mixed-language handling and processing-context-aware caching.
 
-### Interface and appearance
+UI and appearance:
 
-- iPixel-style lyric-source cards, priority controls, expandable provider options, and modal navigation.
-- Bundled Spicy Lyrics font toggle plus a custom system font-family stack.
-- Flat view controls, dark-background option, copy formats, quick translation/romanization controls, and lyrics prefetching.
+- Source manager adapted from [iPixelGalaxy's fork](https://github.com/iPixelGalaxy/spicy-lyrics).
+- Custom installed font-family stack.
+- Han glyph variant toggle: Japanese lines prefer `Noto Sans JP`, while Simplified Chinese lines prefer `Noto Sans SC` *(fuck Han unification man)*.
+- Flat controls, dark-background option, copy formats, quick reading/translation controls, and lyrics prefetching.
 
-For a custom font stack, enable **Use System Font** and enter installed font families in fallback order:
+Example font stack:
 
 ```text
-Inter, "Noto Sans CJK JP", "Segoe UI", sans-serif
+"SF Pro Display", "Noto Sans JP", "Noto Sans SC", "Segoe UI", sans-serif
 ```
 
-## Install the extension
+Enable **Use System Font** to enter the stack. **Fix Han Glyph Variants** reorders the JP/SC fallbacks for each lyric line without replacing your first font.
 
-### From a release
+## Installation
 
-When releases are available, download `spicy-lyrics.js` from this fork's [Releases](https://github.com/eepytofu/spicy-lyrics/releases) page.
-
-Find the active Spicetify configuration file:
-
-```powershell
-spicetify -c
-```
-
-Copy `spicy-lyrics.js` into the `Extensions` directory next to that configuration file, then register and apply it:
-
-```powershell
-spicetify config extensions spicy-lyrics.js
-spicetify apply
-```
-
-### Build from source
-
-Node.js 20 or newer is recommended.
+Requires [Spicetify](https://spicetify.app/). Node.js 20 or newer is recommended when building from source.
 
 ```powershell
 git clone https://github.com/eepytofu/spicy-lyrics.git
@@ -81,13 +46,16 @@ npm test
 npm run build
 ```
 
-The production bundle is written to `dist/spicy-lyrics.js`. Copy it to the Spicetify `Extensions` directory and run the registration commands above.
+Copy `dist/spicy-lyrics.js` to your Spicetify `Extensions` directory, then run:
 
-## Self-host the external-source Worker
+```powershell
+spicetify config extensions spicy-lyrics.js
+spicetify apply
+```
 
-This repository intentionally does **not** provide or embed a shared Worker URL. Anyone enabling AMLL TTML DB, QQ Music, Kugou, or NetEase must deploy their own Worker instance.
+## External lyric sources
 
-You need a Cloudflare account and Node.js 20 or newer:
+No shared Worker URL is included. To use AMLL TTML DB, QQ Music, Kugou, or NetEase, deploy your own:
 
 ```powershell
 cd worker
@@ -98,51 +66,19 @@ npx wrangler login
 npm run deploy
 ```
 
-Wrangler will print an origin similar to:
+Paste the resulting `workers.dev` origin into:
 
 ```text
-https://spicy-lyrics-external-sources.<your-subdomain>.workers.dev
+Spicy Lyrics Settings -> Lyrics -> Manage Sources -> External Sources Worker
 ```
 
-In Spotify, open:
+Use only the origin. Do not append `/v1/lyrics`. Enable the sources you want and arrange them in the same panel.
 
-```text
-Spicy Lyrics Settings → Lyrics → Manage Sources
-```
+See [worker/README.md](worker/README.md) for routes, local development, response formats, and troubleshooting.
 
-Paste only the Worker origin into **External Sources Worker**, then enable and prioritize AMLL TTML DB, QQ Music, Kugou, and NetEase. Do not append `/v1/lyrics` to the configured origin.
+Custom lyric servers can also be added under **Manage Sources**. Responses can use native Spicy Lyrics JSON, TTML, LRC, or plain text. Native JSON is recommended for word timing, translations, and vocal roles.
 
-The Worker exposes:
-
-```text
-GET /v1/lyrics/amlldb/:spotifyTrackId
-GET /v1/lyrics/qq/:spotifyTrackId
-GET /v1/lyrics/kugou/:spotifyTrackId
-GET /v1/lyrics/netease/:spotifyTrackId
-```
-
-The extension supplies `title`, repeated `artist_name`, `album`, and `duration` query parameters. Successful responses use native Spicy Lyrics `Static`, `Line`, or `Syllable` JSON.
-
-See [worker/README.md](worker/README.md) for local development, route examples, and troubleshooting.
-
-## Custom lyric servers
-
-Custom servers are configured separately from the bundled Worker providers. The extension requests:
-
-```text
-GET <server-origin-or-base-path>/:spotifyTrackId
-```
-
-Track metadata is added as query parameters. A server may return:
-
-- Native Spicy Lyrics JSON directly.
-- A JSON object containing a `lyrics` value.
-- TTML.
-- LRC or plain-text lyrics.
-
-Native JSON is recommended when word timing, translations, background vocals, or romanization must be preserved.
-
-## Development and verification
+## Development
 
 ```powershell
 npm test
@@ -159,46 +95,22 @@ npm run typecheck
 npx wrangler deploy --dry-run
 ```
 
-Live provider tests make real requests and are opt-in:
+Some integrations rely on unofficial service interfaces and may stop working without warning. Lyrics and metadata may be covered by third-party terms and rights; you are responsible for how you use, deploy, log, or redistribute them.
 
-```powershell
-$env:LIVE_PROVIDER_TESTS = "1"
-npm test
-```
+This project uses AGPL-3.0. If you modify and provide the Worker as a network service, review the source-availability and notice requirements. See [LICENSE](LICENSE) and [worker/NOTICE.md](worker/NOTICE.md).
 
-## Legal, service, and privacy notice
+## Credits
 
-- This software is provided without warranty. The maintainers do not guarantee provider availability, response accuracy, or continued compatibility.
-- QQ Music, Kugou, NetEase, Musixmatch, Apple Music, Spotify, and other integrations may use undocumented or unofficial endpoints. Those services can change or block the integrations at any time.
-- The Worker contains provider-specific compatibility code for interpreting upstream lyric payloads. Its inclusion does not grant rights to access a service, redistribute lyrics, or violate a provider's terms.
-- Before using or operating the Worker, review the applicable laws, service terms, copyright rules, and data-protection requirements in your jurisdiction. You are responsible for how and where you deploy it.
-- Song lyrics and associated metadata may be copyrighted by their respective owners. Do not publish, archive, or redistribute content unless you have the necessary permission.
-- Enabled providers receive track metadata such as title, artist, album, duration, and Spotify track identifier. A self-hosted Worker operator is responsible for its logs, observability settings, retention, access controls, and privacy disclosures.
-- Do not treat this section as legal advice. If you plan to operate a public or commercial service, obtain qualified legal review.
+- [Spikerko/spicy-lyrics](https://github.com/Spikerko/spicy-lyrics): original project and renderer.
+- [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics): primary fork base and lyrics-processing pipeline.
+- [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics): source manager, custom servers, and custom-font reference.
+- [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource): main QQ, Kugou, and NetEase compatibility reference.
+- [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db): community TTML database.
+- [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) and [surfbryce/beautiful-lyrics](https://github.com/surfbryce/beautiful-lyrics): server architecture and project-lineage references.
+- [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC): acknowledged by retained upstream compatibility code.
+- [Spicetify](https://spicetify.app/) and [Cloudflare Workers](https://developers.cloudflare.com/workers/): extension and Worker platforms.
 
-### Source-availability obligations
-
-This repository is licensed under the GNU Affero General Public License v3.0. Some Worker code is adapted from GPLv3-licensed ESLyric-LyricsSource and retains its individual source notice.
-
-If you modify and deploy the Worker for others to use over a network, review the AGPLv3/GPLv3 obligations carefully. In particular, preserve copyright and license notices and make the complete corresponding source for the deployed version available as required by the applicable licenses.
-
-See [LICENSE](LICENSE) and [worker/NOTICE.md](worker/NOTICE.md).
-
-## Credits and lineage
-
-This fork exists because of work from multiple projects:
-
-- [Spikerko/spicy-lyrics](https://github.com/Spikerko/spicy-lyrics) — original Spicy Lyrics project and renderer.
-- [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics) — primary fork base, processing pipeline, romanization, translation, and interface features.
-- [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics) — external-source orchestration, custom-server work, custom-font concepts, and source-manager interface reference.
-- [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource) — primary reference for QQ, Kugou, and NetEase provider compatibility and parsing behavior.
-- [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db) — community-maintained TTML database used by the optional AMLL DB source.
-- [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC) — acknowledged by the retained upstream ESLyric compatibility module.
-- [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) — external lyrics-server architecture reference.
-- [surfbryce/beautiful-lyrics](https://github.com/surfbryce/beautiful-lyrics) — upstream Beautiful Lyrics project lineage.
-- [Spicetify](https://spicetify.app/) and [Cloudflare Workers](https://developers.cloudflare.com/workers/) — extension and Worker platforms.
-
-Credits describe technical lineage only; they do not imply endorsement of this fork. Please preserve the upstream notices when redistributing modified versions.
+Credits describe technical lineage, not endorsement. Preserve upstream notices when redistributing modified versions.
 
 ## License
 
