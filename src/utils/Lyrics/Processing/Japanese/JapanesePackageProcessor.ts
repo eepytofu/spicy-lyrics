@@ -34,9 +34,10 @@ export async function processJapanesePackageLine(
   displayText: string,
   syllables: JapaneseReadable[],
   spans: JapaneseTimedTextSpan[],
-  times: Array<{ StartTime?: number; EndTime?: number }>
+  times: Array<{ StartTime?: number; EndTime?: number }>,
+  romajiPromise?: Promise<void>
 ): Promise<{ plan: RenderPlan; romaji: string }> {
-  const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, undefined, spans);
+  const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, romajiPromise, spans);
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
   if (!romaji) throw new Error("Japanese fallback processor produced no reading");
 
@@ -54,7 +55,7 @@ export async function processJapanesePackageLine(
     })),
   };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-  const annotation = await annotateJapaneseLine(canonical, romaji);
+  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
@@ -63,9 +64,10 @@ export async function processJapanesePackageLine(
 }
 
 export async function processJapanesePackageTextTarget(
-  target: JapaneseReadable & { Text?: string }
+  target: JapaneseReadable & { Text?: string },
+  romajiPromise?: Promise<void>
 ): Promise<string | undefined> {
-  const reading = await annotateJapaneseTextTarget(target);
+  const reading = await annotateJapaneseTextTarget(target, undefined, romajiPromise);
   if (!reading?.romaji) return undefined;
   target.RomanizedText = reading.romaji;
   target.TransliteratedText = reading.romaji;

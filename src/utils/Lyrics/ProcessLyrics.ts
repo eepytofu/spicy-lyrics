@@ -1,7 +1,9 @@
 import { franc } from "franc-all";
+import Kuroshiro from "kuroshiro";
 import langs from "langs";
 import { RetrievePackage } from "../ImportPackage.ts";
 import Logger from "../Logger.ts";
+import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
 import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanDisplayMode } from "./lyrics.ts";
 import {
   ChineseTextTest,
@@ -36,10 +38,12 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 25;
+export const LYRICS_PROCESSING_VERSION = 26;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
+const RomajiPromise: Promise<void> | undefined =
+  typeof window === "undefined" ? undefined : new Kuroshiro().init(KuromojiAnalyzer);
 const romanizationLogger = new Logger("Lyrics Romanization");
 
 const getLyricsPageContainer = (): HTMLElement | null =>
@@ -77,7 +81,9 @@ const loadPackagesForScripts = async (
 ): Promise<RomanizationPackages> => {
   const packages: RomanizationPackages = {};
   for (const script of scripts) {
-    if (script === "Chinese" && chineseTranslitMode !== "jyutping") {
+    if (script === "Japanese") {
+      await RomajiPromise;
+    } else if (script === "Chinese" && chineseTranslitMode !== "jyutping") {
       packages.pinyin = await RetrievePackage("pinyin", "4.0.0", "mjs");
     } else if (script === "Greek") {
       packages.greekRomanization = await RetrievePackage("GreekRomanization", "1.0.0", "js");
@@ -328,7 +334,7 @@ const postProcessSyllableRomanization = async (
         }
       }
       if (isJapaneseSong && !groupHasKorean && japaneseMap) {
-        const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables);
+        const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables, RomajiPromise);
         for (const syllable of syllables) {
           delete syllable.RomanizedText;
           delete syllable.TransliteratedText;
@@ -393,7 +399,7 @@ const romanizeEntry = async (
   if (hasTransliteration(target) && !replaceKoreanTransliteration) {
     if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
       const previousRomanized = target.RomanizedText || target.TransliteratedText;
-      await processJapanesePackageTextTarget(target);
+      await processJapanesePackageTextTarget(target, RomajiPromise);
       return (target.RomanizedText || target.TransliteratedText) !== previousRomanized;
     }
     return true;
@@ -403,7 +409,7 @@ const romanizeEntry = async (
   let changed = false;
 
   if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
-    const packageRomaji = await processJapanesePackageTextTarget(target);
+    const packageRomaji = await processJapanesePackageTextTarget(target, RomajiPromise);
     if (packageRomaji && acceptRomanization(target.Text || "", packageRomaji, [ScriptResidualTests.Japanese])) {
       line.HasTransliterations = true;
       return true;

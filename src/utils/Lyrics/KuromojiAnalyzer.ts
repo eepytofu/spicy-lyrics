@@ -1,37 +1,39 @@
-// deno-lint-ignore-file no-async-promise-executor no-explicit-any
+// deno-lint-ignore-file no-explicit-any
 import { RetrievePackage } from "../ImportPackage.ts";
 
-RetrievePackage("Kuromoji", "1.0.0", "js")
-  .catch(() => {});
+RetrievePackage("Kuromoji", "1.0.0", "js").catch(() => {});
 
 let Analyzer: any;
+let initPromise: Promise<void> | undefined;
+
 export const init = (): Promise<void> => {
-  if (Analyzer !== undefined) {
-    return Promise.resolve();
-  }
+  if (Analyzer !== undefined) return Promise.resolve();
+  if (initPromise) return initPromise;
 
-  return new Promise(async (resolve, reject) => {
+  initPromise = (async () => {
     await RetrievePackage("Kuromoji", "1.0.0", "js");
-    while (!(window as any).kuromoji) {
-      await new Promise((r) => setTimeout(r, 50));
+    for (let attempt = 0; !(window as any).kuromoji && attempt < 300; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    (window as any).kuromoji.builder({
-      dicPath: "https://kuromoji.pkgs.spikerko.org",
-    }).build((error: any, analyzer: any) => {
-      if (error) {
-        return reject(error);
-      }
+    if (!(window as any).kuromoji) throw new Error("Kuromoji package did not initialize");
 
-      Analyzer = analyzer;
-      resolve();
+    Analyzer = await new Promise<any>((resolve, reject) => {
+      (window as any).kuromoji.builder({
+        dicPath: "https://kuromoji.pkgs.spikerko.org",
+      }).build((error: any, analyzer: any) => {
+        if (error) reject(error);
+        else resolve(analyzer);
+      });
     });
+  })().catch((error) => {
+    initPromise = undefined;
+    throw error;
   });
+  return initPromise;
 };
-export const parse = (text = ""): Promise<any> => {
-  if (text.trim() === "" || Analyzer === undefined) {
-    return Promise.resolve([]);
-  }
 
+export const parse = (text = ""): Promise<any> => {
+  if (text.trim() === "" || Analyzer === undefined) return Promise.resolve([]);
   const result = Analyzer.tokenize(text) as any[];
   for (const token of result) {
     token.verbose = {
@@ -43,6 +45,5 @@ export const parse = (text = ""): Promise<any> => {
     delete token.word_type;
     delete token.word_position;
   }
-
   return Promise.resolve(result);
 };
