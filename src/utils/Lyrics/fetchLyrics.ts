@@ -11,6 +11,7 @@ import {
   $ignoreMusixmatchWordSync,
   $lyricsSourceOrder,
   $prioritizeAppleMusicQuality,
+  $strictLyricsSourcePriority,
 } from "../stores.ts";
 import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
@@ -32,7 +33,7 @@ import { LyricsQueueRetry } from "./LyricsQueueRetry.ts";
 import { GetExpireStore } from "../../modules/Store.ts";
 import { SLObjPack } from "../objpack.ts";
 import { translateLyrics } from "./Fork/Translation.ts";
-import { $japaneseReadingMode } from "../uiState.ts";
+import { $chineseCharacterForm, $japaneseReadingMode } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { fetchLyricsFromProviders } from "./ExternalSources.ts";
 import {
@@ -70,6 +71,7 @@ function lyricsSourceCacheSignature(): string {
     custom: parseCustomLyricsServers($customLyricsServers.get()),
     ignoreMusixmatchWordSync: $ignoreMusixmatchWordSync.get(),
     prioritizeAppleMusicQuality: $prioritizeAppleMusicQuality.get(),
+    strictLyricsSourcePriority: $strictLyricsSourcePriority.get(),
   });
 }
 
@@ -96,6 +98,7 @@ function currentProcessingContextKey(): string {
     translationTargetLang,
     chineseTranslitMode,
     chineseTones,
+    chineseCharacterForm: $chineseCharacterForm.get(),
     koreanDisplayMode,
     cyrillicRomanizationMode,
     cyrillicKeepSigns,

@@ -22,6 +22,7 @@ import {
   $lyricsSourceOrder,
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
+  $strictLyricsSourcePriority,
 } from "../../../utils/stores.ts";
 import { refreshMusixmatchToken } from "../../../utils/Lyrics/ExternalSources.ts";
 import { Toggle } from "./components.tsx";
@@ -33,6 +34,7 @@ export default function LyricsSourcesManager() {
   const customJson = useStore($customLyricsServers);
   const ignoreMusixmatchWordSync = useStore($ignoreMusixmatchWordSync);
   const prioritizeAppleMusicQuality = useStore($prioritizeAppleMusicQuality);
+  const strictLyricsSourcePriority = useStore($strictLyricsSourcePriority);
   const musixmatchToken = useStore($musixmatchToken);
   const customServers = parseCustomLyricsServers(customJson);
   const order = normalizeLyricsSourceOrder(storedOrder, customServers);
@@ -135,6 +137,13 @@ export default function LyricsSourcesManager() {
           spellCheck={false}
         />
       </div>
+      <div className="sl-sp-source-option-row">
+        <div className="sl-sp-source-copy">
+          <span className="sl-sp-source-label">Strict Source Priority</span>
+          <span className="sl-sp-source-description">Use the first available result. When off, word timing beats line timing, line timing beats plain text, and source order breaks ties.</span>
+        </div>
+        <Toggle checked={strictLyricsSourcePriority} onChange={(value) => $strictLyricsSourcePriority.set(value)} />
+      </div>
 
       <div className="sl-sp-source-list">
         {order.map((id, index) => {
@@ -210,8 +219,8 @@ export default function LyricsSourcesManager() {
                   <div className="sl-sp-source-settings-inner">
                     <div className="sl-sp-source-option-row">
                       <div className="sl-sp-source-copy">
-                        <span className="sl-sp-source-label">Prioritize Apple Music Quality</span>
-                        <span className="sl-sp-source-description">Use Apple Music when its timing quality is at least as good.</span>
+                        <span className="sl-sp-source-label">Apple Music Tie Override</span>
+                        <span className="sl-sp-source-description">In quality mode, let Apple Music win equal-quality ties. Ignored when strict priority is enabled.</span>
                       </div>
                       <Toggle checked={prioritizeAppleMusicQuality} onChange={(value) => $prioritizeAppleMusicQuality.set(value)} />
                     </div>

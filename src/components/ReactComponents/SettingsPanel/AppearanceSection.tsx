@@ -19,7 +19,7 @@ export default function AppearanceSection({ query, sectionFilter }: Props) {
 
   const r1 = matches(query, "Use System Font", "Use Spotify's default font or a custom installed font-family stack.");
   const r2 = skipSpicyFont && matches(query, "Font Family Stack", "Choose installed fonts in fallback order.");
-  const r3 = skipSpicyFont && matches(query, "Fix Han Glyph Variants", "Use Japanese or Simplified Chinese Noto glyph forms based on lyric language.");
+  const r3 = skipSpicyFont && matches(query, "Fix Han Glyph Variants", "Use Japanese, Simplified Chinese, or Traditional Chinese Noto glyph forms based on lyric language.");
 
   if (!r1 && !r2 && !r3) return null;
 
@@ -38,7 +38,7 @@ export default function AppearanceSection({ query, sectionFilter }: Props) {
           <input
             className="sl-sp-text-input"
             type="text"
-            placeholder={'"Inter", "Noto Sans JP", "Segoe UI", sans-serif'}
+            placeholder={'"Inter", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", sans-serif'}
             value={systemFontStack}
             onChange={(event) => $systemFontStack.set(event.currentTarget.value)}
             spellCheck={false}
@@ -47,7 +47,7 @@ export default function AppearanceSection({ query, sectionFilter }: Props) {
       )}
 
       {r3 && (
-        <Row label="Fix Han Glyph Variants" description='Keep your stack order, but prefer "Noto Sans JP" for Japanese and "Noto Sans SC" for Chinese lyric lines.'>
+        <Row label="Fix Han Glyph Variants" description='Prefer "Noto Sans JP" for Japanese, "Noto Sans SC" for Simplified Chinese, and "Noto Sans TC" for Traditional Chinese.'>
           <Toggle checked={fixHanGlyphVariants} onChange={(value) => $fixHanGlyphVariants.set(value)} />
         </Row>
       )}

@@ -8,6 +8,7 @@ import {
   $ignoreMusixmatchWordSync,
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
+  $strictLyricsSourcePriority,
 } from "../stores.ts";
 import { ParseTTML } from "./manager/parseTTML.ts";
 import {
@@ -262,8 +263,15 @@ export async function fetchLyricsFromProviders(uri: string, order: LyricsSourceP
     );
     if (result?.status === 503 && provider === "spicy") return result;
     if (!result?.lyrics) continue;
-    if (!best || score(result.lyrics) > score(best.lyrics)) best = result;
-    if (score(result.lyrics) >= 3 && !(provider !== "apple" && $prioritizeAppleMusicQuality.get() && order.slice(order.indexOf(provider) + 1).includes("apple"))) return result;
+    if ($strictLyricsSourcePriority.get()) return result;
+    const resultScore = score(result.lyrics);
+    const bestScore = score(best?.lyrics);
+    const appleTieOverride = provider === "apple" && $prioritizeAppleMusicQuality.get() && resultScore === bestScore;
+    if (!best || resultScore > bestScore || appleTieOverride) best = result;
+    const waitingForApple = provider !== "apple"
+      && $prioritizeAppleMusicQuality.get()
+      && order.slice(order.indexOf(provider) + 1).includes("apple");
+    if (score(best?.lyrics) >= 3 && !waitingForApple) return best;
   }
   return best;
 }

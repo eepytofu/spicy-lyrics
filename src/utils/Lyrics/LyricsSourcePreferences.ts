@@ -22,7 +22,7 @@ export type CustomLyricsServer = {
 type LyricsSourceDefinition = { label: string; description: string };
 
 export const DEFAULT_LYRICS_SOURCE_ORDER: LyricsSourceProviderId[] = [
-  "spicy", "musixmatch", "apple", "spotify", "lrclib", "amlldb", "qq", "kugou", "netease",
+  "spicy", "amlldb", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease",
 ];
 
 export const DEFAULT_DISABLED_LYRICS_SOURCES: LyricsSourceProviderId[] = [

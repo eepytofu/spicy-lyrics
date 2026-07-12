@@ -54,22 +54,24 @@ function normalizedFamilyName(value: string): string {
 }
 
 /**
- * Keeps the user's first (usually Latin) family, then places the two Noto Han
+ * Keeps the user's first (usually Latin) family, then places the three Noto Han
  * fallbacks in the correct language order before the remaining families.
  */
-export function toHanLanguageFontStack(value: string, language: "ja" | "zh-Hans"): string {
+export function toHanLanguageFontStack(value: string, language: "ja" | "zh-Hans" | "zh-Hant"): string {
   const families = splitFamilyList(value)
     .slice(0, 12)
     .map(normalizeFamily)
     .filter((family): family is string => family !== null);
   if (!families.length) return "";
 
-  const notoNames = new Set(["noto sans jp", "noto sans sc"]);
+  const notoNames = new Set(["noto sans jp", "noto sans sc", "noto sans tc"]);
   const remaining = families.filter((family) => !notoNames.has(normalizedFamilyName(family)));
   const insertionIndex = remaining.length && !GENERIC_FAMILIES.has(normalizedFamilyName(remaining[0])) ? 1 : 0;
   const preferred = language === "ja"
-    ? ['"Noto Sans JP"', '"Noto Sans SC"']
-    : ['"Noto Sans SC"', '"Noto Sans JP"'];
+    ? ['"Noto Sans JP"', '"Noto Sans SC"', '"Noto Sans TC"']
+    : language === "zh-Hans"
+      ? ['"Noto Sans SC"', '"Noto Sans TC"', '"Noto Sans JP"']
+      : ['"Noto Sans TC"', '"Noto Sans SC"', '"Noto Sans JP"'];
   remaining.splice(Math.min(insertionIndex, remaining.length), 0, ...preferred);
   return remaining.join(", ");
 }

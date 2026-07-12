@@ -9,13 +9,14 @@ Experimental personal fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-l
 
 Lyrics:
 
-- Source priority and per-provider toggles.
+- Quality-first source selection: word timing beats line timing, line timing beats plain text, and source order breaks ties.
+- Optional strict source priority uses the first available result instead.
 - Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, AMLL TTML DB, QQ Music, Kugou, and NetEase.
-- Word-synced results beat line-synced results, which beat plain lyrics.
 - Self-hosted Worker for AMLL, QQ, Kugou, and NetEase.
 - Custom lyric servers.
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
 - Japanese furigana, romaji, or both.
+- Local Simplified and Traditional Chinese conversion without changing lyric timing.
 - Chinese Pinyin/Jyutping, Korean, Cyrillic, Greek, and Indic-script processing.
 - Translation for static, line-synced, and syllable-synced lyrics.
 
@@ -23,16 +24,16 @@ UI and appearance:
 
 - Source manager adapted from [iPixelGalaxy's fork](https://github.com/iPixelGalaxy/spicy-lyrics).
 - Custom installed font-family stack.
-- Han glyph variant toggle: Japanese lines prefer `Noto Sans JP`, while Simplified Chinese lines prefer `Noto Sans SC` *(fuck Han unification man)*.
+- Han glyph variant toggle: Japanese, Simplified Chinese, and Traditional Chinese lines prefer `Noto Sans JP`, `Noto Sans SC`, and `Noto Sans TC` respectively *(fuck Han unification man)*.
 - Flat controls, dark-background option, copy formats, quick reading/translation controls, and lyrics prefetching.
 
 Example font stack:
 
 ```text
-"SF Pro Display", "Noto Sans JP", "Noto Sans SC", "Segoe UI", sans-serif
+"SF Pro Display", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", "Segoe UI", sans-serif
 ```
 
-Enable **Use System Font** to enter the stack. **Fix Han Glyph Variants** reorders the JP/SC fallbacks for each lyric line without replacing your first font.
+Enable **Use System Font** to enter the stack. **Fix Han Glyph Variants** reorders the JP/SC/TC fallbacks for each lyric line without replacing your first font. Chinese lyrics can stay in their original form or be converted locally under **Chinese Character Form**.
 
 ## Installation
 

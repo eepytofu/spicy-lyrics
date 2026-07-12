@@ -91,14 +91,15 @@ export const $timelineOutsideMediaContent = persistAtom<boolean>(
 export const $playbackOffset = persistAtom<number>("playbackOffset", 0);
 export const $lyricsSourceOrder = persistAtom<string>(
   "lyricsSourceOrder",
-  JSON.stringify(["spicy", "musixmatch", "apple", "spotify", "lrclib", "amlldb", "qq", "kugou", "netease"])
+  JSON.stringify(["spicy", "amlldb", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease"])
 );
 export const $disabledLyricsSources = persistAtom<string>(
   "disabledLyricsSources",
   JSON.stringify(["lrclib", "amlldb", "qq", "kugou", "netease"])
 );
 export const $ignoreMusixmatchWordSync = persistAtom<boolean>("ignoreMusixmatchWordSync", true);
-export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", true);
+export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", false);
+export const $strictLyricsSourcePriority = persistAtom<boolean>("strictLyricsSourcePriority", false);
 export const $musixmatchToken = persistAtom<string>("musixmatchToken", "");
 export const $externalLyricsWorkerUrl = persistAtom<string>("externalLyricsWorkerUrl", "");
 export const $customLyricsServers = persistAtom<string>("customLyricsServers", "[]");

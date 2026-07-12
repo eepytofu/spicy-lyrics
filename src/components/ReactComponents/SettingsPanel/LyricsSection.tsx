@@ -7,6 +7,7 @@ import {
 } from "../../../utils/stores.ts";
 import {
   $chineseTones,
+  $chineseCharacterForm,
   $chineseTranslitMode,
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
@@ -24,6 +25,11 @@ const SECTION_NAME = "Lyrics Display";
 
 const SIMPLE_RENDERING_OPTIONS = ["calculate", "animate"];
 const CHINESE_TRANSLIT_OPTIONS = ["pinyin", "jyutping"];
+const CHINESE_CHARACTER_FORM_OPTIONS = [
+  { value: "original", label: "Original" },
+  { value: "simplified", label: "Simplified" },
+  { value: "traditional", label: "Traditional" },
+] as const;
 const KOREAN_ROMANIZATION_OPTIONS = [
   { value: "wordTranslit", label: "Word-by-word transliteration" },
   { value: "rrStandard", label: "Standard Korean RR" },
@@ -80,6 +86,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const minimalLyricsMode = useStore($minimalLyricsMode);
   const chineseTranslitMode = useStore($chineseTranslitMode);
   const chineseTones = useStore($chineseTones);
+  const chineseCharacterForm = useStore($chineseCharacterForm);
   const japaneseReadingMode = useStore($japaneseReadingMode);
   const koreanDisplayMode = useStore($koreanDisplayMode);
   const cyrillicRomanizationMode = useStore($cyrillicRomanizationMode);
@@ -95,6 +102,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const showSimpleRenderingStyle = matches(query, "Simple Mode: Text Animation Style", "How lyrics text transitions are rendered in Simple Lyrics Mode.");
   const showMinimalLyricsMode = matches(query, "Minimal Lyrics Mode", "Hides sung lyrics lines in Fullscreen and Cinema Mode");
   const showChineseTransliteration = matches(query, "Chinese Transliteration", "Choose Mandarin pinyin or Cantonese jyutping for Chinese lyrics.");
+  const showChineseCharacterForm = matches(query, "Chinese Character Form", "Display Chinese lyrics in their original, Simplified, or Traditional form.");
   const showChineseTones = matches(query, "Chinese Tones", "Show Mandarin tone marks and Cantonese jyutping tone numbers.");
   const showJapaneseReadingDisplay = matches(query, "Japanese Reading Display", "Choose romaji, furigana, or both for Japanese lyrics.");
   const showKoreanDisplay = matches(query, "Korean Display", "Choose Korean transliteration mode for the extra romanized line.");
@@ -110,6 +118,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
     showSimpleLyricsMode ||
     showSimpleRenderingStyle ||
     showMinimalLyricsMode ||
+    showChineseCharacterForm ||
     showChineseTransliteration ||
     showChineseTones ||
     showJapaneseReadingDisplay ||
@@ -162,6 +171,17 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
           description="Hides sung lyrics lines in Fullscreen and Cinema Mode"
         >
           <Toggle checked={minimalLyricsMode} onChange={(v) => $minimalLyricsMode.set(v)} />
+        </Row>
+      )}
+
+      {showChineseCharacterForm && (
+        <Row label="Chinese Character Form" description="Display Chinese lyrics in their original, Simplified, or Traditional form.">
+          <Select
+            value={chineseCharacterForm}
+            options={optionValues(CHINESE_CHARACTER_FORM_OPTIONS)}
+            labels={optionLabels(CHINESE_CHARACTER_FORM_OPTIONS)}
+            onChange={(value) => $chineseCharacterForm.set(value as "original" | "simplified" | "traditional")}
+          />
         </Row>
       )}
 

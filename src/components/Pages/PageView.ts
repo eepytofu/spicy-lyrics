@@ -1,6 +1,7 @@
 import fetchLyrics, { LyricsStore, ShowQueueLoader } from "../../utils/Lyrics/fetchLyrics.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
 import {
+  $chineseCharacterForm,
   $flatViewControls,
   $forceCompactMode,
   $forceDarkBackground,
@@ -143,14 +144,17 @@ function applySystemFontStack(targetDocument: Document = PageContainer?.ownerDoc
     if ($fixHanGlyphVariants.get()) {
       targetDocument.documentElement.style.setProperty("--spicy-system-font-ja", toHanLanguageFontStack($systemFontStack.get(), "ja"));
       targetDocument.documentElement.style.setProperty("--spicy-system-font-zh", toHanLanguageFontStack($systemFontStack.get(), "zh-Hans"));
+      targetDocument.documentElement.style.setProperty("--spicy-system-font-zh-hant", toHanLanguageFontStack($systemFontStack.get(), "zh-Hant"));
     } else {
       targetDocument.documentElement.style.removeProperty("--spicy-system-font-ja");
       targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh");
+      targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh-hant");
     }
   } else {
     targetDocument.documentElement.style.removeProperty("--spicy-system-font");
     targetDocument.documentElement.style.removeProperty("--spicy-system-font-ja");
     targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh");
+    targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh-hant");
   }
 }
 
@@ -995,6 +999,25 @@ const rerenderCurrentLyrics = async () => {
     setTimeout(() => triggerRemeasureLV(), 60);
   });
 };
+const reprocessCurrentLyricsFromSource = async () => {
+  if (!PageContainer) return;
+  const uri = SpotifyPlayer.GetUri();
+  const trackId = SpotifyPlayer.GetId();
+  if (!uri) return;
+  PageContainer.querySelector(".LyricsContainer .LyricsContent")?.classList.add("HiddenTransitioned");
+  $currentLyricsData.set("");
+  if (trackId) await LyricsStore.RemoveItem(trackId).catch(() => {});
+  const lyrics = await fetchLyrics(uri);
+  await ApplyLyrics(lyrics);
+  setTimeout(() => {
+    AppendViewControls(true);
+    triggerRemeasureLV();
+    PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
+  }, 60);
+};
+
+$chineseCharacterForm.listen(() => { void reprocessCurrentLyricsFromSource(); });
+
 
 $japaneseReadingMode.listen(() => {
   rerenderCurrentLyrics();

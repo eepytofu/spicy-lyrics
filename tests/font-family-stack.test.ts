@@ -15,20 +15,21 @@ test("font family stack rejects CSS declaration injection", () => {
 
 test("Han language stacks preserve the Latin font and reorder Noto fallbacks", () => {
   const stack = '"SF Pro Display", "Noto Sans JP", "Noto Sans SC", sans-serif';
-  assert.equal(toHanLanguageFontStack(stack, "ja"), '"SF Pro Display", "Noto Sans JP", "Noto Sans SC", sans-serif');
-  assert.equal(toHanLanguageFontStack(stack, "zh-Hans"), '"SF Pro Display", "Noto Sans SC", "Noto Sans JP", sans-serif');
+  assert.equal(toHanLanguageFontStack(stack, "ja"), '"SF Pro Display", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", sans-serif');
+  assert.equal(toHanLanguageFontStack(stack, "zh-Hans"), '"SF Pro Display", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", sans-serif');
+  assert.equal(toHanLanguageFontStack(stack, "zh-Hant"), '"SF Pro Display", "Noto Sans TC", "Noto Sans SC", "Noto Sans JP", sans-serif');
 });
 
 test("Han language stacks insert missing Noto fallbacks before generic families", () => {
   assert.equal(
     toHanLanguageFontStack('"SF Pro Display", sans-serif', "ja"),
-    '"SF Pro Display", "Noto Sans JP", "Noto Sans SC", sans-serif'
+    '"SF Pro Display", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", sans-serif'
   );
 });
 
 test("Han language stacks put Noto ahead of secondary fallbacks", () => {
   assert.equal(
     toHanLanguageFontStack('"SF Pro Display", "Segoe UI", "Microsoft YaHei", sans-serif', "zh-Hans"),
-    '"SF Pro Display", "Noto Sans SC", "Noto Sans JP", "Segoe UI", "Microsoft YaHei", sans-serif'
+    '"SF Pro Display", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Segoe UI", "Microsoft YaHei", sans-serif'
   );
 });

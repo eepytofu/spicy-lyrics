@@ -4,6 +4,8 @@ import langs from "langs";
 import { RetrievePackage } from "../ImportPackage.ts";
 import Logger from "../Logger.ts";
 import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
+import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
+import { $chineseCharacterForm } from "../uiState.ts";
 import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanDisplayMode } from "./lyrics.ts";
 import {
   ChineseTextTest,
@@ -38,7 +40,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 26;
+export const LYRICS_PROCESSING_VERSION = 27;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
@@ -469,19 +471,29 @@ export const ProcessLyrics = async (
   const updatePageClasses = options.updatePageClasses !== false;
   const awaitTranslation = options.awaitTranslation !== false;
   const hadApiTransliterations = lyrics.HasTransliterations === true;
-  const { francText, scriptText, entries } = gatherText(lyrics);
+  let gathered = gatherText(lyrics);
 
-  const language = franc(francText);
+  const language = franc(gathered.francText);
   const languageISO2 = langs.where("3", language)?.["1"];
   lyrics.Language = language;
   lyrics.LanguageISO2 = languageISO2;
 
-  const presentScripts = detectPresentScripts(scriptText, language, languageISO2);
+  const presentScripts = detectPresentScripts(gathered.scriptText, language, languageISO2);
   const docContext: ScriptBranchDocContext = {
     presentScripts,
     primaryLanguage: language,
     iso2Language: languageISO2,
   };
+  const chineseCharacterForm = $chineseCharacterForm.get();
+  lyrics.ChineseCharacterForm = chineseCharacterForm;
+  if (chineseCharacterForm !== "original" && language !== "jpn" && presentScripts.includes("Chinese")) {
+    convertChineseLyricsText(lyrics, chineseCharacterForm, (text) =>
+      ItemChineseTest.test(text) && scriptBranchForLine(text, docContext).includes("Chinese")
+    );
+    gathered = gatherText(lyrics);
+  }
+  const entries = gathered.entries;
+
 
   let appliedRomanization = false;
   let packages: RomanizationPackages = {};
