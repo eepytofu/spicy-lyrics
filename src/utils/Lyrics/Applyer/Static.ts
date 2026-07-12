@@ -1,4 +1,4 @@
-import { $lyricsContainerExists } from "../../../utils/stores.ts";
+import { $fixHanGlyphVariants, $lyricsContainerExists } from "../../../utils/stores.ts";
 import { PageContainer } from "../../../components/Pages/PageView.ts";
 import { type StyleProperties, applyStyles, removeAllStyles } from "../../CSS/Styles.ts";
 import {
@@ -23,6 +23,7 @@ import { EmitApply, EmitNotApplyed } from "./OnApply.ts";
 import { ApplyLyricsProvider } from "./Credits/ApplyProvider.ts";
 import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "./ReadingRenderer.ts";
 import type { ProcessedTextEntry } from "../Reading/JapaneseReading.ts";
+import { applyHanLanguageTag } from "../HanLanguage.ts";
 
 /**
  * Interface for static lyrics data
@@ -81,6 +82,7 @@ export function ApplyStaticLyrics(data: StaticLyricsData, UseRomanized: boolean 
 
   data.Lines.forEach((line) => {
     const lineElem = document.createElement("div");
+    applyHanLanguageTag(lineElem, line.Text, data, $fixHanGlyphVariants.get());
     const renderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,

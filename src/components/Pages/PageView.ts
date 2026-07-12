@@ -32,6 +32,7 @@ import { ScrollSimplebar } from "../../utils/Scrolling/Simplebar/ScrollSimplebar
 import ApplyDynamicBackground, { KawarpMap } from "../DynamicBG/dynamicBackground.ts";
 import {
   $currentLyricsData,
+  $fixHanGlyphVariants,
   $lyricsContainerExists,
   $minimalLyricsMode,
   $simpleLyricsMode,
@@ -40,7 +41,7 @@ import {
   $ttmlMakerMode,
   $viewControlsPosition,
 } from "../../utils/stores.ts";
-import { toCssFontFamilyStack } from "../../utils/cssFontFamily.ts";
+import { toCssFontFamilyStack, toHanLanguageFontStack } from "../../utils/cssFontFamily.ts";
 import Global from "../Global/Global.ts";
 import Session from "../Global/Session.ts";
 import { SpotifyPlayer } from "../Global/SpotifyPlayer.ts";
@@ -139,8 +140,17 @@ function applySystemFontStack(targetDocument: Document = PageContainer?.ownerDoc
   const stack = toCssFontFamilyStack($systemFontStack.get());
   if ($skipSpicyFont.get() && stack) {
     targetDocument.documentElement.style.setProperty("--spicy-system-font", stack);
+    if ($fixHanGlyphVariants.get()) {
+      targetDocument.documentElement.style.setProperty("--spicy-system-font-ja", toHanLanguageFontStack($systemFontStack.get(), "ja"));
+      targetDocument.documentElement.style.setProperty("--spicy-system-font-zh", toHanLanguageFontStack($systemFontStack.get(), "zh-Hans"));
+    } else {
+      targetDocument.documentElement.style.removeProperty("--spicy-system-font-ja");
+      targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh");
+    }
   } else {
     targetDocument.documentElement.style.removeProperty("--spicy-system-font");
+    targetDocument.documentElement.style.removeProperty("--spicy-system-font-ja");
+    targetDocument.documentElement.style.removeProperty("--spicy-system-font-zh");
   }
 }
 
@@ -252,6 +262,7 @@ async function OpenPage(
   if (!$skipSpicyFont.get()) {
     elem.classList.add("UseSpicyFont");
   }
+  elem.classList.toggle("FixHanGlyphVariants", $fixHanGlyphVariants.get());
   applySystemFontStack(targetDocument);
 
   if ($simpleLyricsMode.get()) {
@@ -940,6 +951,13 @@ $skipSpicyFont.listen((v) => {
 });
 
 $systemFontStack.listen(() => applySystemFontStack());
+
+$fixHanGlyphVariants.listen((value) => {
+  if (!PageContainer) return;
+  PageContainer.classList.toggle("FixHanGlyphVariants", value);
+  applySystemFontStack();
+  rerenderCurrentLyrics();
+});
 
 $viewControlsPosition.listen((v) => {
   if (!PageContainer) return;

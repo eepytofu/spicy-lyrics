@@ -48,3 +48,28 @@ export function toCssFontFamilyStack(value: string): string {
     .filter((family): family is string => family !== null)
     .join(", ");
 }
+
+function normalizedFamilyName(value: string): string {
+  return value.replace(/^["']|["']$/g, "").trim().toLocaleLowerCase();
+}
+
+/**
+ * Keeps the user's first (usually Latin) family, then places the two Noto Han
+ * fallbacks in the correct language order before the remaining families.
+ */
+export function toHanLanguageFontStack(value: string, language: "ja" | "zh-Hans"): string {
+  const families = splitFamilyList(value)
+    .slice(0, 12)
+    .map(normalizeFamily)
+    .filter((family): family is string => family !== null);
+  if (!families.length) return "";
+
+  const notoNames = new Set(["noto sans jp", "noto sans sc"]);
+  const remaining = families.filter((family) => !notoNames.has(normalizedFamilyName(family)));
+  const insertionIndex = remaining.length && !GENERIC_FAMILIES.has(normalizedFamilyName(remaining[0])) ? 1 : 0;
+  const preferred = language === "ja"
+    ? ['"Noto Sans JP"', '"Noto Sans SC"']
+    : ['"Noto Sans SC"', '"Noto Sans JP"'];
+  remaining.splice(Math.min(insertionIndex, remaining.length), 0, ...preferred);
+  return remaining.join(", ");
+}

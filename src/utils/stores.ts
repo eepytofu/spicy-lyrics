@@ -66,6 +66,7 @@ export const $simpleLyricsModeRenderingType = persistAtom<string>(
 export const $minimalLyricsMode = persistAtom<boolean>("minimalLyricsMode", false);
 export const $skipSpicyFont = persistAtom<boolean>("skipSpicyFont", false);
 export const $systemFontStack = persistAtom<string>("systemFontStack", "");
+export const $fixHanGlyphVariants = persistAtom<boolean>("fixHanGlyphVariants", false);
 export const $showNpvDynamicBg = persistAtom<boolean>("showNpvDynamicBg", true);
 export const $lockedMediaBox = persistAtom<boolean>("lockedMediaBox", false);
 // $popupLyricsAllowed: stored as actual boolean "popupLyricsAllowed" in the settings blob.

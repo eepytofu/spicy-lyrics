@@ -1,4 +1,4 @@
-import { $lyricsContainerExists, $simpleLyricsMode } from "../../../../utils/stores.ts";
+import { $fixHanGlyphVariants, $lyricsContainerExists, $simpleLyricsMode } from "../../../../utils/stores.ts";
 import { PageContainer } from "../../../../components/Pages/PageView.ts";
 import { applyStyles, removeAllStyles } from "../../../CSS/Styles.ts";
 import {
@@ -27,6 +27,7 @@ import { EmitApply, EmitNotApplyed } from "../OnApply.ts";
 import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
 import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "../ReadingRenderer.ts";
 import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
+import { applyHanLanguageTag } from "../../HanLanguage.ts";
 
 // Define the data structure for lyrics
 type LyricsLineData = TimedTextEntry;
@@ -177,6 +178,7 @@ export function ApplyLineLyrics(data: LyricsData, UseRomanized: boolean = false)
 
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
+    applyHanLanguageTag(lineElem, line.Text, data, $fixHanGlyphVariants.get());
     const renderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,

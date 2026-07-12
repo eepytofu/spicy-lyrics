@@ -1,4 +1,4 @@
-import { $lyricsContainerExists, $minimalLyricsMode, $simpleLyricsMode } from "../../../../utils/stores.ts";
+import { $fixHanGlyphVariants, $lyricsContainerExists, $minimalLyricsMode, $simpleLyricsMode } from "../../../../utils/stores.ts";
 import { PageContainer } from "../../../../components/Pages/PageView.ts";
 import { isSpicySidebarMode } from "../../../../components/Utils/SidebarLyrics.ts";
 import { applyStyles, removeAllStyles } from "../../../CSS/Styles.ts";
@@ -39,6 +39,7 @@ import {
 import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
 import { timedLogicalGroupIds } from "../../Processing/Japanese/TimedGroupIds.ts";
+import { applyHanLanguageTag } from "../../HanLanguage.ts";
 
 // Define the data structure for syllable lyrics
 type SyllableData = TimedSyllableEntry;
@@ -339,6 +340,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
+    applyHanLanguageTag(lineElem, joinSyllableDisplayText(line.Lead.Syllables), data, $fixHanGlyphVariants.get());
     const lineRenderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,

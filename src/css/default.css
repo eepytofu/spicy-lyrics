@@ -52,6 +52,16 @@ body.SpicySidebarLyrics__Active #SpicyLyricsPage:not(.Fullscreen) {
   font-family: var(--spicy-system-font, var(--encore-body-font-stack, sans-serif)), "Noto Sans Georgian", "VazirmatnRegular", sans-serif !important;
 }
 
+#SpicyLyricsPage:not(.UseSpicyFont).FixHanGlyphVariants .line:lang(ja),
+#SpicyLyricsPage:not(.UseSpicyFont).FixHanGlyphVariants .line:lang(ja) * {
+  font-family: var(--spicy-system-font-ja, var(--spicy-system-font, sans-serif)), "Noto Sans Georgian", "VazirmatnRegular", sans-serif !important;
+}
+
+#SpicyLyricsPage:not(.UseSpicyFont).FixHanGlyphVariants .line:lang(zh-Hans),
+#SpicyLyricsPage:not(.UseSpicyFont).FixHanGlyphVariants .line:lang(zh-Hans) * {
+  font-family: var(--spicy-system-font-zh, var(--spicy-system-font, sans-serif)), "Noto Sans Georgian", "VazirmatnRegular", sans-serif !important;
+}
+
 .Root__main-view:has(#SpicyLyricsPage) .main-view-container__scroll-node-child,
 .Root__main-view:has(#SpicyLyricsPage) .main-view-container__scroll-node-child-spacer,
 .Root__main-view:has(#SpicyLyricsPage) .main-view-container__scroll-node-child,
