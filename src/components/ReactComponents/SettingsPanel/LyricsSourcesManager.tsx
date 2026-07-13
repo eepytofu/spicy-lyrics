@@ -19,13 +19,14 @@ import {
   $disabledLyricsSources,
   $externalLyricsWorkerUrl,
   $ignoreMusixmatchWordSync,
+  $lyricsSelectionDiagnostics,
+  $lyricsSelectionMode,
   $lyricsSourceOrder,
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
-  $strictLyricsSourcePriority,
 } from "../../../utils/stores.ts";
 import { refreshMusixmatchToken } from "../../../utils/Lyrics/ExternalSources.ts";
-import { Toggle } from "./components.tsx";
+import { Select, Toggle } from "./components.tsx";
 
 export default function LyricsSourcesManager() {
   const storedOrder = useStore($lyricsSourceOrder);
@@ -34,7 +35,8 @@ export default function LyricsSourcesManager() {
   const customJson = useStore($customLyricsServers);
   const ignoreMusixmatchWordSync = useStore($ignoreMusixmatchWordSync);
   const prioritizeAppleMusicQuality = useStore($prioritizeAppleMusicQuality);
-  const strictLyricsSourcePriority = useStore($strictLyricsSourcePriority);
+  const lyricsSelectionMode = useStore($lyricsSelectionMode);
+  const selectionDiagnostics = useStore($lyricsSelectionDiagnostics);
   const musixmatchToken = useStore($musixmatchToken);
   const customServers = parseCustomLyricsServers(customJson);
   const order = normalizeLyricsSourceOrder(storedOrder, customServers);
@@ -109,6 +111,13 @@ export default function LyricsSourcesManager() {
   };
 
   const optionCounts: Partial<Record<LyricsSourceProviderId, number>> = { musixmatch: 2, apple: 1 };
+  const sourceLabel = (provider: string) => getLyricsSourceDefinition(provider as LyricsSourceProviderId, customServers).label;
+  const selectedSourceLabel = selectionDiagnostics?.selectedProvider ? sourceLabel(selectionDiagnostics.selectedProvider) : "none";
+  const selectionModeLabel = ({ smart: "Smart Match", syncType: "Sync Type First", strict: "Strict Priority" } as Record<string, string>)[selectionDiagnostics?.mode ?? ""] ?? "Unknown mode";
+  const selectionSummary = selectionDiagnostics
+    ? selectionDiagnostics.candidates.slice().sort((left, right) => right.totalScore - left.totalScore).slice(0, 3)
+      .map((candidate) => `${sourceLabel(candidate.provider)} ${candidate.totalScore}: ${candidate.reasons.join(", ")}`).join(" | ")
+    : "";
   const toggleOptions = (id: LyricsSourceProviderId) => {
     setExpandedOptions((previous) => {
       const next = new Set(previous);
@@ -139,11 +148,25 @@ export default function LyricsSourcesManager() {
       </div>
       <div className="sl-sp-source-option-row">
         <div className="sl-sp-source-copy">
-          <span className="sl-sp-source-label">Strict Source Priority</span>
-          <span className="sl-sp-source-description">Use the first available result. When off, word timing beats line timing, line timing beats plain text, and source order breaks ties.</span>
+          <span className="sl-sp-source-label">Selection Mode</span>
+          <span className="sl-sp-source-description">Smart Match checks track confidence, timing health, and lyric agreement before using sync detail and source order.</span>
         </div>
-        <Toggle checked={strictLyricsSourcePriority} onChange={(value) => $strictLyricsSourcePriority.set(value)} />
+        <Select
+          value={lyricsSelectionMode}
+          options={["smart", "syncType", "strict"]}
+          labels={["Smart Match", "Sync Type First", "Strict Priority"]}
+          onChange={(value) => $lyricsSelectionMode.set(value as typeof lyricsSelectionMode)}
+        />
       </div>
+
+      {selectionDiagnostics && (
+        <div className="sl-sp-source-option-row">
+          <div className="sl-sp-source-copy">
+            <span className="sl-sp-source-label">Last Selection</span>
+            <span className="sl-sp-source-description">Selected: {selectedSourceLabel} | {selectionModeLabel} | {selectionSummary}</span>
+          </div>
+        </div>
+      )}
 
       <div className="sl-sp-source-list">
         {order.map((id, index) => {
@@ -220,7 +243,7 @@ export default function LyricsSourcesManager() {
                     <div className="sl-sp-source-option-row">
                       <div className="sl-sp-source-copy">
                         <span className="sl-sp-source-label">Apple Music Tie Override</span>
-                        <span className="sl-sp-source-description">In quality mode, let Apple Music win equal-quality ties. Ignored when strict priority is enabled.</span>
+                        <span className="sl-sp-source-description">In Sync Type First mode, let Apple Music win equal-format ties.</span>
                       </div>
                       <Toggle checked={prioritizeAppleMusicQuality} onChange={(value) => $prioritizeAppleMusicQuality.set(value)} />
                     </div>

@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { attachSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import type { LyricsProvider, TimedLine } from "../types";
-import { candidateScore, fetchWithTimeout, searchQueries } from "./shared";
+import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
 
 export function decryptQrc(hex: string): string | undefined {
   try {
@@ -110,7 +110,8 @@ export const qqProvider: LyricsProvider = async (track) => {
     const data = await fetchQqLyric(song, track); const primary = qrcContent(decryptQrc(data?.lyric ?? "")); if (!primary) continue;
     const translation = qrcSidecarAsLrc(qrcContent(decryptQrc(data?.trans ?? "")));
     const romanization = qrcSidecarAsLrc(qrcContent(decryptQrc(data?.roma ?? "")));
-    const result = toSyllableLyrics(attachSidecars(parseQrc(primary), translation, romanization), "qq"); if (result) return result;
+    const result = toSyllableLyrics(attachSidecars(parseQrc(primary), translation, romanization), "qq");
+    if (result) return { ...result, SourceMatch: matchMetadata(track, song.title, song.artists, song.durationMs, "search", song.album) };
   }
   return undefined;
 };

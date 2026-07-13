@@ -3,14 +3,14 @@
 Experimental personal fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics), based mostly on [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics).
 
 > [!CAUTION]
-> Yes, it is vibecoded and might contain some slop. I'm just a guy with lots of ideas and barely any coding experience, so things may break. Read the code before relying on it or deploying the optional Worker.
+> Yes, it is vibecoded and might contain some slop. I'm still learning to code and mostly figuring things out by building them, so things may break. Read the code before relying on it or deploying the optional Worker.
 
 ## Fork stuff
 
 Lyrics:
 
-- Quality-first source selection: word timing beats line timing, line timing beats plain text, and source order breaks ties.
-- Optional strict source priority uses the first available result instead.
+- Smart Match compares track confidence, timing health, and normalized lyric agreement before sync detail and source order.
+- Sync Type First and Strict Priority remain available for predictable fallback behavior.
 - Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, AMLL TTML DB, QQ Music, Kugou, and NetEase.
 - Self-hosted Worker for AMLL, QQ, Kugou, and NetEase.
 - Custom lyric servers.

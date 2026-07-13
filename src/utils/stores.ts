@@ -1,5 +1,6 @@
 import { atom } from "nanostores";
 import { ProjectVersion } from "../../project/config.ts";
+import type { LyricsSelectionDiagnostics, LyricsSelectionMode } from "./Lyrics/LyricsCandidateSelector.ts";
 
 export const SETTINGS_KEY = "SL:settings";
 
@@ -29,6 +30,17 @@ function migrateSettingsKeys(blob: Record<string, any>): Record<string, any> {
       delete blob[oldKey];
       changed = true;
     }
+  }
+  const selectionModes = new Set(["smart", "syncType", "strict"]);
+  if ("strictLyricsSourcePriority" in blob) {
+    if (!selectionModes.has(blob.lyricsSelectionMode)) {
+      blob.lyricsSelectionMode = blob.strictLyricsSourcePriority === true ? "strict" : "syncType";
+    }
+    delete blob.strictLyricsSourcePriority;
+    changed = true;
+  } else if ("lyricsSelectionMode" in blob && !selectionModes.has(blob.lyricsSelectionMode)) {
+    blob.lyricsSelectionMode = "smart";
+    changed = true;
   }
   try {
     const order = JSON.parse(blob.lyricsSourceOrder);
@@ -99,7 +111,10 @@ export const $disabledLyricsSources = persistAtom<string>(
 );
 export const $ignoreMusixmatchWordSync = persistAtom<boolean>("ignoreMusixmatchWordSync", true);
 export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", false);
-export const $strictLyricsSourcePriority = persistAtom<boolean>("strictLyricsSourcePriority", false);
+export const $lyricsSelectionMode = persistAtom<LyricsSelectionMode>(
+  "lyricsSelectionMode",
+  "smart"
+);
 export const $musixmatchToken = persistAtom<string>("musixmatchToken", "");
 export const $externalLyricsWorkerUrl = persistAtom<string>("externalLyricsWorkerUrl", "");
 export const $customLyricsServers = persistAtom<string>("customLyricsServers", "[]");
@@ -114,3 +129,4 @@ export const $currentLyricsType = atom<string>("None");
 export const $lyricsContainerExists = atom<boolean>(false);
 export const $currentlyFetching = atom<boolean>(false);
 export const $currentLyricsData = atom<string>("");
+export const $lyricsSelectionDiagnostics = atom<LyricsSelectionDiagnostics | null>(null);

@@ -9,9 +9,9 @@ const live = process.env.LIVE_PROVIDER_TESTS === "1" ? it : it.skip;
 describe("live upstream providers", () => {
   live("AMLL DB returns the personal TTML fixture with background vocals", async () => {
     const ttml = await amllDbProvider({ id: "7aSXHJ8djFxfqKLuOs039d", title: "乐鸣东方", artists: ["洛天依"], album: "乐鸣东方", durationMs: 240_000 });
-    expect(ttml).toContain("<tt");
-    expect(ttml).toContain("x-bg");
-    expect(ttml).toContain("ttm:agent");
+    expect(ttml?.ttml).toContain("<tt");
+    expect(ttml?.ttml).toContain("x-bg");
+    expect(ttml?.ttml).toContain("ttm:agent");
   }, 30000);
 
   live("QQ returns native lyrics", async () => {

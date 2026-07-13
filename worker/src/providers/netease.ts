@@ -1,7 +1,7 @@
 import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import type { LyricsProvider, TimedLine } from "../types";
-import { candidateScore, fetchWithTimeout, searchQueries } from "./shared";
+import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
 
@@ -58,7 +58,8 @@ export const neteaseProvider: LyricsProvider = async (track) => {
     const yrc = body?.yrc?.lyric;
     if (typeof yrc === "string" && yrc.trim()) {
       const lines = attachSidecars(parseYrc(yrc), body?.ytlrc?.lyric ?? body?.tlyric?.lyric, body?.yromalrc?.lyric ?? body?.romalrc?.lyric);
-      const result = toSyllableLyrics(lines, "netease"); if (result) return result;
+      const result = toSyllableLyrics(lines, "netease");
+      if (result) return { ...result, SourceMatch: matchMetadata(track, song.name, song.artists, song.durationMs, "search", song.album) };
     }
     if (typeof body?.lrc?.lyric === "string") {
       const result = toLineLyrics(
@@ -68,7 +69,7 @@ export const neteaseProvider: LyricsProvider = async (track) => {
         body?.tlyric?.lyric,
         body?.romalrc?.lyric,
       );
-      if (result) return result;
+      if (result) return { ...result, SourceMatch: matchMetadata(track, song.name, song.artists, song.durationMs, "search", song.album) };
     }
   }
   return undefined;

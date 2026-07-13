@@ -47,6 +47,8 @@ Spicy Lyrics adds `title`, repeated `artist_name`, `album`, and `duration` (seco
 
 The AMLL DB route returns TTML; QQ, Kugou, and NetEase return native `Static`, `Line`, or `Syllable` Spicy Lyrics JSON. A `404` means no sufficiently close match was found; a `502` means an upstream service failed.
 
+QQ, Kugou, and NetEase include `SourceMatch` metadata for Smart Match. AMLL keeps its TTML body and exposes equivalent URL-encoded JSON through the `X-Spicy-Lyrics-Match` response header. Older Workers and custom servers remain compatible but use neutral match confidence when they provide no metadata.
+
 ## Local development
 
 ```powershell

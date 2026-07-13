@@ -9,9 +9,10 @@ import {
   $disabledLyricsSources,
   $externalLyricsWorkerUrl,
   $ignoreMusixmatchWordSync,
+  $lyricsSelectionDiagnostics,
+  $lyricsSelectionMode,
   $lyricsSourceOrder,
   $prioritizeAppleMusicQuality,
-  $strictLyricsSourcePriority,
 } from "../stores.ts";
 import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
@@ -71,7 +72,7 @@ function lyricsSourceCacheSignature(): string {
     custom: parseCustomLyricsServers($customLyricsServers.get()),
     ignoreMusixmatchWordSync: $ignoreMusixmatchWordSync.get(),
     prioritizeAppleMusicQuality: $prioritizeAppleMusicQuality.get(),
-    strictLyricsSourcePriority: $strictLyricsSourcePriority.get(),
+    lyricsSelectionMode: $lyricsSelectionMode.get(),
   });
 }
 
@@ -226,6 +227,7 @@ function markProcessedWithoutBackground(lyrics: any): void {
 }
 
 function presentLyrics(lyricsData: any): void {
+  $lyricsSelectionDiagnostics.set(lyricsData?.SelectionDiagnostics ?? null);
   // Lyrics are in hand — end any 503 retry loop that was running for this track.
   LyricsQueueRetry.NotifyResolved(lyricsData?.uri);
   setRomanizationClass(lyricsData?.HasTransliterations || lyricsData?.RomanizationPending);
@@ -404,6 +406,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   }
 
   $currentlyFetching.set(true);
+  $lyricsSelectionDiagnostics.set(null);
 
   if (LyricsContent) {
     LyricsContent.classList.add("HiddenTransitioned");

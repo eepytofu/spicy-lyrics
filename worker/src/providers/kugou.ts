@@ -1,7 +1,7 @@
 import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import type { LyricsProvider, TimedLine } from "../types";
-import { candidateScore, fetchWithTimeout, searchQueries } from "./shared";
+import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
 
@@ -52,7 +52,8 @@ export const kugouProvider: LyricsProvider = async (track) => {
     const url = new URL("https://lyrics.kugou.com/download"); url.search = new URLSearchParams({ ver: "1", client: "pc", id: candidate.id, accesskey: candidate.accesskey, fmt: "krc", charset: "utf8" }).toString();
     const response = await fetchWithTimeout(url.toString(), { headers: { Referer: "https://kugou.com", "User-Agent": "Mozilla/5.0" } }); if (!response.ok) continue;
     const body = await response.json<any>(); const raw = decryptKrc(body?.content ?? ""); if (!raw) continue;
-    const result = toSyllableLyrics(parseKrc(raw), "kugou"); if (result) return result;
+    const result = toSyllableLyrics(parseKrc(raw), "kugou");
+    if (result) return { ...result, SourceMatch: matchMetadata(track, candidate.song, [candidate.singer], candidate.duration, "search") };
   }
   return undefined;
 };

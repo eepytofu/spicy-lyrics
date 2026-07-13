@@ -8,7 +8,12 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Expose-Headers": "X-Spicy-Lyrics-Match",
 };
+
+function matchHeader(match: unknown): Record<string, string> {
+  return match ? { "X-Spicy-Lyrics-Match": encodeURIComponent(JSON.stringify(match)) } : {};
+}
 
 function parameter(url: URL, name: string): string { return url.searchParams.get(name)?.trim() ?? ""; }
 function metadata(url: URL, id: string): TrackMetadata | undefined {
@@ -33,9 +38,9 @@ export default {
     if (!track) return new Response("Missing title, artist_name/artist, or duration", { status: 400, headers: cors });
     try {
       if (provider === "amlldb") {
-        const ttml = await amllDbProvider(track);
-        if (!ttml) return new Response("Lyrics not found", { status: 404, headers: cors });
-        return new Response(ttml, { status: 200, headers: { ...cors, "Content-Type": "application/ttml+xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+        const result = await amllDbProvider(track);
+        if (!result) return new Response("Lyrics not found", { status: 404, headers: cors });
+        return new Response(result.ttml, { status: 200, headers: { ...cors, ...matchHeader(result.match), "Content-Type": "application/ttml+xml; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
       }
       const lyrics = await providers[provider](track);
       if (!lyrics) return new Response("Lyrics not found", { status: 404, headers: cors });

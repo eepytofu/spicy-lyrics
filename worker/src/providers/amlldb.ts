@@ -1,5 +1,5 @@
-import type { TrackMetadata } from "../types";
-import { candidateScore, fetchWithTimeout, simplify } from "./shared";
+import type { ProviderMatchMetadata, TrackMetadata } from "../types";
+import { candidateScore, fetchWithTimeout, matchMetadata, simplify } from "./shared";
 
 type FetchLike = typeof fetch;
 type SearchResult = {
@@ -9,6 +9,7 @@ type SearchResult = {
   artists?: string[];
   file?: string;
 };
+export type AmllDbResult = { ttml: string; match: ProviderMatchMetadata };
 
 const spotifyBaseUrl = "https://amll-ttml-db.stevexmh.net/spotify";
 const searchUrl = "https://amlldb.bikonoo.com/api/search-lyrics";
@@ -53,13 +54,18 @@ async function search(fetchImpl: FetchLike, track: TrackMetadata): Promise<Searc
 }
 
 export function createAmllDbProvider(fetchImpl: FetchLike = fetch) {
-  return async (track: TrackMetadata): Promise<string | undefined> => {
+  return async (track: TrackMetadata): Promise<AmllDbResult | undefined> => {
     const direct = await fetchTtml(fetchImpl, `${spotifyBaseUrl}/${encodeURIComponent(track.id)}?format=ttml`);
-    if (direct) return direct;
+    if (direct) return { ttml: direct, match: { ...matchMetadata(track, track.title, track.artists, track.durationMs, "spotify-id", track.album), confidence: 1 } };
     for (const result of await search(fetchImpl, track)) {
       if (!result.file || resultScore(track, result) < 75) continue;
       const ttml = await fetchTtml(fetchImpl, `${rawLyricsBaseUrl}/${encodeURIComponent(result.file)}`);
-      if (ttml) return ttml;
+      if (ttml) {
+        const titles = [...new Set([result.title ?? "", ...(result.titles ?? [])].filter(Boolean))];
+        const artists = [...new Set([result.artist ?? "", ...(result.artists ?? [])].filter(Boolean))];
+        const title = titles.sort((a, b) => candidateScore(track, b, artists) - candidateScore(track, a, artists))[0] ?? track.title;
+        return { ttml, match: matchMetadata(track, title, artists, undefined, "title-search") };
+      }
     }
     return undefined;
   };

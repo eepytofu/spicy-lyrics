@@ -1,5 +1,5 @@
 import OpenCC from "opencc-js";
-import type { TrackMetadata } from "../types";
+import type { ProviderMatchMetadata, TrackMetadata } from "../types";
 
 const traditionalToSimplified = OpenCC.Converter({ from: "tw", to: "cn" });
 const languageTags = new Set(["粤", "粤语", "国", "国语", "普通话", "台", "台语", "闽南语", "日", "日语", "日文", "韩", "韩语", "韩文", "英", "英语", "英文"]);
@@ -86,6 +86,13 @@ export function candidateScore(track: TrackMetadata, title: string, artists: str
     score += difference <= 1500 ? 20 : difference <= 5000 ? 10 : difference > 15000 ? -20 : 0;
   }
   return score;
+}
+
+export function matchMetadata(track: TrackMetadata, title: string, artists: string[], durationMs: number | undefined, method: string, album?: string): ProviderMatchMetadata {
+  const score = candidateScore(track, title, artists, durationMs);
+  const maximumScore = durationMs && track.durationMs ? 110 : 90;
+  const confidence = Math.max(0, Math.min(1, score / maximumScore));
+  return { title, artists, album, durationMs, score, confidence, method };
 }
 
 export async function fetchWithTimeout(input: string, init?: RequestInit, timeoutMs = 7000): Promise<Response> {

@@ -22,6 +22,17 @@ export type NativeLyrics = Record<string, unknown> & {
   source: ProviderId;
   sourceDisplayName: string;
   fetchProvider: ProviderId;
+  SourceMatch?: ProviderMatchMetadata;
+};
+
+export type ProviderMatchMetadata = {
+  title: string;
+  artists: string[];
+  album?: string;
+  durationMs?: number;
+  score: number;
+  confidence: number;
+  method: string;
 };
 
 export type LyricsProvider = (track: TrackMetadata) => Promise<NativeLyrics | undefined>;
