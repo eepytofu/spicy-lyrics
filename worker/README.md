@@ -30,7 +30,7 @@ To choose another Worker name, change `name` in `wrangler.toml` before deploying
 3. Paste the Worker URL into **External Sources Worker URL**. Use only the origin; do not append `/v1/lyrics`.
 4. Enable AMLL TTML DB, QQ Music, Kugou, and NetEase, then arrange their priority with the arrow buttons.
 
-The three endpoints are:
+The four endpoints are:
 
 ```text
 GET /v1/lyrics/amlldb/:spotifyTrackId

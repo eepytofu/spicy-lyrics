@@ -9,23 +9,19 @@ Experimental personal fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-l
 
 Lyrics:
 
-- Smart Match compares track confidence, timing health, and normalized lyric agreement before sync detail and source order.
-- Sync Type First and Strict Priority remain available for predictable fallback behavior.
-- Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, AMLL TTML DB, QQ Music, Kugou, and NetEase.
-- Self-hosted Worker for AMLL, QQ, Kugou, and NetEase.
-- Custom lyric servers.
+- Smart Match weighs track confidence, timing health, lyric agreement, sync detail, and source order. Sync Type First and Strict Priority are still available when you want predictable ordering.
+- Enable, disable, and reorder lyric sources.
+  - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music, Kugou, and NetEase.
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
-- Japanese furigana, romaji, or both.
-- Local Simplified and Traditional Chinese conversion without changing lyric timing.
-- Chinese Pinyin/Jyutping, Korean, Cyrillic, Greek, and Indic-script processing.
-- Translation for static, line-synced, and syllable-synced lyrics.
+- Japanese readings, Chinese character conversion and Pinyin/Jyutping, plus Korean, Cyrillic, and Greek romanization.
+- Translation for static, line-synced, and syllable-synced lyrics, including supported Indic scripts.
 
 UI and appearance:
 
 - Source manager adapted from [iPixelGalaxy's fork](https://github.com/iPixelGalaxy/spicy-lyrics).
 - Custom installed font-family stack.
-- Han glyph variant toggle: Japanese, Simplified Chinese, and Traditional Chinese lines prefer `Noto Sans JP`, `Noto Sans SC`, and `Noto Sans TC` respectively *(fuck Han unification man)*.
-- Flat controls, dark-background option, copy formats, quick reading/translation controls, and lyrics prefetching.
+- Han glyph variant toggle: Japanese, Simplified Chinese, and Traditional Chinese lines prefer `Noto Sans JP`, `Noto Sans SC`, and `Noto Sans TC` respectively (fuck Han unification man).
+- Flat controls, Force Dark Background, copy formats, quick reading/translation controls, and next-track lyrics prefetching.
 
 Example font stack:
 
@@ -37,13 +33,12 @@ Enable **Use System Font** to enter the stack. **Fix Han Glyph Variants** reorde
 
 ## Installation
 
-Requires [Spicetify](https://spicetify.app/). Node.js 20 or newer is recommended when building from source.
+Requires [Spicetify](https://spicetify.app/). Node.js 22.6 or newer is recommended when building or testing from source.
 
 ```powershell
 git clone https://github.com/eepytofu/spicy-lyrics.git
 cd spicy-lyrics
 npm install
-npm test
 npm run build
 ```
 
@@ -98,7 +93,7 @@ npx wrangler deploy --dry-run
 
 Some integrations rely on unofficial service interfaces and may stop working without warning. Lyrics and metadata may be covered by third-party terms and rights; you are responsible for how you use, deploy, log, or redistribute them.
 
-This project uses AGPL-3.0. If you modify and provide the Worker as a network service, review the source-availability and notice requirements. See [LICENSE](LICENSE) and [worker/NOTICE.md](worker/NOTICE.md).
+If you modify and provide the Worker as a network service, review the source-availability and notice requirements. See [LICENSE](LICENSE) and [worker/NOTICE.md](worker/NOTICE.md).
 
 ## Credits
 
@@ -111,7 +106,7 @@ This project uses AGPL-3.0. If you modify and provide the Worker as a network se
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC): acknowledged by retained upstream compatibility code.
 - [Spicetify](https://spicetify.app/) and [Cloudflare Workers](https://developers.cloudflare.com/workers/): extension and Worker platforms.
 
-Credits describe technical lineage, not endorsement. Preserve upstream notices when redistributing modified versions.
+Preserve upstream notices when redistributing modified versions.
 
 ## License
 
