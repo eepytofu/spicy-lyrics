@@ -20,6 +20,16 @@ function align(chunks: string[], display: string): string[] {
   return out;
 }
 
+function alignChineseTimedUnits(chunks: string[], display: string): string[] {
+  const tokens = display.trim().split(/\s+/u).filter(Boolean);
+  if (tokens.length !== chunks.length) return align(chunks, display);
+
+  // A full-line pinyin pass has the context needed for polyphonic characters.
+  // Keep each timed source unit as its timing owner, but take its reading from
+  // that contextual result instead of an isolated per-character fallback.
+  return tokens.map((token, index) => index === 0 ? token : ` ${token}`);
+}
+
 export function buildTimedGenericPlan(group: any, display: string, processor: string): RenderPlan | undefined {
   const syllables = group?.Syllables;
   if (!Array.isArray(syllables) || syllables.length === 0 || !display) return undefined;
@@ -28,7 +38,10 @@ export function buildTimedGenericPlan(group: any, display: string, processor: st
     spans: syllables.map((s: any, i: number) => ({ id: String(i), rawText: s.Text || "", cleanText: s.Text || "",
       startMs: Number(s.StartTime || 0), endMs: Number(s.EndTime || 0), providerPartOfWord: s.IsPartOfWord === true })) };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-  const chunks = align(syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim()), display);
+  const rawChunks = syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim());
+  const chunks = processor === "Chinese"
+    ? alignChineseTimedUnits(rawChunks, display)
+    : align(rawChunks, display);
   const annotation: ReadingAnnotation = { processor, mode: "local", provenance: "local",
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",

@@ -242,70 +242,23 @@ LyricsInterval();
 let LinesEvListenerMaid: Maid | null = null;
 let LinesEvListenerExists: boolean = false;
 
-// Define proper type for event parameter
+// Resolve clicks on nested furigana, emphasis, or reading elements to their lyric line.
 function LinesEvListener(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  if (target.classList.contains("line")) {
-    let startTime: number | undefined;
+  const target = e.target;
+  if (!(target instanceof Element)) return;
 
-    LyricsObject.Types.Line.Lines.forEach((line) => {
-      if (line.HTMLElement === target) {
-        startTime = line.StartTime;
-        if (line.Syllables?.Lead && line.Syllables.Lead.length > 0) {
-          startTime = line.Syllables.Lead[0].StartTime;
-        }
-      }
-    });
+  const clickedLine = target.closest<HTMLElement>(".line");
+  if (!clickedLine) return;
 
-    if (startTime !== undefined) {
-      SpotifyPlayer.Seek(startTime);
-      Global.Event.evoke("song:seek", startTime);
-    }
-  } else if (target.classList.contains("word")) {
-    let startTime: number | undefined;
+  const line = [
+    ...LyricsObject.Types.Line.Lines,
+    ...LyricsObject.Types.Syllable.Lines,
+  ].find((entry) => entry.HTMLElement === clickedLine);
+  if (!line) return;
 
-    LyricsObject.Types.Syllable.Lines.forEach((line) => {
-      if (line.Syllables?.Lead) {
-        line.Syllables.Lead.forEach((word, _, array) => {
-          if (word.HTMLElement === target) {
-            startTime = line.StartTime;
-            if (array.length > 0) {
-              startTime = array[0].StartTime;
-            }
-          }
-        });
-      }
-    });
-
-    if (startTime !== undefined) {
-      SpotifyPlayer.Seek(startTime);
-      Global.Event.evoke("song:seek", startTime);
-    }
-  } else if (target.classList.contains("Emphasis")) {
-    let startTime: number | undefined;
-
-    LyricsObject.Types.Syllable.Lines.forEach((line) => {
-      if (line.Syllables?.Lead) {
-        line.Syllables.Lead.forEach((word, _, array) => {
-          if (word?.Letters) {
-            word.Letters.forEach((letter) => {
-              if (letter.HTMLElement === target) {
-                startTime = line.StartTime;
-                if (array.length > 0) {
-                  startTime = array[0].StartTime;
-                }
-              }
-            });
-          }
-        });
-      }
-    });
-
-    if (startTime !== undefined) {
-      SpotifyPlayer.Seek(startTime);
-      Global.Event.evoke("song:seek", startTime);
-    }
-  }
+  const startTime = line.Syllables?.Lead?.[0]?.StartTime ?? line.StartTime;
+  SpotifyPlayer.Seek(startTime);
+  Global.Event.evoke("song:seek", startTime);
 }
 
 export function addLinesEvListener() {

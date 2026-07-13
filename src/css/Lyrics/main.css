@@ -204,8 +204,13 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   white-space: nowrap;
 }
 
-/* Timed fragments inside one Japanese token are not provider word breaks. */
-#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group > .word:not(:last-child)::after {
+/* Japanese semantic groups preserve readings, not visible source-text spaces. */
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line
+  .semantic-word-group
+  > .word::after {
   margin-right: 0;
 }
 

@@ -48,6 +48,16 @@ const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
 const lyricsPrefetchLogger = new Logger("Lyrics Prefetch");
 const prefetchInFlight = new Set<string>();
+let lyricsPipelineEpoch = 0;
+
+export function invalidateLyricsPipeline(): void {
+  lyricsPipelineEpoch += 1;
+  $currentlyFetching.set(false);
+}
+
+function isLyricsPipelineCurrent(epoch: number): boolean {
+  return epoch === lyricsPipelineEpoch;
+}
 
 // recently updated key structure - changed name
 export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 1, {
@@ -136,12 +146,13 @@ function dispatchProcessingReady(trackId: string, lyrics: any): void {
   );
 }
 
-async function finishProcessingInBackground(trackId: string, lyrics: any): Promise<void> {
+async function finishProcessingInBackground(trackId: string, lyrics: any, pipelineEpoch: number): Promise<void> {
   const shouldTranslate = lyrics.TranslationPending === true;
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
     await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: false });
+    if (!isLyricsPipelineCurrent(pipelineEpoch)) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
     lyrics.TranslationPending = shouldTranslate;
@@ -161,11 +172,11 @@ async function finishProcessingInBackground(trackId: string, lyrics: any): Promi
     await translateLyrics(lyrics);
   } catch (error) {
     lyricsCacheLogger.error("Background lyrics translation failed", error);
-  } finally {
-    lyrics.TranslationPending = false;
-    await setProcessedLyricsStoreItem(trackId, lyrics);
-    dispatchProcessingReady(trackId, lyrics);
   }
+  if (!isLyricsPipelineCurrent(pipelineEpoch)) return;
+  lyrics.TranslationPending = false;
+  await setProcessedLyricsStoreItem(trackId, lyrics);
+  dispatchProcessingReady(trackId, lyrics);
 }
 
 const RomanizableScriptQuickTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
@@ -358,6 +369,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
 }
 
 export default async function fetchLyrics(uri: string): Promise<[object | string, number] | null> {
+  const pipelineEpoch = lyricsPipelineEpoch;
   lyricsLogger.debug("Fetch requested", uri);
   //if (!PageContainer) return;
   const LyricsContent =
@@ -434,6 +446,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         const isCurrentTrack = lyricsData?.uri === uri || (!lyricsData?.uri && lyricsData?.id === trackId);
         if (isCurrentTrack && lyricsData?.ProcessingPending !== true && isSourceCacheCompatible(lyricsData)) {
           const processedLyrics = await ensureProcessingVersion(trackId, uri, lyricsData);
+          if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
           $currentLyricsData.set(JSON.stringify(processedLyrics));
           presentLyrics(processedLyrics);
           return [processedLyrics, 200];
@@ -447,6 +460,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   }
 
   const localLyric = await LocalLyricsManager.get(uri);
+  if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
   if (localLyric) {
     const lyricsData = { ...localLyric, uri };
     $currentLyricsData.set(JSON.stringify(lyricsData));
@@ -477,6 +491,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
           ...lyricsFromCacheRes,
           uri,
         });
+        if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
         $currentLyricsData.set(JSON.stringify(lyricsFromCache));
         presentLyrics(lyricsFromCache);
         return [{ ...lyricsFromCache, fromCache: true }, 200];
@@ -505,6 +520,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     const providers = getActiveLyricsSourceOrder();
     lyricsLogger.debug("Provider lyrics query", { trackId, providers });
     const providerResult = await fetchLyricsFromProviders(uri, providers);
+    if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
 
     if (providerResult?.status === 503) {
       // The server accepted the request but hasn't processed it yet — it's
@@ -554,7 +570,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     $currentLyricsData.set(JSON.stringify(lyrics));
 
     presentLyrics(lyrics);
-    void finishProcessingInBackground(trackId, lyrics);
+    void finishProcessingInBackground(trackId, lyrics, pipelineEpoch);
     return [{ ...lyrics, fromCache: false }, 200];
   } catch (error) {
     lyricsLogger.error("Error fetching lyrics", error);

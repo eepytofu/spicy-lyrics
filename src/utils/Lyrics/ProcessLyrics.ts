@@ -40,7 +40,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 27;
+export const LYRICS_PROCESSING_VERSION = 29;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
