@@ -1,13 +1,21 @@
 import fetchLyrics, { LyricsStore, ShowQueueLoader } from "../../utils/Lyrics/fetchLyrics.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
 import {
+  $chineseTones,
   $chineseCharacterForm,
+  $chineseTranslitMode,
+  $cyrillicKeepSigns,
+  $cyrillicRomanizationMode,
   $flatViewControls,
   $forceCompactMode,
   $forceDarkBackground,
   $isGlobalNav,
   $japaneseReadingMode,
+  $koreanDisplayMode,
+  $showBuiltInTranslationButton,
   $showChineseTranslitButton,
+  $translationEnabled,
+  $translationTargetLang,
 } from "../../utils/uiState.ts";
 import "../../css/Loaders/DotLoader.css";
 import { DestroyAllLyricsContainers } from "../../utils/Lyrics/Applyer/CreateLyricsContainer.ts";
@@ -496,9 +504,13 @@ function AppendViewControls(ReAppend: boolean = false) {
               }</button>`
             : ""
         }
-        <button id="TranslationToggle" class="ViewControl">
-          ${translationEnabled ? Icons.DisableTranslation : Icons.EnableTranslation}
-        </button>
+        ${
+          $showBuiltInTranslationButton.get()
+            ? `<button id="TranslationToggle" class="ViewControl">
+                ${translationEnabled ? Icons.DisableTranslation : Icons.EnableTranslation}
+              </button>`
+            : ""
+        }
         ${
           !Fullscreen.IsOpen &&
           !Fullscreen.CinemaViewOpen &&
@@ -673,22 +685,6 @@ function AppendViewControls(ReAppend: boolean = false) {
       }
     }
 
-    const reprocessCurrentLyrics = async () => {
-      const songUri = SpotifyPlayer.GetUri();
-      const songId = SpotifyPlayer.GetId();
-      if (!songUri) return;
-      PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.add("HiddenTransitioned");
-      $currentLyricsData.set("");
-      if (songId) await LyricsStore.RemoveItem(songId).catch(() => {});
-      const lyrics = await fetchLyrics(songUri);
-      ApplyLyrics(lyrics);
-      setTimeout(() => {
-        AppendViewControls();
-        triggerRemeasureLV();
-        PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
-      }, 45);
-    };
-
     const chineseTranslitToggle = elem.querySelector("#ChineseTranslitToggle");
     if (chineseTranslitToggle) {
       try {
@@ -698,9 +694,8 @@ function AppendViewControls(ReAppend: boolean = false) {
             content: chineseTranslitMode === "jyutping" ? "Switch to Mandarin (Pinyin)" : "Switch to Cantonese (Jyutping)",
           });
         }
-        chineseTranslitToggle.addEventListener("click", async () => {
+        chineseTranslitToggle.addEventListener("click", () => {
           setChineseTranslitMode(chineseTranslitMode === "jyutping" ? "pinyin" : "jyutping");
-          await reprocessCurrentLyrics();
         });
       } catch (err) {
         controlsLogger.warn("Failed to setup Chinese transliteration tooltip", err);
@@ -713,12 +708,11 @@ function AppendViewControls(ReAppend: boolean = false) {
         if (!isPip) {
           Tooltips.Close = Spicetify.Tippy(translationToggle, {
             ...Spicetify.TippyProps,
-            content: translationEnabled ? "Disable Translation" : "Enable Translation",
+            content: translationEnabled ? "Disable Built-in Translation" : "Enable Built-in Translation",
           });
         }
-        translationToggle.addEventListener("click", async () => {
+        translationToggle.addEventListener("click", () => {
           setTranslationEnabled(!translationEnabled);
-          await reprocessCurrentLyrics();
         });
       } catch (err) {
         controlsLogger.warn("Failed to setup Translation tooltip", err);
@@ -980,6 +974,11 @@ $showChineseTranslitButton.listen(() => {
   AppendViewControls(true);
 });
 
+$showBuiltInTranslationButton.listen(() => {
+  if (!PageContainer) return;
+  AppendViewControls(true);
+});
+
 const rerenderCurrentLyrics = async () => {
   if (!PageContainer) return;
   const raw = $currentLyricsData.get();
@@ -1000,23 +999,66 @@ const rerenderCurrentLyrics = async () => {
   });
 };
 const reprocessCurrentLyricsFromSource = async () => {
-  if (!PageContainer) return;
+  if (!PageContainer || !PageView.IsOpened) return;
   const uri = SpotifyPlayer.GetUri();
   const trackId = SpotifyPlayer.GetId();
   if (!uri) return;
-  PageContainer.querySelector(".LyricsContainer .LyricsContent")?.classList.add("HiddenTransitioned");
-  $currentLyricsData.set("");
-  if (trackId) await LyricsStore.RemoveItem(trackId).catch(() => {});
-  const lyrics = await fetchLyrics(uri);
-  await ApplyLyrics(lyrics);
-  setTimeout(() => {
-    AppendViewControls(true);
-    triggerRemeasureLV();
-    PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
-  }, 60);
+  const lyricsContent = PageContainer.querySelector(".LyricsContainer .LyricsContent");
+  lyricsContent?.classList.add("HiddenTransitioned");
+  try {
+    $currentLyricsData.set("");
+    if (trackId) await LyricsStore.RemoveItem(trackId).catch(() => {});
+    const lyrics = await fetchLyrics(uri);
+    await ApplyLyrics(lyrics);
+  } catch (error) {
+    pageLogger.warn("Failed to reprocess lyrics after a processing setting changed", error);
+  }
 };
 
-$chineseCharacterForm.listen(() => { void reprocessCurrentLyricsFromSource(); });
+let processingSettingsRevision = 0;
+let appliedProcessingSettingsRevision = 0;
+let processingSettingsRefreshRunning = false;
+
+const runQueuedProcessingSettingsRefresh = async (): Promise<void> => {
+  if (processingSettingsRefreshRunning) return;
+  processingSettingsRefreshRunning = true;
+  try {
+    while (appliedProcessingSettingsRevision < processingSettingsRevision) {
+      const targetRevision = processingSettingsRevision;
+      await reprocessCurrentLyricsFromSource();
+      appliedProcessingSettingsRevision = targetRevision;
+    }
+  } finally {
+    processingSettingsRefreshRunning = false;
+    if (appliedProcessingSettingsRevision < processingSettingsRevision) {
+      void runQueuedProcessingSettingsRefresh();
+    } else {
+      const completedRevision = appliedProcessingSettingsRevision;
+      setTimeout(() => {
+        if (processingSettingsRefreshRunning || completedRevision !== processingSettingsRevision) return;
+        AppendViewControls(true);
+        triggerRemeasureLV();
+        PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
+      }, 60);
+    }
+  }
+};
+
+const queueProcessingSettingsRefresh = (): void => {
+  processingSettingsRevision++;
+  void runQueuedProcessingSettingsRefresh();
+};
+
+$chineseCharacterForm.listen(queueProcessingSettingsRefresh);
+$chineseTranslitMode.listen(queueProcessingSettingsRefresh);
+$chineseTones.listen(queueProcessingSettingsRefresh);
+$koreanDisplayMode.listen(queueProcessingSettingsRefresh);
+$cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
+$cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
+$translationEnabled.listen(queueProcessingSettingsRefresh);
+$translationTargetLang.listen(() => {
+  if ($translationEnabled.get()) queueProcessingSettingsRefresh();
+});
 
 
 $japaneseReadingMode.listen(() => {
