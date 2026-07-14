@@ -11,6 +11,11 @@ const lineLyrics = (rows: Array<[string, number]>) => ({
   Content: rows.map(([Text, StartTime], index) => ({ Text, StartTime, EndTime: rows[index + 1]?.[1] ?? 240 })),
 });
 
+const staticLyrics = (rows: Array<[string, number]>) => ({
+  Type: "Static",
+  Lines: rows.map(([Text]) => ({ Text })),
+});
+
 const wordLyrics = (rows: Array<[string, number]>) => ({
   Type: "Syllable",
   Content: rows.map(([text, start], index) => ({
@@ -86,6 +91,24 @@ test("smart mode uses word timing as a bonus when candidates are otherwise equal
     candidate("amlldb", 1, wordLyrics(correctRows), 1),
   ], 240_000, "smart");
   assert.equal(result.candidate?.provider, "amlldb");
+});
+
+test("smart mode strongly penalizes plain lyrics when a credible synced candidate agrees", () => {
+  const result = selectLyricsCandidate([
+    candidate("apple", 0, staticLyrics(correctRows), 1),
+    candidate("netease", 1, lineLyrics(correctRows), 0.68),
+  ], 240_000, "smart");
+  assert.equal(result.candidate?.provider, "netease");
+  const apple = result.diagnostics.candidates.find((entry) => entry.provider === "apple");
+  assert.ok(apple?.reasons.includes("no synced timing"));
+});
+
+test("smart mode keeps plain lyrics as fallback when the synced candidate is rejected", () => {
+  const result = selectLyricsCandidate([
+    candidate("apple", 0, staticLyrics(correctRows), 1),
+    candidate("netease", 1, lineLyrics(correctRows), 0.29),
+  ], 240_000, "smart");
+  assert.equal(result.candidate?.provider, "apple");
 });
 
 test("smart mode penalizes a globally shifted word candidate when agreeing sources align", () => {

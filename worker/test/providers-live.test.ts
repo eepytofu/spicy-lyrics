@@ -27,7 +27,7 @@ describe("live upstream providers", () => {
     expect(result?.Type).toBe("Syllable");
   }, 30000);
 
-  live("Kugou Music returns native lyrics", async () => {
+  live("KuGou returns native lyrics", async () => {
     const result = await kugouProvider({ id: "test", title: "逝去日子", artists: ["Beyond"], album: "", durationMs: 225000 });
     expect(result?.Type).toBe("Syllable");
   }, 30000);

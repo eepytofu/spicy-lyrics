@@ -45,6 +45,8 @@ export type LyricsSelectionResult = {
 
 type LineSnapshot = { text: string; normalized: string; start?: number; end?: number };
 
+const PLAIN_LYRICS_PENALTY = 15;
+
 const CREDIT_LINE = /^(?:作\s*[词詞曲]|编\s*曲|編\s*曲|词\s*曲|詞\s*曲|制作人|製作人|监\s*制|監\s*製|lyric(?:s|ist)?|composer|arranger|producer)\s*[:：]/iu;
 
 function finite(value: unknown): number | undefined {
@@ -227,13 +229,13 @@ function syncDetailScore(lyrics: any): number {
   return lyrics?.Type === "Syllable" ? 100 : lyrics?.Type === "Line" ? 70 : lyrics?.Type === "Static" ? 20 : 0;
 }
 
-function reasonList(track: number, structural: number, timingAgreement: number, agreement: number): string[] {
+function reasonList(track: number, structural: number, timingAgreement: number, agreement: number, format: LyricsCandidateAssessment["format"]): string[] {
   const reasons: string[] = [];
   reasons.push(track >= 85 ? "strong track match" : track < 45 ? "weak track match" : "usable track match");
-  reasons.push(structural >= 80 ? "healthy timing" : structural < 45 ? "suspicious timing" : "usable timing");
+  reasons.push(format === "Static" ? "no synced timing" : structural >= 80 ? "healthy timing" : structural < 45 ? "suspicious timing" : "usable timing");
   if (agreement >= 78) reasons.push("lyrics agree with other sources");
   else if (agreement < 42) reasons.push("low text agreement");
-  if (timingAgreement < 45) reasons.push("line timing differs from agreeing sources");
+  if (format !== "Static" && timingAgreement < 45) reasons.push("line timing differs from agreeing sources");
   return reasons;
 }
 
@@ -246,13 +248,15 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
     const timing = structural * 0.7 + timingAgreement * 0.3;
     const agreement = agreementScore(candidate, candidates);
     const detail = syncDetailScore(candidate.lyrics);
+    const format: LyricsCandidateAssessment["format"] = ["Syllable", "Line", "Static"].includes(candidate.lyrics?.Type) ? candidate.lyrics.Type : "Unknown";
     const priorityRank = priorityOrder.indexOf(candidate);
     const priority = candidates.length === 1 ? 100 : 100 * (1 - priorityRank / (candidates.length - 1));
     const rejected = track < 30 || structural < 25 || detail === 0;
-    const total = rejected ? 0 : track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.05 + clamp(priority) * 0.05;
+    const plainPenalty = format === "Static" ? PLAIN_LYRICS_PENALTY : 0;
+    const total = rejected ? 0 : clamp(track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.05 + clamp(priority) * 0.05 - plainPenalty);
     return {
       provider: candidate.provider,
-      format: ["Syllable", "Line", "Static"].includes(candidate.lyrics?.Type) ? candidate.lyrics.Type : "Unknown",
+      format,
       totalScore: rounded(total),
       trackMatchScore: rounded(track),
       timingScore: rounded(timing),
@@ -260,7 +264,7 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
       syncDetailScore: detail,
       priorityScore: rounded(clamp(priority)),
       rejected,
-      reasons: reasonList(track, structural, timingAgreement, agreement),
+      reasons: reasonList(track, structural, timingAgreement, agreement, format),
     };
   });
 }

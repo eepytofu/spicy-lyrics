@@ -67,7 +67,7 @@ export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 1, 
 }, isDev as true);
 
 const lyricsPacker = new SLObjPack();
-const LYRICS_SOURCE_CACHE_VERSION = 1;
+const LYRICS_SOURCE_CACHE_VERSION = 2;
 
 function getActiveLyricsSourceOrder(): LyricsSourceProviderId[] {
   const custom = parseCustomLyricsServers($customLyricsServers.get());

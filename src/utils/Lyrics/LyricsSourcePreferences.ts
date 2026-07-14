@@ -37,7 +37,7 @@ export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, L
   lrclib: { label: "LRCLIB", description: "Open community synced and plain lyrics." },
   amlldb: { label: "AMLL TTML DB", description: "Community TTML with word timing, duet, and background-vocal metadata." },
   qq: { label: "QQ Music", description: "Word-synced QRC lyrics." },
-  kugou: { label: "Kugou Music", description: "Word-synced KRC lyrics." },
+  kugou: { label: "KuGou", description: "Word-synced KRC lyrics." },
   netease: { label: "NetEase Cloud Music", description: "Word-synced YRC or line-synced LRC lyrics." },
 };
 
@@ -109,7 +109,7 @@ export function getLyricsSourceDefinition(id: LyricsSourceProviderId, customServ
 const SOURCE_LABELS: Record<string, string> = {
   spl: "Spicy Lyrics Community", spt: "Spotify", aml: "Apple Music",
   spicy: "Spicy Lyrics", musixmatch: "Musixmatch", apple: "Apple Music",
-  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "Kugou Music", netease: "NetEase Cloud Music",
+  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "KuGou", netease: "NetEase Cloud Music",
 };
 
 const CANONICAL_EXTERNAL_SOURCE_LABELS: Record<string, string> = {

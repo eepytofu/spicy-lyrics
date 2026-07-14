@@ -28,8 +28,8 @@ test("server URLs require HTTPS except for local development", () => {
 
 test("external provider labels use canonical service names", () => {
   assert.equal(getLyricsSourceDefinition("qq", []).label, "QQ Music");
-  assert.equal(getLyricsSourceDefinition("kugou", []).label, "Kugou Music");
+  assert.equal(getLyricsSourceDefinition("kugou", []).label, "KuGou");
   assert.equal(getLyricsSourceDefinition("netease", []).label, "NetEase Cloud Music");
   assert.equal(resolveLyricsSourceLabel("netease", "NetEase", "netease"), "NetEase Cloud Music");
-  assert.equal(resolveLyricsSourceLabel("kugou", "Kugou", "kugou"), "Kugou Music");
+  assert.equal(resolveLyricsSourceLabel("kugou", "Kugou", "kugou"), "KuGou");
 });
