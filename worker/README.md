@@ -49,6 +49,8 @@ The AMLL DB route returns TTML; QQ, Kugou, and NetEase return native `Static`, `
 
 QQ, Kugou, and NetEase include `SourceMatch` metadata for Smart Match. AMLL keeps its TTML body and exposes equivalent URL-encoded JSON through the `X-Spicy-Lyrics-Match` response header. Older Workers and custom servers remain compatible but use neutral match confidence when they provide no metadata.
 
+Native provider JSON may also include a `ProviderCredits` array when contributor metadata is already present in the lyric response. NetEase synced-lyrics and translation entries retain their user IDs for profile links; QQ and Kugou `[by:]` entries remain plain text. This does not make an additional provider request.
+
 ## Local development
 
 ```powershell

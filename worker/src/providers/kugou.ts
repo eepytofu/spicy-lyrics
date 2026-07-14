@@ -1,5 +1,6 @@
 import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
+import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
 import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
 
@@ -53,7 +54,8 @@ export const kugouProvider: LyricsProvider = async (track) => {
     const response = await fetchWithTimeout(url.toString(), { headers: { Referer: "https://kugou.com", "User-Agent": "Mozilla/5.0" } }); if (!response.ok) continue;
     const body = await response.json<any>(); const raw = decryptKrc(body?.content ?? ""); if (!raw) continue;
     const result = toSyllableLyrics(parseKrc(raw), "kugou");
-    if (result) return { ...result, SourceMatch: matchMetadata(track, candidate.song, [candidate.singer], candidate.duration, "search") };
+    const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
+    if (result) return { ...result, ...(ProviderCredits.length ? { ProviderCredits } : {}), SourceMatch: matchMetadata(track, candidate.song, [candidate.singer], candidate.duration, "search") };
   }
   return undefined;
 };

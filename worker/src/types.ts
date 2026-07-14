@@ -1,5 +1,13 @@
 export type ProviderId = "qq" | "kugou" | "netease";
 
+export type ProviderCreditRole = "syncedLyrics" | "lyrics" | "translation" | "romanization" | "credit";
+export type ProviderCredit = {
+  role: ProviderCreditRole;
+  name: string;
+  provider: ProviderId;
+  userId?: string;
+};
+
 export type TrackMetadata = {
   id: string;
   title: string;
@@ -23,6 +31,7 @@ export type NativeLyrics = Record<string, unknown> & {
   sourceDisplayName: string;
   fetchProvider: ProviderId;
   SourceMatch?: ProviderMatchMetadata;
+  ProviderCredits?: ProviderCredit[];
 };
 
 export type ProviderMatchMetadata = {

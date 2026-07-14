@@ -29,6 +29,7 @@ import { EmitApply, EmitNotApplyed } from "../OnApply.ts";
 import Emphasize from "../Utils/Emphasize.ts";
 import { IsLetterCapable } from "../Utils/IsLetterCapable.ts";
 import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
+import { ApplyProviderCredits } from "../Credits/ApplyProviderCredits.ts";
 import {
   appendSyllableRomanizedBelow,
   hasFuriganaCrossingTimedUnits,
@@ -592,6 +593,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
 
   ApplyLyricsCredits(data, LyricsContainer);
   ApplyLyricsProvider(data, LyricsContainer);
+  ApplyProviderCredits(data, LyricsContainer);
   ApplyIsByCommunity(data, LyricsContainer);
 
   if (LyricsContainerParent) {

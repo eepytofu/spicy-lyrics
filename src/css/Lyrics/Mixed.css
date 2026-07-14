@@ -948,6 +948,36 @@ body.SpicySidebarLyrics__Active
   color: white;
 }
 
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .ProviderCredits {
+  font-size: 0.34em !important;
+  font-weight: 600 !important;
+  margin: 0.25cqw 1px 0 !important;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12cqw;
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .ProviderCreditLabel {
+  opacity: 0.5;
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .ProviderCreditName {
+  color: inherit;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent a.ProviderCreditName {
+  text-decoration: underline;
+  cursor: pointer;
+  transition: opacity 0.21s;
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent a.ProviderCreditName:hover {
+  opacity: 1;
+}
+
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .SongInfo .song-info-profile-section {
   font-weight: 700;
   opacity: 0.55;

@@ -1,6 +1,7 @@
 import { inflateSync } from "node:zlib";
 import { attachSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
+import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
 import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
 
@@ -108,10 +109,15 @@ export const qqProvider: LyricsProvider = async (track) => {
   for (const song of await searchQq(track)) {
     if (candidateScore(track, song.title, song.artists, song.durationMs) < 45) continue;
     const data = await fetchQqLyric(song, track); const primary = qrcContent(decryptQrc(data?.lyric ?? "")); if (!primary) continue;
-    const translation = qrcSidecarAsLrc(qrcContent(decryptQrc(data?.trans ?? "")));
+    const rawTranslation = qrcContent(decryptQrc(data?.trans ?? ""));
+    const translation = qrcSidecarAsLrc(rawTranslation);
     const romanization = qrcSidecarAsLrc(qrcContent(decryptQrc(data?.roma ?? "")));
     const result = toSyllableLyrics(attachSidecars(parseQrc(primary), translation, romanization), "qq");
-    if (result) return { ...result, SourceMatch: matchMetadata(track, song.title, song.artists, song.durationMs, "search", song.album) };
+    const ProviderCredits = dedupeProviderCredits([
+      extractByCredit(primary, "lyrics", "qq"),
+      extractByCredit(rawTranslation, "translation", "qq"),
+    ]);
+    if (result) return { ...result, ...(ProviderCredits.length ? { ProviderCredits } : {}), SourceMatch: matchMetadata(track, song.title, song.artists, song.durationMs, "search", song.album) };
   }
   return undefined;
 };

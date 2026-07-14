@@ -25,6 +25,7 @@ import { ApplyIsByCommunity } from "../Credits/ApplyIsByCommunity.tsx";
 import { ApplyLyricsCredits } from "../Credits/ApplyLyricsCredits.ts";
 import { EmitApply, EmitNotApplyed } from "../OnApply.ts";
 import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
+import { ApplyProviderCredits } from "../Credits/ApplyProviderCredits.ts";
 import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "../ReadingRenderer.ts";
 import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag } from "../../HanLanguage.ts";
@@ -313,6 +314,7 @@ export function ApplyLineLyrics(data: LyricsData, UseRomanized: boolean = false)
 
   ApplyLyricsCredits(data, LyricsContainer);
   ApplyLyricsProvider(data, LyricsContainer);
+  ApplyProviderCredits(data, LyricsContainer);
   ApplyIsByCommunity(data, LyricsContainer);
 
   if (LyricsContainerParent) {

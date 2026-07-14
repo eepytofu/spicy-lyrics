@@ -13,6 +13,7 @@ Lyrics:
 - Enable, disable, and reorder lyric sources.
   - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music, Kugou, and NetEase.
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
+- External provider contributor metadata is shown when available. NetEase synced-lyrics and translation contributors link to their profiles; QQ and Kugou `[by:]` credits remain plain text.
 - Japanese readings, Chinese character conversion and Pinyin/Jyutping, plus Korean, Cyrillic, and Greek romanization.
   - Compatibility fix: mixed Chinese/Japanese tracks route readings per line, and Japanese lines are repaired for analysis when community-supplied lyrics hosted by Chinese services use Simplified Chinese forms in place of Japanese kanji (who simplified the shinjitai, man? That's fucked up).
 - Translation for static, line-synced, and syllable-synced lyrics, including supported Indic scripts.

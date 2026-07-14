@@ -36,4 +36,18 @@ describe("live upstream providers", () => {
     const result = await neteaseProvider({ id: "personal-fixture", title: "乐鸣东方", artists: ["洛天依"], album: "", durationMs: 240_000 });
     expect(["Syllable", "Line"]).toContain(result?.Type);
   }, 30000);
+
+  live("NetEase preserves distinct synced-lyrics and translation contributors", async () => {
+    const result = await neteaseProvider({
+      id: "personal-fixture",
+      title: "一梦红尘",
+      artists: ["Risa Yuzuki", "BlackY"],
+      album: "ELYSIAN",
+      durationMs: 219_440,
+    });
+    expect(result?.ProviderCredits).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: "syncedLyrics", name: "Hendrix_u", provider: "netease" }),
+      expect.objectContaining({ role: "translation", name: "冰霜暗月", provider: "netease" }),
+    ]));
+  }, 30000);
 });

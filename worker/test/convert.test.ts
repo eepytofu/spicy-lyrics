@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { toLineLyrics, toSyllableLyrics } from "../src/convert";
+import { dedupeProviderCredits, extractByCredit } from "../src/credits";
 import { parseKrc } from "../src/providers/kugou";
 import { parseQrc } from "../src/providers/qq";
-import { parseYrc } from "../src/providers/netease";
+import { neteaseProviderCredits, parseYrc } from "../src/providers/netease";
 
 describe("native word-sync conversion", () => {
   it("parses QRC absolute word timings", () => {
@@ -48,5 +49,31 @@ describe("native word-sync conversion", () => {
     ) as any;
     expect(lyrics.Content[0].ProviderTranslatedText).toBeUndefined();
     expect(lyrics.IncludesTranslation).toBe(false);
+  });
+
+  it("preserves distinct NetEase synced-lyrics and translation contributors", () => {
+    expect(neteaseProviderCredits({
+      lyricUser: { userid: 6493075429, nickname: "Hendrix_u" },
+      transUser: { userid: 270201970, nickname: "冰霜暗月" },
+      tlyric: { lyric: "[by:冰霜暗月]\n[00:01.00]translation" },
+    })).toEqual([
+      { role: "syncedLyrics", name: "Hendrix_u", provider: "netease", userId: "6493075429" },
+      { role: "translation", name: "冰霜暗月", provider: "netease", userId: "270201970" },
+    ]);
+  });
+
+  it("uses translation by-tags only when richer contributor metadata is absent", () => {
+    expect(neteaseProviderCredits({
+      tlyric: { lyric: "[by:community editor]\n[00:01.00]translation" },
+    })).toEqual([
+      { role: "translation", name: "community editor", provider: "netease" },
+    ]);
+  });
+
+  it("extracts and de-duplicates plain provider by-tags", () => {
+    const credit = extractByCredit("[ti:title]\n[by:  contributor  ]\n[00:01.00]line", "lyrics", "qq");
+    expect(dedupeProviderCredits([credit, credit])).toEqual([
+      { role: "lyrics", name: "contributor", provider: "qq" },
+    ]);
   });
 });
