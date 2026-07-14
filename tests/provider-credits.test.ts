@@ -24,7 +24,7 @@ test("normalizes multiple provider credits while preserving distinct roles", () 
   assert.equal(providerCreditLabel(credits[1].role), "Translation by");
 });
 
-test("only creates profile links for numeric NetEase user ids", () => {
+test("only creates profile links for numeric NetEase Cloud Music user ids", () => {
   assert.equal(
     providerCreditProfileUrl({ role: "lyrics", name: "user", provider: "netease", userId: "123" }),
     "https://music.163.com/#/user/home?id=123",

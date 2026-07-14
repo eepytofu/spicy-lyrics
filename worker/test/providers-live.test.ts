@@ -27,17 +27,17 @@ describe("live upstream providers", () => {
     expect(result?.Type).toBe("Syllable");
   }, 30000);
 
-  live("Kugou returns native lyrics", async () => {
+  live("Kugou Music returns native lyrics", async () => {
     const result = await kugouProvider({ id: "test", title: "逝去日子", artists: ["Beyond"], album: "", durationMs: 225000 });
     expect(result?.Type).toBe("Syllable");
   }, 30000);
 
-  live("NetEase returns native lyrics", async () => {
+  live("NetEase Cloud Music returns native lyrics", async () => {
     const result = await neteaseProvider({ id: "personal-fixture", title: "乐鸣东方", artists: ["洛天依"], album: "", durationMs: 240_000 });
     expect(["Syllable", "Line"]).toContain(result?.Type);
   }, 30000);
 
-  live("NetEase preserves distinct synced-lyrics and translation contributors", async () => {
+  live("NetEase Cloud Music preserves distinct synced-lyrics and translation contributors", async () => {
     const result = await neteaseProvider({
       id: "personal-fixture",
       title: "一梦红尘",

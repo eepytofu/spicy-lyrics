@@ -11,9 +11,9 @@ Lyrics:
 
 - Smart Match weighs track confidence, timing health, lyric agreement, sync detail, and source order. Sync Type First and Strict Priority are still available when you want predictable ordering.
 - Enable, disable, and reorder lyric sources.
-  - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music, Kugou, and NetEase.
+  - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music (QQ音乐), Kugou Music (酷狗音乐), and NetEase Cloud Music (网易云音乐).
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
-- External provider contributor metadata is shown when available. NetEase synced-lyrics and translation contributors link to their profiles; QQ and Kugou `[by:]` credits remain plain text.
+- External provider contributor metadata is shown when available. NetEase Cloud Music synced-lyrics and translation contributors link to their profiles; QQ Music and Kugou Music `[by:]` credits remain plain text.
 - Japanese readings, Chinese character conversion and Pinyin/Jyutping, plus Korean, Cyrillic, and Greek romanization.
   - Compatibility fix: mixed Chinese/Japanese tracks route readings per line, and Japanese lines are repaired for analysis when community-supplied lyrics hosted by Chinese services use Simplified Chinese forms in place of Japanese kanji (who simplified the shinjitai, man? That's fucked up).
 - Translation for static, line-synced, and syllable-synced lyrics, including supported Indic scripts.
@@ -53,7 +53,7 @@ spicetify apply
 
 ## External lyric sources
 
-No shared Worker URL is included. To use AMLL TTML DB, QQ Music, Kugou, or NetEase, deploy your own:
+No shared Worker URL is included. To use AMLL TTML DB, QQ Music, Kugou Music, or NetEase Cloud Music, deploy your own:
 
 ```powershell
 cd worker
@@ -102,7 +102,7 @@ If you modify and provide the Worker as a network service, review the source-ava
 - [Spikerko/spicy-lyrics](https://github.com/Spikerko/spicy-lyrics): original project and renderer.
 - [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics): primary fork base and lyrics-processing pipeline.
 - [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics): source manager, custom servers, and custom-font reference.
-- [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource): main QQ, Kugou, and NetEase compatibility reference.
+- [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource): main QQ Music, Kugou Music, and NetEase Cloud Music compatibility reference.
 - [MuttonString/Furigana](https://github.com/MuttonString/Furigana) and [Hxjjxg/Furigana-api-fixed](https://github.com/Hxjjxg/Furigana-api-fixed): Japanese kanji repair behavior references for lyrics from Chinese services.
 - [Kuroshiro](https://github.com/hexenq/kuroshiro), [Kuromoji.js](https://github.com/takuyaa/kuromoji.js), and [OpenCC.js](https://github.com/nk2028/opencc-js): local Japanese reading analysis and CJK character-form normalization.
 - [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db): community TTML database.

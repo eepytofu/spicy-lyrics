@@ -51,7 +51,7 @@ describe("native word-sync conversion", () => {
     expect(lyrics.IncludesTranslation).toBe(false);
   });
 
-  it("preserves distinct NetEase synced-lyrics and translation contributors", () => {
+  it("preserves distinct NetEase Cloud Music synced-lyrics and translation contributors", () => {
     expect(neteaseProviderCredits({
       lyricUser: { userid: 6493075429, nickname: "Hendrix_u" },
       transUser: { userid: 270201970, nickname: "冰霜暗月" },

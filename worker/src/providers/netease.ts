@@ -11,7 +11,7 @@ export function encryptEapi(path: string, payload: unknown): string {
   const digest = MD5(`nobody${path}use${json}md5forencrypt`).toString();
   const plain = `${path}-36cd479b6b5-${json}-36cd479b6b5-${digest}`;
   const encrypted = AES.encrypt(Utf8.parse(plain), EAPI_KEY, { mode: ECB });
-  if (!encrypted.ciphertext) throw new Error("NetEase EAPI encryption produced no ciphertext");
+  if (!encrypted.ciphertext) throw new Error("NetEase Cloud Music EAPI encryption produced no ciphertext");
   return encrypted.ciphertext.toString(Hex).toUpperCase();
 }
 

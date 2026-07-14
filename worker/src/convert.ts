@@ -1,6 +1,6 @@
 import type { NativeLyrics, ProviderId, TimedLine, TimedWord } from "./types";
 
-const labels: Record<ProviderId, string> = { qq: "QQ Music", kugou: "Kugou", netease: "NetEase" };
+const labels: Record<ProviderId, string> = { qq: "QQ Music", kugou: "Kugou Music", netease: "NetEase Cloud Music" };
 
 function endMs(word: TimedWord, next?: TimedWord): number {
   const raw = word.startMs + Math.max(0, word.durationMs);

@@ -37,8 +37,8 @@ export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, L
   lrclib: { label: "LRCLIB", description: "Open community synced and plain lyrics." },
   amlldb: { label: "AMLL TTML DB", description: "Community TTML with word timing, duet, and background-vocal metadata." },
   qq: { label: "QQ Music", description: "Word-synced QRC lyrics." },
-  kugou: { label: "Kugou", description: "Word-synced KRC lyrics." },
-  netease: { label: "NetEase", description: "Word-synced YRC or line-synced LRC lyrics." },
+  kugou: { label: "Kugou Music", description: "Word-synced KRC lyrics." },
+  netease: { label: "NetEase Cloud Music", description: "Word-synced YRC or line-synced LRC lyrics." },
 };
 
 function parseStringArray(value: unknown): string[] {
@@ -109,10 +109,18 @@ export function getLyricsSourceDefinition(id: LyricsSourceProviderId, customServ
 const SOURCE_LABELS: Record<string, string> = {
   spl: "Spicy Lyrics Community", spt: "Spotify", aml: "Apple Music",
   spicy: "Spicy Lyrics", musixmatch: "Musixmatch", apple: "Apple Music",
-  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "Kugou", netease: "NetEase",
+  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "Kugou Music", netease: "NetEase Cloud Music",
+};
+
+const CANONICAL_EXTERNAL_SOURCE_LABELS: Record<string, string> = {
+  qq: SOURCE_LABELS.qq,
+  kugou: SOURCE_LABELS.kugou,
+  netease: SOURCE_LABELS.netease,
 };
 
 export function resolveLyricsSourceLabel(source?: string, displayName?: string, fetchProvider?: string): string | null {
+  if (source && CANONICAL_EXTERNAL_SOURCE_LABELS[source]) return CANONICAL_EXTERNAL_SOURCE_LABELS[source];
+  if (fetchProvider && CANONICAL_EXTERNAL_SOURCE_LABELS[fetchProvider]) return CANONICAL_EXTERNAL_SOURCE_LABELS[fetchProvider];
   if (displayName?.trim()) return displayName.trim();
   if (source && SOURCE_LABELS[source]) return SOURCE_LABELS[source];
   if (fetchProvider && SOURCE_LABELS[fetchProvider]) return SOURCE_LABELS[fetchProvider];

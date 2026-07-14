@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getLyricsSourceDefinition,
   normalizeLyricsSourceOrder,
   normalizeLyricsServerUrl,
   parseCustomLyricsServers,
+  resolveLyricsSourceLabel,
 } from "../src/utils/Lyrics/LyricsSourcePreferences.ts";
 
 test("source order retains valid custom servers and restores built-ins", () => {
@@ -22,4 +24,12 @@ test("server URLs require HTTPS except for local development", () => {
     parseCustomLyricsServers('[{"id":"custom:unsafe","name":"Unsafe","url":"http://worker.example"}]'),
     []
   );
+});
+
+test("external provider labels use canonical service names", () => {
+  assert.equal(getLyricsSourceDefinition("qq", []).label, "QQ Music");
+  assert.equal(getLyricsSourceDefinition("kugou", []).label, "Kugou Music");
+  assert.equal(getLyricsSourceDefinition("netease", []).label, "NetEase Cloud Music");
+  assert.equal(resolveLyricsSourceLabel("netease", "NetEase", "netease"), "NetEase Cloud Music");
+  assert.equal(resolveLyricsSourceLabel("kugou", "Kugou", "kugou"), "Kugou Music");
 });
