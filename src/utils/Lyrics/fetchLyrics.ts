@@ -43,6 +43,7 @@ import {
   parseCustomLyricsServers,
   type LyricsSourceProviderId,
 } from "./LyricsSourcePreferences.ts";
+import { publishLyricsInteropSnapshot } from "./Interop.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -139,6 +140,7 @@ function setRomanizationClass(hasTransliterations: boolean | undefined): void {
 function dispatchProcessingReady(trackId: string, lyrics: any): void {
   if (SpotifyPlayer.GetId() !== trackId) return;
   $currentLyricsData.set(JSON.stringify(lyrics));
+  publishLyricsInteropSnapshot(lyrics);
   window.dispatchEvent(
     new CustomEvent("spicy-lyrics:processing-ready", {
       detail: { trackId, lyrics },
@@ -238,6 +240,7 @@ function markProcessedWithoutBackground(lyrics: any): void {
 }
 
 function presentLyrics(lyricsData: any): void {
+  publishLyricsInteropSnapshot(lyricsData);
   $lyricsSelectionDiagnostics.set(lyricsData?.SelectionDiagnostics ?? null);
   // Lyrics are in hand — end any 503 retry loop that was running for this track.
   LyricsQueueRetry.NotifyResolved(lyricsData?.uri);

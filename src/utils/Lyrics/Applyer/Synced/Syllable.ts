@@ -340,6 +340,9 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
+    const leadSourceText = line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
+    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
+    lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
     applyHanLanguageTag(lineElem, joinSyllableDisplayText(line.Lead.Syllables), data, $fixHanGlyphVariants.get());
     const lineRenderOptions = {
       useRomanized: UseRomanized,
@@ -384,7 +387,6 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
     const leadHasFurigana = shouldRenderFurigana(line.Lead, lineRenderOptions) || line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
     const leadUsesSemanticGroups = line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
     const leadRenderOptions = { ...lineRenderOptions, reserveFurigana: leadHasFurigana };
-    const leadSourceText = line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
     const leadFuriganaCrossesTiming = leadHasFurigana && hasFuriganaCrossingTimedUnits(line.Lead.ReadingRenderPlan);
     const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
 

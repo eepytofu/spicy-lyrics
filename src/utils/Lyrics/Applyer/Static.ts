@@ -80,8 +80,10 @@ export function ApplyStaticLyrics(data: StaticLyricsData, UseRomanized: boolean 
 
   const isJapaneseLyrics = (data as any).Language === "jpn" || data.Lines.some((line) => isJapaneseEntry(line));
 
-  data.Lines.forEach((line) => {
+  data.Lines.forEach((line, index) => {
     const lineElem = document.createElement("div");
+    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
+    lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
     applyHanLanguageTag(lineElem, line.Text, data, $fixHanGlyphVariants.get());
     const renderOptions = {
       useRomanized: UseRomanized,

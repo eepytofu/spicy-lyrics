@@ -178,6 +178,8 @@ export function ApplyLineLyrics(data: LyricsData, UseRomanized: boolean = false)
 
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
+    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
+    lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
     applyHanLanguageTag(lineElem, line.Text, data, $fixHanGlyphVariants.get());
     const renderOptions = {
       useRomanized: UseRomanized,
