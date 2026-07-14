@@ -2,23 +2,11 @@
 
 Experimental personal fork of [Spicy Lyrics](https://github.com/Spikerko/spicy-lyrics), based mostly on [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics).
 
+![TTML lyrics demo for 乐鸣东方](assets/乐鸣东方.avif)
+![Line synced lyrics demo for 一梦红尘](assets/一梦红尘.avif)
+
 > [!CAUTION]
 > Yes, it is vibecoded and might contain some slop. I'm still learning to code and mostly figuring things out by building them, so things may break. Read the code before relying on it or deploying the optional Worker.
-
-<details>
-<summary><strong>Preview</strong></summary>
-
-![Animated lyrics demo for 乐鸣东方](assets/乐鸣东方.avif)
-
-Lyrics from **AMLL TTML DB** with syllable-level timing, Pinyin readings, and language-aware Han glyph rendering.
-
-![Animated lyrics demo for 一梦红尘](assets/一梦红尘.avif)
-
-Mixed Japanese and Chinese lyrics from **NetEase Cloud Music**, with Chinese translations for Japanese lines, per-line Pinyin and furigana handling, repaired kanji forms, and language-aware Han glyph rendering.
-
-The first preview's English translation and the second preview's Indonesian translation are provided through [**SLT**](https://github.com/7xeh/SpicyLyricTranslator), a separate plugin rather than Spicy Lyrics' built-in translator.
-
-</details>
 
 ## Fork stuff
 
