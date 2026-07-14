@@ -2,6 +2,7 @@ import {
   annotateJapaneseTextTarget,
   applyJapaneseReadingToSyllables,
   type FuriganaSegment,
+  type JapaneseAnalysisOptions,
   type JapaneseReadable,
   type JapaneseTimedTextSpan,
 } from "../../Reading/JapaneseReading.ts";
@@ -35,9 +36,10 @@ export async function processJapanesePackageLine(
   syllables: JapaneseReadable[],
   spans: JapaneseTimedTextSpan[],
   times: Array<{ StartTime?: number; EndTime?: number }>,
-  romajiPromise?: Promise<void>
+  romajiPromise?: Promise<void>,
+  options: JapaneseAnalysisOptions = {}
 ): Promise<{ plan: RenderPlan; romaji: string }> {
-  const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, romajiPromise, spans);
+  const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, romajiPromise, spans, options);
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
   if (!romaji) throw new Error("Japanese fallback processor produced no reading");
 
@@ -55,7 +57,7 @@ export async function processJapanesePackageLine(
     })),
   };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise);
+  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, options);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
@@ -65,9 +67,10 @@ export async function processJapanesePackageLine(
 
 export async function processJapanesePackageTextTarget(
   target: JapaneseReadable & { Text?: string },
-  romajiPromise?: Promise<void>
+  romajiPromise?: Promise<void>,
+  options: JapaneseAnalysisOptions = {}
 ): Promise<string | undefined> {
-  const reading = await annotateJapaneseTextTarget(target, undefined, romajiPromise);
+  const reading = await annotateJapaneseTextTarget(target, undefined, romajiPromise, options);
   if (!reading?.romaji) return undefined;
   target.RomanizedText = reading.romaji;
   target.TransliteratedText = reading.romaji;

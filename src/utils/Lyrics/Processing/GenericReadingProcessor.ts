@@ -47,7 +47,8 @@ export function buildTimedGenericPlan(group: any, display: string, processor: st
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",
       logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId] })) };
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
-  return validateRenderPlan(plan).valid ? plan : undefined;
+  if (!validateRenderPlan(plan).valid) return undefined;
+  return processor === "Chinese" ? { ...plan, primaryScript: "Chinese" } : plan;
 }
 
 export function buildLineFallbackPlan(source: string, display: string, id: string): RenderPlan {

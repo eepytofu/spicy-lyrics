@@ -52,7 +52,7 @@ const storage = new Map<string, string>();
   disconnect(): void {}
 };
 
-const { appendSyllableRomanizedBelow, hasFuriganaCrossingTimedUnits } = await import(
+const { appendSyllableRomanizedBelow, hasFuriganaCrossingTimedUnits, isJapaneseEntry } = await import(
   "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
 );
 const { $japaneseReadingMode } = await import("../src/utils/uiState.ts");
@@ -109,4 +109,38 @@ test("cross-fragment compound ruby requires whole-line rendering", () => {
   };
   assert.equal(hasFuriganaCrossingTimedUnits(planWithSplitCompound), true);
   assert.equal(hasFuriganaCrossingTimedUnits({ ...planWithSplitCompound, sourceUnits: [{ spanId: "0", canonicalRange: { startCp: 0, endCp: 4 } }] }), false);
+});
+
+test("an explicit Chinese reading route overrides an embedded kana island", () => {
+  assert.equal(isJapaneseEntry({
+    Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",
+    ReadingPrimaryScript: "Chinese",
+  }), false);
+});
+
+test("Chinese-dominant mixed readings stay visible in Japanese furigana mode", () => {
+  $japaneseReadingMode.set("furigana");
+  const line = new FakeElement();
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [
+      { Text: "\u5982\u679c", ReadingPrimaryScript: "Chinese" },
+      { Text: "\u3059\u307f\u307e\u305b\u3093", ReadingPrimaryScript: "Chinese" },
+    ],
+    "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",
+    undefined,
+    undefined,
+    [{}, {}],
+    {
+      ...plan,
+      primaryScript: "Chinese",
+      joinedDisplayText: "ru guo sumimasen",
+      timedReadingUnits: [
+        { spanId: "0", canonicalRange: { startCp: 0, endCp: 2 }, text: "ru guo", logicalGroupId: "cn-0" },
+        { spanId: "1", canonicalRange: { startCp: 2, endCp: 7 }, text: " sumimasen", logicalGroupId: "jp-1" },
+      ],
+    },
+    { useRomanized: true, isJapaneseLyrics: false }
+  );
+  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true);
 });

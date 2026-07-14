@@ -57,6 +57,8 @@ export function hasFuriganaCrossingTimedUnits(readingPlan: RenderPlan | undefine
 
 export function isJapaneseEntry(entry: JapaneseReadable | undefined, isJapaneseLyrics?: boolean): boolean {
   if (!entry) return !!isJapaneseLyrics;
+  if (entry.ReadingPrimaryScript === "Chinese") return false;
+  if (entry.ReadingPrimaryScript === "Japanese") return true;
   return !!isJapaneseLyrics || !!entry.JapaneseReading || JapaneseKanaTextTest.test(entry.Text || "");
 }
 
@@ -233,6 +235,7 @@ export function appendSyllableRomanizedBelow(
     RomanizedText: groupRomanizedText,
     TransliteratedText: groupRomanizedText,
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
+    ReadingPrimaryScript: readingPlan?.primaryScript,
   };
 
   if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {

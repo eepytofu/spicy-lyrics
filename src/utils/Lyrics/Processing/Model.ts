@@ -88,6 +88,7 @@ export type RenderPlan = {
   readonly joinedDisplayText: string;
   readonly translation?: string;
   readonly furigana?: readonly unknown[];
+  readonly primaryScript?: "Japanese" | "Chinese";
 };
 
 export type LanguageContext = {

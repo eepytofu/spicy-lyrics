@@ -1,4 +1,6 @@
-import { ConverterBuilder } from "opencc-js/core";
+import { ConverterBuilder, ConverterFactory } from "opencc-js/core";
+import JapaneseShinjitaiCharacters from "opencc-js/dict/JPShinjitaiCharactersRev";
+import SimplifiedToTraditionalCharacters from "opencc-js/dict/STCharacters";
 import * as CnToTraditionalPreset from "opencc-js/preset/cn2t";
 import * as TraditionalToCnPreset from "opencc-js/preset/t2cn";
 
@@ -9,6 +11,9 @@ type TimedTextUnit = { Text?: string; IsPartOfWord?: boolean };
 
 const toSimplified = ConverterBuilder(TraditionalToCnPreset)({ from: "t", to: "cn" });
 const toTraditional = ConverterBuilder(CnToTraditionalPreset)({ from: "cn", to: "tw" });
+let toJapanese: ((text: string) => string) | undefined;
+
+const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease"]);
 
 function codePoints(value: string): string[] {
   return Array.from(value);
@@ -28,6 +33,27 @@ function differenceCount(left: string, right: string): number {
 export function convertChineseText(text: string, form: ChineseCharacterForm): string {
   if (!text || form === "original") return text;
   return form === "simplified" ? toSimplified(text) : toTraditional(text);
+}
+
+export function isChineseLyricsProvider(lyrics: { fetchProvider?: unknown; source?: unknown } | null | undefined): boolean {
+  return [lyrics?.fetchProvider, lyrics?.source].some((value) =>
+    typeof value === "string" && CHINESE_LYRICS_PROVIDERS.has(value.toLowerCase())
+  );
+}
+
+/**
+ * Repair Chinese-provider character conversion for Japanese token analysis.
+ * The displayed lyric remains unchanged, and unequal-length conversions are
+ * rejected so UTF-16 furigana and timing ranges continue to align.
+ */
+export function normalizeChineseProviderJapaneseText(text: string): string {
+  if (!text) return text;
+  toJapanese ??= ConverterFactory(
+    [SimplifiedToTraditionalCharacters],
+    [JapaneseShinjitaiCharacters]
+  );
+  const normalized = toJapanese(text);
+  return normalized.length === text.length ? normalized : text;
 }
 
 export function detectChineseCharacterForm(text: string): DetectedChineseCharacterForm {

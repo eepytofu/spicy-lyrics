@@ -14,6 +14,7 @@ Lyrics:
   - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music, Kugou, and NetEase.
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
 - Japanese readings, Chinese character conversion and Pinyin/Jyutping, plus Korean, Cyrillic, and Greek romanization.
+  - Compatibility fix: mixed Chinese/Japanese tracks route readings per line, and Japanese lines are repaired for analysis when community-supplied lyrics hosted by Chinese services use Simplified Chinese forms in place of Japanese kanji (who simplified the shinjitai, man? That's fucked up).
 - Translation for static, line-synced, and syllable-synced lyrics, including supported Indic scripts.
 
 UI and appearance:
@@ -101,8 +102,10 @@ If you modify and provide the Worker as a network service, review the source-ava
 - [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics): primary fork base and lyrics-processing pipeline.
 - [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics): source manager, custom servers, and custom-font reference.
 - [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource): main QQ, Kugou, and NetEase compatibility reference.
+- [MuttonString/Furigana](https://github.com/MuttonString/Furigana) and [Hxjjxg/Furigana-api-fixed](https://github.com/Hxjjxg/Furigana-api-fixed): Japanese kanji repair behavior references for lyrics from Chinese services.
+- [Kuroshiro](https://github.com/hexenq/kuroshiro), [Kuromoji.js](https://github.com/takuyaa/kuromoji.js), and [OpenCC.js](https://github.com/nk2028/opencc-js): local Japanese reading analysis and CJK character-form normalization.
 - [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db): community TTML database.
-- [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) and [surfbryce/beautiful-lyrics](https://github.com/surfbryce/beautiful-lyrics): server architecture and project-lineage references.
+- [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn): server architecture reference.
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC): acknowledged by retained upstream compatibility code.
 - [Spicetify](https://spicetify.app/) and [Cloudflare Workers](https://developers.cloudflare.com/workers/): extension and Worker platforms.
 

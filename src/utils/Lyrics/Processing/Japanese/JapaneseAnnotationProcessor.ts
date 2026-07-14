@@ -1,6 +1,7 @@
 import {
   analyzeJapaneseLine,
   applyJapaneseReadingToSyllables,
+  type JapaneseAnalysisOptions,
   type JapaneseReadable,
 } from "../../Reading/JapaneseReading.ts";
 import { codePointOffsetToUtf16Index, codePointSlice, utf16IndexToCodePointOffset } from "../CodePoint.ts";
@@ -27,9 +28,10 @@ function alignUnitTexts(texts: string[], display: string): string[] {
 export async function annotateJapaneseLine(
   canonical: CanonicalLine,
   fullRomaji?: string,
-  romajiPromise?: Promise<void>
+  romajiPromise?: Promise<void>,
+  options: JapaneseAnalysisOptions = {}
 ): Promise<ReadingAnnotation | undefined> {
-  const reading = await analyzeJapaneseLine(canonical.text, fullRomaji, romajiPromise);
+  const reading = await analyzeJapaneseLine(canonical.text, fullRomaji, romajiPromise, options);
   if (!reading?.romaji) return undefined;
   const temp: JapaneseReadable[] = canonical.spanMappings.map((mapping) => ({
     Text: codePointSlice(canonical.text, mapping.canonicalRange),
@@ -41,7 +43,7 @@ export async function annotateJapaneseLine(
     start: codePointOffsetToUtf16Index(canonical.text, mapping.canonicalRange.startCp),
     end: codePointOffsetToUtf16Index(canonical.text, mapping.canonicalRange.endCp),
   }));
-  await applyJapaneseReadingToSyllables(canonical.text, reading.romaji, temp, romajiPromise, spans);
+  await applyJapaneseReadingToSyllables(canonical.text, reading.romaji, temp, romajiPromise, spans, options);
   const aligned = alignUnitTexts(temp.map((entry) => entry.RomanizedText || entry.TransliteratedText ||
     (/\p{Script=Latin}/u.test(entry.Text || "") ? entry.Text || "" : "")), reading.romaji);
   if (!aligned.some(Boolean) && aligned.length > 0) aligned[0] = reading.romaji;

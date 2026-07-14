@@ -4,7 +4,7 @@ import langs from "langs";
 import { RetrievePackage } from "../ImportPackage.ts";
 import Logger from "../Logger.ts";
 import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
-import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
+import { convertChineseLyricsText, isChineseLyricsProvider } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
 import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanDisplayMode } from "./lyrics.ts";
 import {
@@ -17,8 +17,11 @@ import {
 } from "./Fork/index.ts";
 import {
   romanizationBranchFromLanguage,
+  resolveCjkDocumentBranch,
+  resolveCjkLineRoute,
   scriptBranchForLine,
   SCRIPT_PRIORITY,
+  type CjkReadingBranch,
   type RomanizationBranch,
   type ScriptBranchDocContext,
 } from "./Fork/TextDetection.ts";
@@ -29,13 +32,14 @@ import {
   romanizeKoreanForDisplay,
 } from "./Fork/Romanization.ts";
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
-import { buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
+import { analyzeJapaneseLine, buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 import { DefaultCanonicalLineBuilder } from "./Processing/Canonical.ts";
 import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/RenderPlan.ts";
 import { processJapanesePackageLine, processJapanesePackageTextTarget } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
+import { romanizeChineseDominantCjkText } from "./Processing/CjkLanguageRouting.ts";
 import {
   preserveProviderReading,
   restoreProviderReading,
@@ -45,7 +49,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 31;
+export const LYRICS_PROCESSING_VERSION = 33;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
@@ -195,15 +199,13 @@ const gatherText = (
 const detectPresentScripts = (
   scriptText: string,
   language: string,
-  iso2Language: string | undefined
+  iso2Language: string | undefined,
+  cjkDominantBranch: CjkReadingBranch | undefined
 ): RomanizationBranch[] => {
   const present = new Set<RomanizationBranch>();
 
-  if (JapaneseTextTest.test(scriptText)) {
-    present.add("Japanese");
-  } else if (ChineseTextTest.test(scriptText)) {
-    present.add("Chinese");
-  }
+  if (JapaneseTextTest.test(scriptText)) present.add("Japanese");
+  if (ChineseTextTest.test(scriptText)) present.add(cjkDominantBranch || "Chinese");
   if (KoreanTextTest.test(scriptText)) present.add("Korean");
   if (CyrillicTextTest.test(scriptText)) present.add("Cyrillic");
   if (GreekTextTest.test(scriptText)) present.add("Greek");
@@ -279,21 +281,10 @@ const postProcessSyllableRomanization = async (
   lyrics: any,
   docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
-  language: string
+  language: string,
+  normalizeChineseProviderKanji: boolean
 ) => {
   if (lyrics.Type !== "Syllable") return;
-
-  const isJapaneseSong =
-    language === "jpn" ||
-    lyrics.Content?.some((group: any) =>
-      group.Lead?.Syllables?.some((s: any) => JapaneseTextTest.test(s.Text || ""))
-    );
-  const isChineseSong =
-    language === "cmn" ||
-    language === "yue" ||
-    lyrics.Content?.some((group: any) =>
-      group.Lead?.Syllables?.some((s: any) => ChineseTextTest.test(s.Text || ""))
-    );
 
   for (const vocalGroup of lyrics.Content || []) {
     if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
@@ -304,9 +295,16 @@ const postProcessSyllableRomanization = async (
       preserveProviderReading(group);
       for (const syllable of syllables) preserveProviderReading(syllable);
 
-      const lineText = joinSyllables(syllables, isJapaneseSong);
+      const spacedLineText = joinSyllables(syllables);
+      const cjkLineRoute = resolveCjkLineRoute(spacedLineText, docContext);
+      const isJapaneseLine = cjkLineRoute === "Japanese";
+      const isChineseLine = cjkLineRoute === "Chinese" || cjkLineRoute === "MixedChinese";
+      if (isJapaneseLine) group.ReadingPrimaryScript = "Japanese";
+      else if (isChineseLine) group.ReadingPrimaryScript = "Chinese";
+
+      const lineText = isJapaneseLine ? joinSyllables(syllables, true) : spacedLineText;
       const groupHasKorean = syllables.some((s: any) => KoreanTextTest.test(s.Text || ""));
-      const japaneseMap = isJapaneseSong && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
+      const japaneseMap = isJapaneseLine && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
       const effectiveLineText = japaneseMap?.lineText ?? lineText;
       if (groupHasKorean) {
         const parsed: ParsedLine = {
@@ -338,9 +336,16 @@ const postProcessSyllableRomanization = async (
           return;
         }
       }
-      if (isJapaneseSong && !groupHasKorean && japaneseMap) {
+      if (isJapaneseLine && !groupHasKorean && japaneseMap) {
         try {
-          const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables, RomajiPromise);
+          const packageResult = await processJapanesePackageLine(
+            effectiveLineText,
+            syllables,
+            japaneseMap.spans,
+            syllables,
+            RomajiPromise,
+            { normalizeChineseProviderKanji }
+          );
           for (const syllable of syllables) {
             delete syllable.RomanizedText;
             delete syllable.TransliteratedText;
@@ -372,11 +377,11 @@ const postProcessSyllableRomanization = async (
           if (syllable.TransliteratedText && !syllable.RomanizedText) {
             syllable.RomanizedText = syllable.TransliteratedText;
           }
-          if (isChineseSong && index > 0 && syllable.RomanizedText) {
+          if (isChineseLine && index > 0 && syllable.RomanizedText) {
             syllable.RomajiSpaceBefore = true;
           }
         }
-        const plan = buildTimedGenericPlan(group, fullRomaji, isChineseSong ? "Chinese" : "Generic");
+        const plan = buildTimedGenericPlan(group, fullRomaji, isChineseLine ? "Chinese" : "Generic");
         if (plan) {
           group.ReadingRenderPlan = plan;
           delete group.RomanizedText;
@@ -402,13 +407,18 @@ const romanizeEntry = async (
   docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
   primaryLanguage: string,
-  annotateJapanese: boolean = true
+  annotateJapanese: boolean = true,
+  normalizeChineseProviderKanji: boolean = false
 ): Promise<boolean> => {
   const { target, line } = entry;
 
   if (target.Text) target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
-  const lineScripts = scriptBranchForLine(entry.lineText || target.Text || "", docContext);
-  const useConfiguredLocalReading = shouldUseConfiguredLocalReading(target.Text || "", lineScripts);
+  const cjkLineRoute = resolveCjkLineRoute(entry.lineText || target.Text || "", docContext);
+  const targetDocContext = cjkLineRoute === "Japanese"
+    ? { ...docContext, cjkDominantBranch: "Japanese" as const }
+    : docContext;
+  const targetScripts = scriptBranchForLine(target.Text || "", targetDocContext);
+  const useConfiguredLocalReading = shouldUseConfiguredLocalReading(target.Text || "", targetScripts);
   const providerReading = preserveProviderReading(target);
 
   if (providerReading && !useConfiguredLocalReading) {
@@ -419,16 +429,38 @@ const romanizeEntry = async (
   let text: string = target.Text;
   let changed = false;
 
-  if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
-    const packageRomaji = await processJapanesePackageTextTarget(target, RomajiPromise);
+  if (
+    annotateJapanese &&
+    cjkLineRoute === "Japanese" &&
+    targetScripts.includes("Japanese") &&
+    ItemJapaneseTest.test(target.Text || "")
+  ) {
+    const packageRomaji = await processJapanesePackageTextTarget(
+      target,
+      RomajiPromise,
+      { normalizeChineseProviderKanji }
+    );
     if (packageRomaji && acceptRomanization(target.Text || "", packageRomaji, [ScriptResidualTests.Japanese])) {
       line.HasTransliterations = true;
       return true;
     }
   }
 
-  for (const script of lineScripts) {
-    if (script === "Japanese") {
+  const chineseDominantCjk = docContext.cjkDominantBranch === "Chinese" &&
+    cjkLineRoute !== "Japanese" &&
+    (ItemChineseTest.test(text) || JapaneseTextTest.test(text));
+  if (chineseDominantCjk) {
+    text = await romanizeChineseDominantCjkText(text, {
+      romanizeHan: (run) => romanizeChineseText(run, packages.pinyin, primaryLanguage),
+      romanizeKana: async (run) => (await analyzeJapaneseLine(run, undefined, RomajiPromise))?.romaji,
+    });
+    changed = text !== target.Text;
+  }
+
+  for (const script of targetScripts) {
+    if (chineseDominantCjk && (script === "Japanese" || script === "Chinese")) {
+      continue;
+    } else if (script === "Japanese") {
       continue;
     } else if (script === "Chinese") {
       if (ItemChineseTest.test(text)) {
@@ -460,7 +492,7 @@ const romanizeEntry = async (
         romanized: text,
       });
     }
-    if (!acceptRomanization(target.Text || "", text, lineScripts.map((script) => ScriptResidualTests[script]))) {
+    if (!acceptRomanization(target.Text || "", text, targetScripts.map((script) => ScriptResidualTests[script]))) {
       return restoreProviderReading(target);
     }
     target.TransliteratedText = text;
@@ -482,17 +514,30 @@ export const ProcessLyrics = async (
   const hadApiTransliterations = lyrics.HasTransliterations === true;
   let gathered = gatherText(lyrics);
 
-  const language = franc(gathered.francText);
+  const detectedLanguage = franc(gathered.francText);
+  const detectedLanguageISO2 = langs.where("3", detectedLanguage)?.["1"];
+  const cjkDominantBranch = resolveCjkDocumentBranch(
+    gathered.scriptText,
+    detectedLanguage,
+    detectedLanguageISO2
+  );
+  const language = cjkDominantBranch === "Japanese"
+    ? "jpn"
+    : cjkDominantBranch === "Chinese"
+      ? detectedLanguage === "yue" ? "yue" : "cmn"
+      : detectedLanguage;
   const languageISO2 = langs.where("3", language)?.["1"];
   lyrics.Language = language;
   lyrics.LanguageISO2 = languageISO2;
 
-  const presentScripts = detectPresentScripts(gathered.scriptText, language, languageISO2);
+  const presentScripts = detectPresentScripts(gathered.scriptText, language, languageISO2, cjkDominantBranch);
   const docContext: ScriptBranchDocContext = {
     presentScripts,
     primaryLanguage: language,
     iso2Language: languageISO2,
+    cjkDominantBranch,
   };
+  const normalizeChineseProviderKanji = isChineseLyricsProvider(lyrics);
   const chineseCharacterForm = $chineseCharacterForm.get();
   lyrics.ChineseCharacterForm = chineseCharacterForm;
   if (chineseCharacterForm !== "original" && language !== "jpn" && presentScripts.includes("Chinese")) {
@@ -502,7 +547,14 @@ export const ProcessLyrics = async (
     gathered = gatherText(lyrics);
   }
   const entries = gathered.entries;
-  for (const entry of entries) preserveProviderReading(entry.target);
+  for (const entry of entries) {
+    preserveProviderReading(entry.target);
+    const cjkLineRoute = resolveCjkLineRoute(entry.lineText || entry.target?.Text || "", docContext);
+    if (cjkLineRoute === "Japanese") entry.target.ReadingPrimaryScript = "Japanese";
+    else if (cjkLineRoute === "Chinese" || cjkLineRoute === "MixedChinese") {
+      entry.target.ReadingPrimaryScript = "Chinese";
+    }
+  }
 
 
   let appliedRomanization = false;
@@ -522,14 +574,27 @@ export const ProcessLyrics = async (
   if (presentScripts.length > 0 && needsRomanizationOrJapaneseReading) {
     packages = await loadPackagesForScripts(presentScripts);
     const results = await Promise.all(
-      entries.map((entry) => romanizeEntry(entry, docContext, packages, language, lyrics.Type !== "Syllable"))
+      entries.map((entry) => romanizeEntry(
+        entry,
+        docContext,
+        packages,
+        language,
+        lyrics.Type !== "Syllable",
+        normalizeChineseProviderKanji
+      ))
     );
     appliedRomanization = results.some(Boolean);
   }
 
   if (presentScripts.length > 0) {
     if (Object.keys(packages).length === 0) packages = await loadPackagesForScripts(presentScripts);
-    await postProcessSyllableRomanization(lyrics, docContext, packages, language);
+    await postProcessSyllableRomanization(
+      lyrics,
+      docContext,
+      packages,
+      language,
+      normalizeChineseProviderKanji
+    );
     if (lyrics.Type !== "Syllable") {
       entries.forEach((entry, index) => {
         const display = entry.target.RomanizedText || entry.target.TransliteratedText;
