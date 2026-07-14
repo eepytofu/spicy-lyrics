@@ -36,11 +36,16 @@ import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcesso
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/RenderPlan.ts";
 import { processJapanesePackageLine, processJapanesePackageTextTarget } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
+import {
+  preserveProviderReading,
+  restoreProviderReading,
+  shouldUseConfiguredLocalReading,
+} from "./Processing/ReadingPrecedence.ts";
 import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 29;
+export const LYRICS_PROCESSING_VERSION = 31;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants
@@ -218,10 +223,6 @@ const detectPresentScripts = (
 const hasTransliteration = (entry: any): boolean =>
   typeof entry.TransliteratedText === "string" && entry.TransliteratedText !== "";
 
-const shouldReplaceKoreanTransliteration = (entry: RomanizeEntry, docContext: ScriptBranchDocContext): boolean =>
-  scriptBranchForLine(entry.lineText || entry.target?.Text || "", docContext).includes("Korean")
-  && ItemKoreanTest.test(entry.target?.Text || "");
-
 const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
   if (lyrics.Type === "Static") {
     return lyrics.Lines?.some((line: any) => hasTransliteration(line) || typeof line.RomanizedText === "string"
@@ -300,6 +301,8 @@ const postProcessSyllableRomanization = async (
     const processGroup = async (group: any) => {
       const syllables = group?.Syllables;
       if (!Array.isArray(syllables) || syllables.length === 0) return;
+      preserveProviderReading(group);
+      for (const syllable of syllables) preserveProviderReading(syllable);
 
       const lineText = joinSyllables(syllables, isJapaneseSong);
       const groupHasKorean = syllables.some((s: any) => KoreanTextTest.test(s.Text || ""));
@@ -336,16 +339,25 @@ const postProcessSyllableRomanization = async (
         }
       }
       if (isJapaneseSong && !groupHasKorean && japaneseMap) {
-        const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables, RomajiPromise);
-        for (const syllable of syllables) {
-          delete syllable.RomanizedText;
-          delete syllable.TransliteratedText;
-          delete syllable.RomajiSpaceBefore;
+        try {
+          const packageResult = await processJapanesePackageLine(effectiveLineText, syllables, japaneseMap.spans, syllables, RomajiPromise);
+          for (const syllable of syllables) {
+            delete syllable.RomanizedText;
+            delete syllable.TransliteratedText;
+            delete syllable.RomajiSpaceBefore;
+          }
+          group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.plan.furigana || [] };
+          group.ReadingRenderPlan = packageResult.plan;
+          delete group.RomanizedText;
+          delete group.TransliteratedText;
+        } catch (error) {
+          delete group.JapaneseReading;
+          delete group.ReadingRenderPlan;
+          const restoredGroup = restoreProviderReading(group);
+          const restoredSyllables = syllables.map(restoreProviderReading).some(Boolean);
+          if (!restoredGroup && !restoredSyllables) throw error;
+          romanizationLogger.warn("Japanese local reading failed; using provider fallback", error);
         }
-        group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.plan.furigana || [] };
-        group.ReadingRenderPlan = packageResult.plan;
-        delete group.RomanizedText;
-        delete group.TransliteratedText;
         return;
       }
       const fullRomaji = await romanizeLineText(effectiveLineText, docContext, packages, language);
@@ -396,14 +408,11 @@ const romanizeEntry = async (
 
   if (target.Text) target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
   const lineScripts = scriptBranchForLine(entry.lineText || target.Text || "", docContext);
-  const replaceKoreanTransliteration = shouldReplaceKoreanTransliteration(entry, docContext);
+  const useConfiguredLocalReading = shouldUseConfiguredLocalReading(target.Text || "", lineScripts);
+  const providerReading = preserveProviderReading(target);
 
-  if (hasTransliteration(target) && !replaceKoreanTransliteration) {
-    if (annotateJapanese && lineScripts.includes("Japanese") && ItemJapaneseTest.test(target.Text || "")) {
-      const previousRomanized = target.RomanizedText || target.TransliteratedText;
-      await processJapanesePackageTextTarget(target, RomajiPromise);
-      return (target.RomanizedText || target.TransliteratedText) !== previousRomanized;
-    }
+  if (providerReading && !useConfiguredLocalReading) {
+    restoreProviderReading(target);
     return true;
   }
 
@@ -452,14 +461,14 @@ const romanizeEntry = async (
       });
     }
     if (!acceptRomanization(target.Text || "", text, lineScripts.map((script) => ScriptResidualTests[script]))) {
-      return false;
+      return restoreProviderReading(target);
     }
     target.TransliteratedText = text;
     target.RomanizedText = text;
     line.HasTransliterations = true;
   }
 
-  return changed;
+  return changed || restoreProviderReading(target);
 };
 
 export const ProcessLyrics = async (
@@ -493,13 +502,17 @@ export const ProcessLyrics = async (
     gathered = gatherText(lyrics);
   }
   const entries = gathered.entries;
+  for (const entry of entries) preserveProviderReading(entry.target);
 
 
   let appliedRomanization = false;
   let packages: RomanizationPackages = {};
   const needsRomanizationOrJapaneseReading = entries.some((entry) =>
-    !hasTransliteration(entry.target) ||
-    shouldReplaceKoreanTransliteration(entry, docContext) ||
+    shouldUseConfiguredLocalReading(
+      entry.target?.Text || "",
+      scriptBranchForLine(entry.lineText || entry.target?.Text || "", docContext)
+    ) ||
+    !entry.target?.ProviderRomanizedText ||
     (
       scriptBranchForLine(entry.lineText, docContext).includes("Japanese") &&
       ItemJapaneseTest.test(entry.target.Text || "") &&

@@ -250,7 +250,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
       )}
 
       {showTranslationQuickButton && (
-        <Row label="Built-in Translation Quick Button" description="Show the built-in translation toggle in lyrics controls. This does not affect SLT.">
+        <Row label="Built-in Translation Quick Button" description="Show the built-in translation toggle in lyrics controls.">
           <Toggle checked={showBuiltInTranslationButton} onChange={(v) => $showBuiltInTranslationButton.set(v)} />
         </Row>
       )}

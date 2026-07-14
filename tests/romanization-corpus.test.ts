@@ -113,6 +113,8 @@ test("Chinese tone toggle selects pinyin style when the package exposes constant
   const pinyin = { STYLE_TONE: 1, STYLE_NORMAL: 0 };
   assert.deepEqual(pinyinOptionsForToneMode(pinyin, true), { segment: true, group: false, style: 1 });
   assert.deepEqual(pinyinOptionsForToneMode(pinyin, false), { segment: true, group: false, style: 0 });
+  assert.deepEqual(pinyinOptionsForToneMode({ pinyin }, true), { segment: true, group: false, style: 1 });
+  assert.deepEqual(pinyinOptionsForToneMode({ pinyin }, false), { segment: true, group: false, style: 0 });
   assert.deepEqual(pinyinOptionsForToneMode({}, true), { segment: true, group: false });
 });
 

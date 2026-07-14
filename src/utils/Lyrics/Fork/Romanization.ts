@@ -135,7 +135,8 @@ export function pinyinOptionsForToneMode(pinyin: any, tones: boolean): Record<st
   // char so karaoke syllable alignment survives. Verified against the CDN
   // artifact pkgs.spikerko.org/pinyin/pinyin@4.0.0.mjs (2026-07-06).
   const options: Record<string, any> = { segment: true, group: false };
-  const style = tones ? pinyin?.STYLE_TONE : pinyin?.STYLE_NORMAL;
+  const api = pinyin?.pinyin ?? pinyin?.default ?? pinyin;
+  const style = tones ? api?.STYLE_TONE : api?.STYLE_NORMAL;
   if (style !== undefined) options.style = style;
   return options;
 }

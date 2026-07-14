@@ -36,9 +36,9 @@ export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, L
   spotify: { label: "Spotify", description: "Lyrics returned by Spotify's native lyrics endpoint." },
   lrclib: { label: "LRCLIB", description: "Open community synced and plain lyrics." },
   amlldb: { label: "AMLL TTML DB", description: "Community TTML with word timing, duet, and background-vocal metadata." },
-  qq: { label: "QQ Music", description: "QRC word-synced lyrics through your external Worker." },
-  kugou: { label: "Kugou", description: "KRC word-synced lyrics through your external Worker." },
-  netease: { label: "NetEase", description: "YRC/LRC lyrics through your external Worker." },
+  qq: { label: "QQ Music", description: "Word-synced QRC lyrics." },
+  kugou: { label: "Kugou", description: "Word-synced KRC lyrics." },
+  netease: { label: "NetEase", description: "Word-synced YRC or line-synced LRC lyrics." },
 };
 
 function parseStringArray(value: unknown): string[] {
