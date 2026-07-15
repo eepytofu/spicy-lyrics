@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toLineLyrics, toSyllableLyrics } from "../src/convert";
+import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../src/convert";
 import { dedupeProviderCredits, extractByCredit } from "../src/credits";
 import { parseKrc } from "../src/providers/kugou";
 import { parseQrc } from "../src/providers/qq";
@@ -49,6 +49,67 @@ describe("native word-sync conversion", () => {
     ) as any;
     expect(lyrics.Content[0].ProviderTranslatedText).toBeUndefined();
     expect(lyrics.IncludesTranslation).toBe(false);
+  });
+
+  it("treats a NetEase Cloud Music instrumental sentinel as no usable lyrics", () => {
+    expect(toLineLyrics(
+      "[00:00.00] 纯音乐，请欣赏。 ",
+      180_000,
+      "netease",
+    )).toBeUndefined();
+
+    expect(toSyllableLyrics([{
+      startMs: 0,
+      durationMs: 2000,
+      words: [
+        { text: "纯音乐", startMs: 0, durationMs: 800 },
+        { text: ",请欣赏", startMs: 800, durationMs: 1200 },
+      ],
+    }], "netease")).toBeUndefined();
+  });
+
+  it("does not discard a real NetEase lyric document containing the sentinel text", () => {
+    const lyrics = toLineLyrics(
+      "[00:00.00]纯音乐，请欣赏\n[00:02.00]actual lyric",
+      5000,
+      "netease",
+    ) as any;
+    expect(lyrics.Content.map((line: any) => line.Text)).toEqual(["纯音乐，请欣赏", "actual lyric"]);
+  });
+
+  it("removes QQ marker-only lyric lines and sidecars", () => {
+    const lines = attachSidecars([
+      {
+        startMs: 0,
+        durationMs: 1000,
+        words: [{ text: "//", startMs: 0, durationMs: 1000 }],
+      },
+      {
+        startMs: 1000,
+        durationMs: 1000,
+        words: [{ text: "Hmm", startMs: 1000, durationMs: 1000 }],
+      },
+    ], "[00:00.00]translation for removed marker\n[00:01.00] ／／ ", "[00:01.00]//");
+    const lyrics = toSyllableLyrics(lines, "qq") as any;
+
+    expect(lyrics.Content).toHaveLength(1);
+    expect(lyrics.Content[0].Lead.Syllables.map((word: any) => word.Text).join("")).toBe("Hmm");
+    expect(lyrics.Content[0].Lead.ProviderTranslatedText).toBeUndefined();
+    expect(lyrics.Content[0].Lead.ProviderRomanizedText).toBeUndefined();
+    expect(lyrics.IncludesTranslation).toBe(false);
+    expect(lyrics.IncludesRomanization).toBe(false);
+  });
+
+  it("preserves QQ lyric text that merely contains slashes", () => {
+    const lyrics = toSyllableLyrics([{
+      startMs: 0,
+      durationMs: 1000,
+      words: [{ text: "left // right", startMs: 0, durationMs: 1000 }],
+      translation: "translation // note",
+    }], "qq") as any;
+
+    expect(lyrics.Content[0].Lead.Syllables[0].Text).toBe("left // right");
+    expect(lyrics.Content[0].Lead.ProviderTranslatedText).toBe("translation // note");
   });
 
   it("preserves distinct NetEase Cloud Music synced-lyrics and translation contributors", () => {
