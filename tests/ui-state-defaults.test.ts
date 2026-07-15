@@ -19,12 +19,14 @@ const storage = new Map<string, string>();
 
 const {
   UI_STATE_KEY,
+  $providerTranslationsEnabled,
   $chineseTones,
   $showBuiltInTranslationButton,
   $translationEnabled,
 } = await import("../src/utils/uiState.ts");
 
 test("Chinese tones default on while built-in translation stays off", () => {
+  assert.equal($providerTranslationsEnabled.get(), true);
   assert.equal($chineseTones.get(), true);
   assert.equal($translationEnabled.get(), false);
   assert.equal($showBuiltInTranslationButton.get(), true);

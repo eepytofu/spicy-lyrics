@@ -8,6 +8,7 @@ import {
 import {
   $chineseTones,
   $chineseCharacterForm,
+  $providerTranslationsEnabled,
   $chineseTranslitMode,
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
@@ -88,6 +89,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const chineseTranslitMode = useStore($chineseTranslitMode);
   const chineseTones = useStore($chineseTones);
   const chineseCharacterForm = useStore($chineseCharacterForm);
+  const providerTranslationsEnabled = useStore($providerTranslationsEnabled);
   const japaneseReadingMode = useStore($japaneseReadingMode);
   const koreanDisplayMode = useStore($koreanDisplayMode);
   const cyrillicRomanizationMode = useStore($cyrillicRomanizationMode);
@@ -110,9 +112,10 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
   const showKoreanDisplay = matches(query, "Korean Display", "Choose Korean transliteration mode for the extra romanized line.");
   const showCyrillicRomanization = matches(query, "Cyrillic Language", "Choose Russian or Ukrainian Cyrillic romanization rules.");
   const showCyrillicKeepSigns = matches(query, "Keep Cyrillic Signs", "Preserve Cyrillic hard and soft sign marks.");
-  const showLyricsTranslation = matches(query, "Built-in Lyrics Translation", "Use the built-in Google Translate fallback under each line.");
-  const showTranslationTarget = matches(query, "Built-in Translation Target Language", "Language used by built-in lyrics translation.");
-  const showTranslationQuickButton = matches(query, "Built-in Translation Quick Button", "Show the built-in translation toggle in lyrics controls.");
+  const showLyricsTranslation = matches(query, "Google Translation Fallback", "Translate lines without a source translation into the selected language.");
+  const showProviderTranslations = matches(query, "Source Translations", "Show translations supplied with the lyrics. Languages may vary between lines.");
+  const showTranslationTarget = matches(query, "Google Target Language", "Choose the language used for Google fallback translations.");
+  const showTranslationQuickButton = matches(query, "Google Translation Quick Button", "Show the Google translation fallback toggle in lyrics controls.");
   const showChineseQuickButton = matches(query, "Chinese Transliteration Quick Button", "Show the pinyin/jyutping toggle in lyrics controls when Chinese lyrics are detected.");
   const showCopyFormat = matches(query, "Copy Lyrics Format", "Choose what the lyrics copy button writes to clipboard.");
   const showLyricsSources = matches(query, "Lyrics Sources", "Choose providers, priority, external Worker, and custom servers.");
@@ -129,6 +132,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
     showCyrillicRomanization ||
     showCyrillicKeepSigns ||
     showLyricsTranslation ||
+    showProviderTranslations ||
     showTranslationTarget ||
     showTranslationQuickButton ||
     showChineseQuickButton ||
@@ -243,14 +247,20 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
         </Row>
       )}
 
+      {showProviderTranslations && (
+        <Row label="Source Translations" description="Show translations supplied with the lyrics. Languages may vary between lines.">
+          <Toggle checked={providerTranslationsEnabled} onChange={(v) => $providerTranslationsEnabled.set(v)} />
+        </Row>
+      )}
+
       {showLyricsTranslation && (
-        <Row label="Built-in Lyrics Translation" description="Use the built-in Google Translate fallback under each line.">
+        <Row label="Google Translation Fallback" description="Translate lines without a source translation into the selected language.">
           <Toggle checked={translationEnabled} onChange={(v) => $translationEnabled.set(v)} />
         </Row>
       )}
 
       {showTranslationQuickButton && (
-        <Row label="Built-in Translation Quick Button" description="Show the built-in translation toggle in lyrics controls.">
+        <Row label="Google Translation Quick Button" description="Show the Google translation fallback toggle in lyrics controls.">
           <Toggle checked={showBuiltInTranslationButton} onChange={(v) => $showBuiltInTranslationButton.set(v)} />
         </Row>
       )}
@@ -262,7 +272,7 @@ export default function LyricsSection({ query, sectionFilter }: Props) {
       )}
 
       {showTranslationTarget && (
-        <Row label="Built-in Translation Target Language" description="Language used by built-in lyrics translation.">
+        <Row label="Google Target Language" description="Choose the language used for Google fallback translations.">
           <Select
             value={translationTargetLang}
             options={optionValues(TRANSLATION_TARGETS)}

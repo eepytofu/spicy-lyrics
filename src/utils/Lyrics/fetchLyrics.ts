@@ -33,7 +33,12 @@ import { LocalLyricsManager } from "./manager/index.ts";
 import { LyricsQueueRetry } from "./LyricsQueueRetry.ts";
 import { GetExpireStore } from "../../modules/Store.ts";
 import { SLObjPack } from "../objpack.ts";
-import { translateLyrics } from "./Fork/Translation.ts";
+import {
+  captureSourceTranslations,
+  normalizeProviderTranslations,
+  TRANSLATION_SIDECAR_SCHEMA_VERSION,
+  translateLyrics,
+} from "./Fork/Translation.ts";
 import { $chineseCharacterForm, $japaneseReadingMode } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { fetchLyricsFromProviders } from "./ExternalSources.ts";
@@ -61,13 +66,13 @@ function isLyricsPipelineCurrent(epoch: number): boolean {
 }
 
 // recently updated key structure - changed name
-export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 1, {
+export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 2, {
   Unit: "Days",
   Duration: 3,
 }, isDev as true);
 
 const lyricsPacker = new SLObjPack();
-const LYRICS_SOURCE_CACHE_VERSION = 2;
+const LYRICS_SOURCE_CACHE_VERSION = 3;
 
 function getActiveLyricsSourceOrder(): LyricsSourceProviderId[] {
   const custom = parseCustomLyricsServers($customLyricsServers.get());
@@ -93,7 +98,9 @@ function isExternalProviderLyrics(lyrics: any): boolean {
 
 function isSourceCacheCompatible(lyrics: any): boolean {
   if (!lyrics || typeof lyrics !== "object") return false;
-  if (lyrics.source === "ldb") return true;
+  if (lyrics.source === "ldb") {
+    return lyrics.TranslationSidecarSchemaVersion === TRANSLATION_SIDECAR_SCHEMA_VERSION;
+  }
   if (isExternalProviderLyrics(lyrics)) {
     return lyrics.LyricsSourceCacheSignature === lyricsSourceCacheSignature();
   }
@@ -259,6 +266,7 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
   if (lyrics) {
     lyrics.uri = lyrics.uri || uri;
     lyrics.id = lyrics.id || trackId;
+    normalizeProviderTranslations(lyrics);
   }
 
   const processingContextKey = currentProcessingContextKey();
@@ -466,6 +474,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
   if (localLyric) {
     const lyricsData = { ...localLyric, uri };
+    captureSourceTranslations(lyricsData);
     $currentLyricsData.set(JSON.stringify(lyricsData));
     presentLyrics(lyricsData);
     return [lyricsData, 200];
@@ -556,6 +565,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     lyrics.id = trackId;
     lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
     lyrics.DetectedChinese = detectChineseQuick(lyrics);
+    captureSourceTranslations(lyrics);
     const needsRomanization = hasRomanizationWorkQuick(lyrics);
     const needsTranslation = hasTranslationWorkQuick(lyrics);
 

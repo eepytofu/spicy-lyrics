@@ -33,6 +33,8 @@ export type JapaneseReadable = {
   Text?: string;
   TransliteratedText?: string;
   RomanizedText?: string;
+  ProviderTranslatedText?: string;
+  ProviderTranslationLanguage?: string;
   JapaneseReading?: JapaneseReading;
   RomajiSpaceBefore?: boolean;
   ReadingRenderPlan?: RenderPlan;

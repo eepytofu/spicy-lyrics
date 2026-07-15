@@ -15,6 +15,7 @@ import { CleanUpIsByCommunity } from "../Applyer/Credits/ApplyIsByCommunity.tsx"
 import { IsCompactMode } from "../../../components/Utils/CompactMode.ts";
 import Fullscreen from "../../../components/Utils/Fullscreen.ts";
 import { SpotifyPlayer } from "../../../components/Global/SpotifyPlayer.ts";
+import { $providerTranslationsEnabled } from "../../uiState.ts";
 
 /**
  * Union type for all lyrics data types
@@ -160,13 +161,14 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
   const lyrics = descriptor as LyricsData;
 
   const romanize = isRomanized;
+  const showProviderTranslations = $providerTranslationsEnabled.get();
 
   if (lyrics.Type === "Syllable") {
-    ApplySyllableLyrics(lyrics as any, romanize);
+    ApplySyllableLyrics(lyrics as any, romanize, showProviderTranslations);
   } else if (lyrics.Type === "Line") {
-    ApplyLineLyrics(lyrics as any, romanize);
+    ApplyLineLyrics(lyrics as any, romanize, showProviderTranslations);
   } else if (lyrics.Type === "Static") {
     // Type assertion to StaticLyricsData since we've verified the Type is "Static"
-    ApplyStaticLyrics(lyrics as StaticLyricsData, romanize);
+    ApplyStaticLyrics(lyrics as StaticLyricsData, romanize, showProviderTranslations);
   }
 }

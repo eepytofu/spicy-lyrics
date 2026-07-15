@@ -66,6 +66,13 @@ test("disabled translation key ignores target language", () => {
   );
 });
 
+test("provider translation visibility is render-only", () => {
+  assert.equal(
+    buildProcessingContextKey({ ...baseContext, providerTranslationsEnabled: true } as ProcessingContext),
+    buildProcessingContextKey({ ...baseContext, providerTranslationsEnabled: false } as ProcessingContext)
+  );
+});
+
 test("Korean display mode is part of processing context key", () => {
   assert.notEqual(
     buildProcessingContextKey({ ...baseContext, koreanDisplayMode: "rrStandard" }),

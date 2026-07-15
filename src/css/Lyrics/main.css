@@ -234,7 +234,9 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.55);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.55);
-  text-shadow: inherit;
+  /* Reading/translation sidecars keep a stable shadow instead of inheriting
+     the base lyric's karaoke Active -> Sung glow transition. */
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
   background: none;
 }
@@ -264,7 +266,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   --gradient-position: -20%;
   --gradient-degrees: 90deg;
   --gradient-alpha-end: 0.35;
-  text-shadow: inherit;
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
 }
 
@@ -278,7 +280,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   color: rgba(255, 255, 255, 0.45);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.45);
   font-style: italic;
-  text-shadow: inherit;
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
   background: none;
 }

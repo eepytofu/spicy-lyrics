@@ -17,6 +17,7 @@ Lyrics:
   - Includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, LRCLIB, and custom servers, plus self-hosted AMLL TTML DB, QQ Music (QQ音乐), KuGou (酷狗音乐), and NetEase Cloud Music (网易云音乐).
 - Word timing, translations, duet roles, and background vocals are kept when the source provides them.
 - External provider contributor metadata is shown when available. NetEase Cloud Music synced-lyrics and translation contributors link to their profiles; QQ Music and KuGou `[by:]` credits remain plain text.
+- Translations supplied with lyrics can be shown independently from the Google Translate fallback, with language-aware glyphs.
 - Japanese readings, Chinese character conversion and Pinyin/Jyutping, plus Korean, Cyrillic, and Greek romanization.
   - Compatibility fix: mixed Chinese/Japanese tracks route readings per line, and Japanese lines are repaired for analysis when community-supplied lyrics hosted by Chinese services use Simplified Chinese forms in place of Japanese kanji (who simplified the shinjitai, man? That's fucked up).
 - Translation for static, line-synced, and syllable-synced lyrics, including supported Indic scripts.

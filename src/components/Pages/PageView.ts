@@ -16,6 +16,7 @@ import {
   $showChineseTranslitButton,
   $translationEnabled,
   $translationTargetLang,
+  $providerTranslationsEnabled,
 } from "../../utils/uiState.ts";
 import "../../css/Loaders/DotLoader.css";
 import { DestroyAllLyricsContainers } from "../../utils/Lyrics/Applyer/CreateLyricsContainer.ts";
@@ -708,7 +709,7 @@ function AppendViewControls(ReAppend: boolean = false) {
         if (!isPip) {
           Tooltips.Close = Spicetify.Tippy(translationToggle, {
             ...Spicetify.TippyProps,
-            content: translationEnabled ? "Disable Built-in Translation" : "Enable Built-in Translation",
+            content: translationEnabled ? "Disable Google Translation Fallback" : "Enable Google Translation Fallback",
           });
         }
         translationToggle.addEventListener("click", () => {
@@ -1056,6 +1057,9 @@ $koreanDisplayMode.listen(queueProcessingSettingsRefresh);
 $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
 $translationEnabled.listen(queueProcessingSettingsRefresh);
+$providerTranslationsEnabled.listen(() => {
+  rerenderCurrentLyrics();
+});
 $translationTargetLang.listen(() => {
   if ($translationEnabled.get()) queueProcessingSettingsRefresh();
 });

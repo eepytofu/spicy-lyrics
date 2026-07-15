@@ -58,7 +58,6 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
     const translation = cleanSidecarText(line.translation, provider);
     if (translation) {
       Lead.ProviderTranslatedText = translation;
-      Lead.TranslatedText = translation;
     }
     const romanization = cleanSidecarText(line.romanization, provider);
     if (romanization) {
@@ -75,6 +74,7 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
     Type: "Syllable", StartTime: (Content[0].Lead as any).StartTime,
     EndTime: (Content.at(-1)!.Lead as any).EndTime, Content,
     IncludesTranslation: includesTranslation,
+    HasProviderTranslations: includesTranslation,
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
@@ -115,7 +115,7 @@ export function toLineLyrics(
     return {
       Type: "Vocal", Text: row.text, StartTime: row.startMs / 1000,
       EndTime: Math.max(row.startMs, rows[index + 1]?.startMs ?? durationMs) / 1000, OppositeAligned: false,
-      ...(translated ? { ProviderTranslatedText: translated, TranslatedText: translated } : {}),
+      ...(translated ? { ProviderTranslatedText: translated } : {}),
       ...(romanized ? { ProviderRomanizedText: romanized, RomanizedText: romanized, TransliteratedText: romanized } : {}),
     };
   });
@@ -124,6 +124,7 @@ export function toLineLyrics(
   return {
     Type: "Line", StartTime: Content[0].StartTime, EndTime: Content.at(-1)!.EndTime, Content,
     IncludesTranslation: includesTranslation,
+    HasProviderTranslations: includesTranslation,
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],

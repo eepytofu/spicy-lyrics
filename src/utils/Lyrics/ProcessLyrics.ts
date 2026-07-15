@@ -49,7 +49,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 33;
+export const LYRICS_PROCESSING_VERSION = 34;
 export const READING_PLAN_SCHEMA_VERSION = 1;
 
 // Constants

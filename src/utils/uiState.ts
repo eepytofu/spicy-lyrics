@@ -90,6 +90,7 @@ export const $cyrillicRomanizationMode = persistAtom<"Russian" | "Ukrainian">("c
 export const $cyrillicKeepSigns = persistAtom<boolean>("cyrillicKeepSigns", false);
 export const $translationEnabled = persistAtom<boolean>("translationEnabled", false);
 export const $translationTargetLang = persistAtom<string>("translationTargetLang", "en");
+export const $providerTranslationsEnabled = persistAtom<boolean>("providerTranslationsEnabled", true);
 export const $lyricsCopyFormat = persistAtom<"plain" | "timestamps" | "translation" | "metadata">("lyricsCopyFormat", "plain");
 export const $flatViewControls = persistAtom<boolean>("flatViewControls", true);
 export const $forceDarkBackground = persistAtom<boolean>("forceDarkBackground", false);

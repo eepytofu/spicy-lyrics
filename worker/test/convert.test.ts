@@ -32,11 +32,12 @@ describe("native word-sync conversion", () => {
     ) as any;
     expect(lyrics.Content[0]).toMatchObject({
       ProviderTranslatedText: "translation",
-      TranslatedText: "translation",
       ProviderRomanizedText: "romanization",
       RomanizedText: "romanization",
     });
+    expect(lyrics.Content[0].TranslatedText).toBeUndefined();
     expect(lyrics.IncludesTranslation).toBe(true);
+    expect(lyrics.HasProviderTranslations).toBe(true);
     expect(lyrics.IncludesRomanization).toBe(true);
   });
 

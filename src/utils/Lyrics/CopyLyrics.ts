@@ -2,6 +2,7 @@ import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import { $currentLyricsData } from "../stores.ts";
 import { $lyricsCopyFormat } from "../uiState.ts";
 import { isMeaningfullyDifferent } from "./TextCompare.ts";
+import { preferredCopyTranslation } from "./TranslationSidecar.ts";
 
 export type LyricsCopyFormat = "plain" | "timestamps" | "translation" | "metadata";
 
@@ -48,7 +49,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
     return (lyrics.Lines ?? [])
       .map((line: any) => ({
         text: cleanText(line?.Text),
-        translatedText: cleanText(line?.TranslatedText),
+        translatedText: cleanText(preferredCopyTranslation(line)),
       }))
       .filter((line: CopyLine) => line.text);
   }
@@ -58,7 +59,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
       .map((line: any) => ({
         text: cleanText(line?.Text),
         startTime: line?.StartTime,
-        translatedText: cleanText(line?.TranslatedText),
+        translatedText: cleanText(preferredCopyTranslation(line)),
       }))
       .filter((line: CopyLine) => line.text);
   }
@@ -71,7 +72,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
         out.push({
           text: leadText,
           startTime: group?.Lead?.StartTime,
-          translatedText: cleanText(group?.Lead?.TranslatedText),
+          translatedText: cleanText(preferredCopyTranslation(group?.Lead)),
         });
       }
       for (const bg of group?.Background ?? []) {
@@ -80,7 +81,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
           out.push({
             text: bgText,
             startTime: bg?.StartTime,
-            translatedText: cleanText(bg?.TranslatedText),
+            translatedText: cleanText(preferredCopyTranslation(bg)),
           });
         }
       }

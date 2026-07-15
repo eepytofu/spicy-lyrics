@@ -7,6 +7,7 @@
 
 import { $japaneseReadingMode } from "../../uiState.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
+import { resolveTranslationSidecars } from "../TranslationSidecar.ts";
 import {
   JapaneseKanaTextTest,
   type FuriganaSegment,
@@ -20,6 +21,8 @@ export type ReadingRenderOptions = {
   useRomanized: boolean;
   romanizationPending?: boolean;
   translationPending?: boolean;
+  translationLanguage?: string;
+  showProviderTranslations?: boolean;
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
   reserveFurigana?: boolean;
@@ -207,6 +210,9 @@ export function appendTranslatedBelow(
   const translatedElem = document.createElement("div");
   translatedElem.className = `translated-below${options.translationPending && !hasDistinctTranslation ? " translation-placeholder" : ""}`;
   translatedElem.textContent = hasDistinctTranslation ? translatedText! : "";
+  if (hasDistinctTranslation && options.translationLanguage) {
+    translatedElem.lang = options.translationLanguage;
+  }
   lineElem.appendChild(translatedElem);
   return true;
 }
@@ -217,7 +223,16 @@ export function appendLineExtras(
   options: ReadingRenderOptions
 ): void {
   appendRomanizedBelow(lineElem, entry, options);
-  appendTranslatedBelow(lineElem, entry.Text || "", entry.TranslatedText, options);
+  const translations = resolveTranslationSidecars(entry);
+  const providerTranslation = options.showProviderTranslations
+    ? translations.provider
+    : undefined;
+  appendTranslatedBelow(lineElem, entry.Text || "", providerTranslation, {
+    ...options,
+    translationLanguage: translations.providerLanguage,
+    translationPending: false,
+  });
+  appendTranslatedBelow(lineElem, entry.Text || "", translations.generic, options);
 }
 
 export function appendSyllableRomanizedBelow(
@@ -225,6 +240,7 @@ export function appendSyllableRomanizedBelow(
   syllables: SyllableLike[],
   sourceText: string,
   groupRomanizedText: string | undefined,
+  groupProviderTranslatedText: string | undefined,
   groupTranslatedText: string | undefined,
   animatorEntries: Array<{ RomajiElement?: HTMLElement }> | undefined,
   readingPlan: RenderPlan | undefined,
@@ -275,5 +291,17 @@ export function appendSyllableRomanizedBelow(
     }
   }
 
-  appendTranslatedBelow(lineElem, sourceText, groupTranslatedText, options);
+  const translations = resolveTranslationSidecars({
+    ProviderTranslatedText: groupProviderTranslatedText,
+    TranslatedText: groupTranslatedText,
+  });
+  const providerTranslation = options.showProviderTranslations
+    ? translations.provider
+    : undefined;
+  appendTranslatedBelow(lineElem, sourceText, providerTranslation, {
+    ...options,
+    translationLanguage: translations.providerLanguage,
+    translationPending: false,
+  });
+  appendTranslatedBelow(lineElem, sourceText, translations.generic, options);
 }

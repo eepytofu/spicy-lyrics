@@ -202,7 +202,11 @@ const appendGroupedWord = (
   return null;
 };
 
-export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = false): void {
+export function ApplySyllableLyrics(
+  data: LyricsData,
+  UseRomanized: boolean = false,
+  ShowProviderTranslations: boolean = false
+): void {
   if (!$lyricsContainerExists.get()) return;
   EmitNotApplyed();
 
@@ -349,6 +353,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
       useRomanized: UseRomanized,
       romanizationPending,
       translationPending,
+      showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
     };
@@ -420,6 +425,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
       line.Lead.Syllables,
       leadSourceText,
       leadRomanizedText,
+      line.Lead.ProviderTranslatedText,
       line.Lead.TranslatedText,
       leadEntries,
       line.Lead.ReadingRenderPlan,
@@ -488,6 +494,7 @@ export function ApplySyllableLyrics(data: LyricsData, UseRomanized: boolean = fa
           bg.Syllables,
           bgSourceText,
           bgRomanizedText,
+          bg.ProviderTranslatedText,
           bg.TranslatedText,
           bgEntries,
           bg.ReadingRenderPlan,

@@ -42,7 +42,11 @@ export interface StaticLyricsData {
  * Apply static lyrics to the lyrics container
  * @param data - Static lyrics data
  */
-export function ApplyStaticLyrics(data: StaticLyricsData, UseRomanized: boolean = false): void {
+export function ApplyStaticLyrics(
+  data: StaticLyricsData,
+  UseRomanized: boolean = false,
+  ShowProviderTranslations: boolean = false
+): void {
   if (!$lyricsContainerExists.get()) return;
 
   EmitNotApplyed();
@@ -90,6 +94,7 @@ export function ApplyStaticLyrics(data: StaticLyricsData, UseRomanized: boolean 
       useRomanized: UseRomanized,
       romanizationPending,
       translationPending,
+      showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
     };
 

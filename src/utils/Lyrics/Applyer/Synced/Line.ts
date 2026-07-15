@@ -43,7 +43,11 @@ interface LyricsData {
   styles?: Record<string, string>;
 }
 
-export function ApplyLineLyrics(data: LyricsData, UseRomanized: boolean = false): void {
+export function ApplyLineLyrics(
+  data: LyricsData,
+  UseRomanized: boolean = false,
+  ShowProviderTranslations: boolean = false
+): void {
   if (!$lyricsContainerExists.get()) return;
   EmitNotApplyed();
 
@@ -186,6 +190,7 @@ export function ApplyLineLyrics(data: LyricsData, UseRomanized: boolean = false)
       useRomanized: UseRomanized,
       romanizationPending,
       translationPending,
+      showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
     };

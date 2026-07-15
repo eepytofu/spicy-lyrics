@@ -462,6 +462,124 @@ export async function batchTranslate(
 
 // ─── Lyrics Translation ───────────────────────────────────────────────────────
 
+type TranslationLineRef = { obj: any; sourceText: string };
+
+function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
+  const lineRefs: TranslationLineRef[] = [];
+
+  if (lyrics.Type === "Static") {
+    for (const line of lyrics.Lines) {
+      lineRefs.push({ obj: line, sourceText: line.Text || "" });
+    }
+  } else if (lyrics.Type === "Line") {
+    for (const vocalGroup of lyrics.Content) {
+      if (vocalGroup.Text) {
+        lineRefs.push({ obj: vocalGroup, sourceText: vocalGroup.Text });
+      }
+    }
+  } else if (lyrics.Type === "Syllable") {
+    for (const vocalGroup of lyrics.Content) {
+      if (vocalGroup.Type === "Vocal") {
+        // Build full line text from syllables
+        const lineText = joinSyllableText(vocalGroup.Lead.Syllables);
+        lineRefs.push({ obj: vocalGroup.Lead, sourceText: lineText });
+
+        // Background vocals
+        if (vocalGroup.Background) {
+          for (const bg of vocalGroup.Background) {
+            const bgText = joinSyllableText(bg.Syllables);
+            lineRefs.push({ obj: bg, sourceText: bgText });
+          }
+        }
+      }
+    }
+  }
+
+  return lineRefs;
+}
+
+function hasGenericTranslation(ref: TranslationLineRef): boolean {
+  return typeof ref.obj.TranslatedText === "string"
+    && shouldDisplayTranslation(ref.sourceText, ref.obj.TranslatedText);
+}
+
+export const TRANSLATION_SIDECAR_SCHEMA_VERSION = 1;
+
+/**
+ * Capture translations that arrived with freshly fetched lyrics before the
+ * built-in translator runs. This is the ownership boundary for native APIs,
+ * TTML, external Workers, and custom servers using the native lyric schema.
+ */
+export function captureSourceTranslations(lyrics: any): number {
+  const lineRefs = collectTranslationLineRefs(lyrics);
+  let captured = 0;
+
+  for (const ref of lineRefs) {
+    const existingProvider = typeof ref.obj.ProviderTranslatedText === "string"
+      ? ref.obj.ProviderTranslatedText.trim()
+      : "";
+    const sourceTranslation = existingProvider || (
+      typeof ref.obj.TranslatedText === "string" ? ref.obj.TranslatedText.trim() : ""
+    );
+
+    if (shouldDisplayTranslation(ref.sourceText, sourceTranslation)) {
+      ref.obj.ProviderTranslatedText = sourceTranslation;
+      const language = ref.obj.ProviderTranslationLanguage ?? ref.obj.TranslatedTextLanguage;
+      if (typeof language === "string" && language.trim()) {
+        ref.obj.ProviderTranslationLanguage = language.trim();
+      }
+      captured++;
+    }
+
+    delete ref.obj.TranslatedText;
+    delete ref.obj.TranslatedTextLanguage;
+    delete ref.obj.TranslatedTextSource;
+    delete ref.obj.ChineseProviderTranslatedText;
+  }
+
+  lyrics.TranslationSidecarSchemaVersion = TRANSLATION_SIDECAR_SCHEMA_VERSION;
+  normalizeProviderTranslations(lyrics);
+  return captured;
+}
+
+/**
+ * Normalize provider sidecars without applying a display preference. Older
+ * Workers and caches duplicated ProviderTranslatedText into TranslatedText;
+ * remove only that matching legacy copy while preserving a distinct built-in
+ * target-language translation.
+ */
+export function normalizeProviderTranslations(lyrics: any): number {
+  const lineRefs = collectTranslationLineRefs(lyrics);
+  let available = 0;
+
+  for (const ref of lineRefs) {
+    const legacyProvider = typeof ref.obj.ChineseProviderTranslatedText === "string"
+      ? ref.obj.ChineseProviderTranslatedText.trim()
+      : "";
+    if (!ref.obj.ProviderTranslatedText && legacyProvider) {
+      ref.obj.ProviderTranslatedText = legacyProvider;
+    }
+    const providerTranslation = typeof ref.obj.ProviderTranslatedText === "string"
+      ? ref.obj.ProviderTranslatedText.trim()
+      : "";
+    const wasProviderDisplay = ref.obj.TranslatedTextSource === "chinese-provider"
+      || (!!providerTranslation && sameComparableText(ref.obj.TranslatedText, providerTranslation));
+
+    if (wasProviderDisplay) {
+      delete ref.obj.TranslatedText;
+      delete ref.obj.TranslatedTextLanguage;
+      delete ref.obj.TranslatedTextSource;
+    }
+
+    delete ref.obj.ChineseProviderTranslatedText;
+    if (shouldDisplayTranslation(ref.sourceText, providerTranslation)) available++;
+  }
+
+  lyrics.HasProviderTranslations = available > 0;
+  lyrics.IncludesTranslation = lyrics.HasProviderTranslations || lineRefs.some(hasGenericTranslation);
+  return available;
+}
+
 /**
  * Translate all lines in the lyrics object and store as TranslatedText.
  * Called after romanization is complete.
@@ -516,7 +634,6 @@ export async function translateLyrics(lyrics: any): Promise<void> {
   for (let index = 0; index < lineRefs.length; index++) {
     const providerTranslation = lineRefs[index].obj.ProviderTranslatedText;
     if (typeof providerTranslation === "string" && shouldDisplayTranslation(lineTexts[index], providerTranslation)) {
-      lineRefs[index].obj.TranslatedText = providerTranslation;
       hasProviderTranslation[index] = true;
       providerTranslationCount++;
     }
