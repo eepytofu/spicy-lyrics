@@ -32,7 +32,6 @@ import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
 import { ApplyProviderCredits } from "../Credits/ApplyProviderCredits.ts";
 import {
   appendSyllableRomanizedBelow,
-  hasFuriganaCrossingTimedUnits,
   isJapaneseEntry,
   renderBaseTextWithReadings,
   shouldRenderFurigana,
@@ -152,31 +151,6 @@ const createSyllableWord = (
   word.classList.add("word");
   applyWordPositionClasses(word, syllable, index, all);
   registerSyllableWord(word, syllable, totalDuration, isBackground);
-  return word;
-};
-
-const createLineLevelJapaneseWord = (
-  group: TimedSyllableGroup,
-  sourceText: string,
-  renderOptions: ReadingRenderOptions,
-  isBackground: boolean = false
-): HTMLElement => {
-  const word = document.createElement("span");
-  const totalDuration = ConvertTime(group.EndTime) - ConvertTime(group.StartTime);
-  const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
-  renderBaseTextWithReadings(word, { ...group, Text: sourceText }, renderOptions);
-
-  if (!$simpleLyricsMode.get()) {
-    word.style.setProperty("--gradient-position", isBackground ? "0%" : "-20%");
-    word.style.setProperty("--text-shadow-opacity", "0%");
-    word.style.setProperty("--text-shadow-blur-radius", "4px");
-    word.style.scale = IdleLyricsScale.toString();
-    word.style.transform = `translateY(calc(${sizeVar} * 0.01))`;
-  }
-
-  if (isBackground) word.classList.add("bg-word");
-  word.classList.add("word", "line-level-japanese-word");
-  registerSyllableWord(word, { Text: sourceText, StartTime: group.StartTime, EndTime: group.EndTime }, totalDuration, isBackground);
   return word;
 };
 
@@ -393,12 +367,12 @@ export function ApplySyllableLyrics(
     const leadHasFurigana = shouldRenderFurigana(line.Lead, lineRenderOptions) || line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
     const leadUsesSemanticGroups = line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
     const leadRenderOptions = { ...lineRenderOptions, reserveFurigana: leadHasFurigana };
-    const leadFuriganaCrossesTiming = leadHasFurigana && hasFuriganaCrossingTimedUnits(line.Lead.ReadingRenderPlan);
     const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
 
-    if (leadFuriganaCrossesTiming) {
-      lineElem.appendChild(createLineLevelJapaneseWord(line.Lead, leadSourceText, leadRenderOptions));
-    } else line.Lead.Syllables.forEach((lead, iL, aL) => {
+    // Ruby crossing timed syllables cannot be drawn per fragment without
+    // duplication; skip it and keep per-syllable karaoke timing until the
+    // timed furigana group renderer lands. Never collapse the line.
+    line.Lead.Syllables.forEach((lead, iL, aL) => {
       if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
         lineElem.classList.add("rtl");
       }
@@ -461,12 +435,9 @@ export function ApplySyllableLyrics(
         const bgUsesSemanticGroups = bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
         const bgWordRenderOptions = { ...bgRenderOptions, reserveFurigana: bgHasFurigana };
         const bgSourceText = bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
-        const bgFuriganaCrossesTiming = bgHasFurigana && hasFuriganaCrossingTimedUnits(bg.ReadingRenderPlan);
         const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
 
-        if (bgFuriganaCrossesTiming) {
-          lineE.appendChild(createLineLevelJapaneseWord(bg, bgSourceText, bgWordRenderOptions, true));
-        } else bg.Syllables.forEach((bw, bI, bA) => {
+        bg.Syllables.forEach((bw, bI, bA) => {
           if (isRtl(bw.Text) && !lineE.classList.contains("rtl")) {
             lineE.classList.add("rtl");
           }
