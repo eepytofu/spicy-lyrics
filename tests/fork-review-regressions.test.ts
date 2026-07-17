@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
+import { annotateKoreanLine } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
 import type { ParsedLine, ReadingAnnotation } from "../src/utils/Lyrics/Processing/Model.ts";
 
 function charSpans(text: string): ParsedLine {
@@ -62,4 +63,16 @@ test("crossing-ruby detection accepts annotation-shaped furigana", async () => {
     furigana: [{ canonicalRange: { startCp: 0, endCp: 1 }, reading: "か" }],
   };
   assert.equal(hasFuriganaCrossingTimedUnits(contained), false);
+});
+
+test("korean annotation stays aligned when normalization inserts whitespace", () => {
+  // One 5-syllable word with no canonical spaces: the readability splitter
+  // inserts a space ("사랑 합니다"), which used to shift every later unit.
+  const canonical = new DefaultCanonicalLineBuilder().build(charSpans("사랑합니다"));
+  const annotation = annotateKoreanLine(canonical, "rrStandard");
+  assert.equal(annotation.units.map((u) => u.text).join(""), "sarang hapnida");
+  assert.deepEqual(
+    annotation.units.map((u) => u.text),
+    ["sa", "rang", " hap", "ni", "da"],
+  );
 });
