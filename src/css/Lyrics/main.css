@@ -182,6 +182,13 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   justify-content: center;
 }
 
+/* Directly adjacent rubies must not overhang into each other; the packed
+   cluster is sized by its reading so neighboring readings never collide
+   and the base characters space apart instead. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-cluster-packed > .furigana-reading {
+  width: max-content;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading {
   grid-row: 1;
   width: max-content;
@@ -252,22 +259,41 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   max-width: none;
 }
 
-/* Karaoke fill sweep across the group window, mirroring the word gradient.
-   Uses its own position var so it does not inherit the host word's sweep;
-   !important outranks the base furigana rule that turns backgrounds off.
-   The soft gradient edge hides the fact that kana to kanji boundaries
-   inside the reading are unknown. Simple lyrics mode keeps the flat fill. */
-#SpicyLyricsPage:not(.SimpleLyricsMode) .LyricsContainer .LyricsContent .timed-furigana-reading {
-  background-image: linear-gradient(
-    var(--gradient-degrees, 90deg),
-    rgba(255, 255, 255, var(--gradient-alpha, 0.85)) var(--tfg-gradient-position, -20%),
-    rgba(255, 255, 255, var(--gradient-alpha-end, 0.5))
-      calc(var(--tfg-gradient-position, -20%) + 20% + var(--gradient-offset, 0%))
-  ) !important;
-  background-clip: text !important;
-  -webkit-background-clip: text !important;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+/* Ruby follows its line's state instead of running its own karaoke: dimmed
+   with the rest of an unsung line, normal ruby white once the line is
+   active or sung. Applies identically to compound and regular furigana.
+   (A ruby cannot paint its own background inside a background-clip: text
+   word, so state color is used; see the paint notes in project memory.) */
+#SpicyLyricsPage:not(.SimpleLyricsMode)
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .line
+  .furigana-reading {
+  transition: color 0.25s, -webkit-text-fill-color 0.25s;
+}
+
+#SpicyLyricsPage:not(.SimpleLyricsMode)
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .line.NotSung
+  .furigana-reading {
+  color: rgba(255, 255, 255, 0.4);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.4);
+}
+
+/* Time-synced lyrics: each ruby follows its own word's karaoke state via
+   the word's animated position. The steep ramp makes it a quick pop as the
+   word starts, not a gradual intra-ruby sweep; a ruby over a not-yet-sung
+   word stays dim like that word instead of outshining it. */
+#SpicyLyricsPage:not(.SimpleLyricsMode)
+  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
+  .line
+  .furigana-reading {
+  --ruby-on: clamp(0%, calc((var(--gradient-position, -20%) + 20%) * 4), 100%);
+  color: color-mix(in srgb, rgba(255, 255, 255, 0.85) var(--ruby-on), rgba(255, 255, 255, 0.45));
+  -webkit-text-fill-color: color-mix(
+    in srgb,
+    rgba(255, 255, 255, 0.85) var(--ruby-on),
+    rgba(255, 255, 255, 0.45)
+  );
 }
 
 /* Japanese semantic groups preserve readings, not visible source-text spaces. */

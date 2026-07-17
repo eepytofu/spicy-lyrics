@@ -115,12 +115,23 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
   let cursor = 0;
+  let lastRubyCluster: HTMLElement | null = null;
+  let lastRubyEnd = -1;
   for (const segment of segments) {
     if (segment.start < cursor) continue;
     appendPlainText(parent, text.slice(cursor, segment.start));
 
     const cluster = document.createElement("span");
     cluster.className = "furigana-cluster";
+
+    // Ruby may overhang plain neighbors, but never another ruby's base:
+    // directly adjacent readings (きょく|ぼし over 極|星) would collide.
+    // Packed clusters widen to their reading and space the base characters
+    // apart instead, the way print typesetting resolves it.
+    if (segment.start === lastRubyEnd && lastRubyCluster) {
+      lastRubyCluster.classList.add("furigana-cluster-packed");
+      cluster.classList.add("furigana-cluster-packed");
+    }
 
     const reading = document.createElement("span");
     reading.className = "furigana-reading";
@@ -132,6 +143,8 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
 
     cluster.append(reading, base);
     parent.appendChild(cluster);
+    lastRubyCluster = cluster;
+    lastRubyEnd = segment.end;
     cursor = segment.end;
   }
 
