@@ -26,6 +26,8 @@ export type ReadingRenderOptions = {
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
   reserveFurigana?: boolean;
+  /** Readings drawn once by an enclosing timed furigana group; member words skip their own copy. */
+  suppressedRubyReadings?: readonly string[];
 };
 
 type SyllableLike = JapaneseReadable & {
@@ -145,9 +147,14 @@ export function renderBaseTextWithReadings(
   const reading = getJapaneseReading(entry);
 
   if (shouldRenderFurigana(entry, options) && reading) {
-    element.classList.add("has-furigana");
-    appendFuriganaText(element, text, reading.furigana);
-    return true;
+    const segments = options.suppressedRubyReadings?.length
+      ? reading.furigana.filter((segment) => !options.suppressedRubyReadings!.includes(segment.reading))
+      : reading.furigana;
+    if (segments.length > 0) {
+      element.classList.add("has-furigana");
+      appendFuriganaText(element, text, segments);
+      return true;
+    }
   }
 
   if (

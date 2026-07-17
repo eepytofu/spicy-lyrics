@@ -167,6 +167,21 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   overflow: visible;
 }
 
+/* Readings wider than their base overhang the neighbors like typeset ruby
+   instead of widening the cluster and pushing the lyric text apart. The
+   reading must stay an in-flow, non-positioned grid item: a positioned
+   cluster subtree drops the base text out of the word's
+   background-clip: text mask and the lyric becomes invisible. A zero-width
+   item centers its overflowing text itself. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-cluster > .furigana-reading {
+  width: 0;
+  min-width: 0;
+  max-width: none;
+  justify-self: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading {
   grid-row: 1;
   width: max-content;
@@ -204,6 +219,57 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   white-space: nowrap;
 }
 
+/* One ruby drawn once above several timed syllables; timing stays per word.
+   Member words reserve the normal furigana row; the shared reading is
+   anchored inside the first member word so it follows that word's animated
+   scale, translateY, and glow like every per-word ruby. Lyric CJK glyphs are
+   full-width, so the code-point midpoint maps to em without measurement. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group.timed-furigana-group {
+  position: relative;
+  overflow: visible;
+}
+
+/* The anchor must stay OUT of the cluster grid flow: a grid item pinned to
+   cell (1,1) pushes the word's own reading into a phantom second column via
+   auto-placement, widening the cluster and shifting everything after it.
+   Absolute positioning emulates the rt row instead: readings bottom-align
+   at rt-size + gap from the word top, matching every per-word reading. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .timed-furigana-ruby-anchor {
+  position: absolute;
+  top: 0;
+  height: calc(var(--furigana-rt-size) + var(--furigana-rt-gap));
+  left: calc(var(--tfg-center-ch, 0) * 1em);
+  width: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent .timed-furigana-reading {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-50%);
+  max-width: none;
+}
+
+/* Karaoke fill sweep across the group window, mirroring the word gradient.
+   Uses its own position var so it does not inherit the host word's sweep;
+   !important outranks the base furigana rule that turns backgrounds off.
+   The soft gradient edge hides the fact that kana to kanji boundaries
+   inside the reading are unknown. Simple lyrics mode keeps the flat fill. */
+#SpicyLyricsPage:not(.SimpleLyricsMode) .LyricsContainer .LyricsContent .timed-furigana-reading {
+  background-image: linear-gradient(
+    var(--gradient-degrees, 90deg),
+    rgba(255, 255, 255, var(--gradient-alpha, 0.85)) var(--tfg-gradient-position, -20%),
+    rgba(255, 255, 255, var(--gradient-alpha-end, 0.5))
+      calc(var(--tfg-gradient-position, -20%) + 20% + var(--gradient-offset, 0%))
+  ) !important;
+  background-clip: text !important;
+  -webkit-background-clip: text !important;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
 /* Japanese semantic groups preserve readings, not visible source-text spaces. */
 #SpicyLyricsPage.SpicyRenderer
   .LyricsContainer
@@ -213,6 +279,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   > .word::after {
   margin-right: 0;
 }
+
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-row {
   display: flex;

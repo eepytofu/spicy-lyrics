@@ -37,6 +37,86 @@ export const Clamp = (value: number, min: number, max: number): number => {
 
 const LetterGlowMultiplier_Opacity = 185;
 
+// Per-channel hold points for timed furigana group members sit at each
+// spline's own peak (scale peaks at 0.7, glow's plateau ends at 0.6, lift
+// peaks at 0.9), so the release phase only ever descends and the compound
+// cannot "pop" right before it settles.
+const TimedGroupScaleHold = 0.7;
+const TimedGroupGlowHold = 0.6;
+const TimedGroupLiftHold = 0.9;
+
+type TimedGroupWindow = { start: number; firstEnd: number; lastStart: number; end: number };
+
+/**
+ * Envelope shared by a timed furigana group's ruby and its member words:
+ * rise with the first member's curve, hold at each channel's peak through
+ * the middle, release in sync with the last member's curve. This keeps the
+ * whole compound animating as one unit while every member still owns its
+ * gradient sweep and timing.
+ */
+const timedGroupEnvelope = (
+  times: TimedGroupWindow,
+  position: number
+): ((hold: number) => number) => {
+  if (position <= times.start) return () => 0;
+  if (position >= times.end) return () => 1;
+  if (position <= times.firstEnd) {
+    const attack = Clamp(
+      (position - times.start) / Math.max(times.firstEnd - times.start, 1),
+      0,
+      1
+    );
+    return (hold) => Math.min(attack, hold);
+  }
+  if (position < times.lastStart) return (hold) => hold;
+  const release = Clamp(
+    (position - times.lastStart) / Math.max(times.end - times.lastStart, 1),
+    0,
+    1
+  );
+  return (hold) => Math.max(hold, release);
+};
+
+/**
+ * The host word is group-driven (unified member animation), so the ruby
+ * simply inherits its scale, lift, and glow. Only two things stay
+ * animator-owned here: the karaoke fill sweep over the group window, and
+ * cancelling the anchor displacement caused by the host word scaling about
+ * its own center (which would otherwise sway long compounds).
+ */
+const applyTimedRubyState = (
+  word: {
+    TimedRubyElement?: HTMLElement;
+    TimedRubyAnchorElement?: HTMLElement;
+    TimedRubyAnchorOffsetEm?: number;
+    TimedGroupTimes?: TimedGroupWindow;
+    StartTime: number;
+    EndTime: number;
+  },
+  position: number,
+  hostWordScale: number
+): void => {
+  const ruby = word.TimedRubyElement;
+  const times = word.TimedGroupTimes;
+  if (!ruby || !times) return;
+  // Simple lyrics mode stubs word motion; the ruby stays static there too.
+  if ($simpleLyricsMode.get()) return;
+
+  const anchor = word.TimedRubyAnchorElement;
+  const safeHost = Math.max(hostWordScale || 1, 0.001);
+  if (anchor && typeof word.TimedRubyAnchorOffsetEm === "number") {
+    const tx = ((1 - safeHost) / safeHost) * word.TimedRubyAnchorOffsetEm;
+    setStyleIfChanged(anchor, "transform", `translate3d(${tx}em, 0, 0)`, 0);
+  }
+  const sweep =
+    position <= times.start
+      ? -20
+      : position >= times.end
+        ? 100
+        : -20 + 120 * Clamp((position - times.start) / Math.max(times.end - times.start, 1), 0, 1);
+  setStyleIfChanged(ruby, "--tfg-gradient-position", `${sweep}%`, 0.5);
+};
+
 const ScaleRange = [
   { Time: 0, Value: 0.95 },
   { Time: 0.7, Value: 1.0505 /* 1.025 */ },
@@ -761,6 +841,16 @@ export function Animate(position: number): void {
               targetGradientPos = 100;
             }
 
+            // Timed furigana group members lift, scale, and glow as one unit
+            // over the group's window; the gradient sweep keeps each word's
+            // own timing so the karaoke fill stays provider-accurate.
+            if (word.TimedGroupTimes && !$simpleLyricsMode.get()) {
+              const groupEnvelope = timedGroupEnvelope(word.TimedGroupTimes, ProcessedPosition);
+              targetScale = ScaleSpline.at(groupEnvelope(TimedGroupScaleHold));
+              targetYOffset = YOffsetSpline.at(groupEnvelope(TimedGroupLiftHold));
+              targetGlow = GlowSpline.at(groupEnvelope(TimedGroupGlowHold));
+            }
+
             word.AnimatorStore.Scale.SetGoal(targetScale);
             word.AnimatorStore.YOffset.SetGoal(targetYOffset);
             word.AnimatorStore.Glow.SetGoal(targetGlow);
@@ -772,6 +862,7 @@ export function Animate(position: number): void {
             if (word.RomajiElement) {
               word.RomajiElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
             }
+            applyTimedRubyState(word, ProcessedPosition, currentScale);
 
             setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
             // Use translate3d to ensure GPU-accelerated transforms
@@ -1414,6 +1505,7 @@ export function Animate(position: number): void {
               );
               setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
               //}
+              applyTimedRubyState(word, ProcessedPosition, currentScale);
               if (word.RomajiElement) {
                 word.RomajiElement.style.setProperty("--gradient-position", "100%");
               }
