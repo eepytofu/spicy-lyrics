@@ -271,14 +271,16 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
 
   const processingContextKey = currentProcessingContextKey();
 
+  if (!lyrics) return lyrics;
+
+  // ProcessingPending === true means a previous session cached raw lyrics and
+  // died before its background processing finished — treat as stale and
+  // reprocess below instead of serving unprocessed lyrics forever.
   if (
-    !lyrics
-    || lyrics.ProcessingPending === true
-    || (
-      lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
-      && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
-      && lyrics.ProcessingContextKey === processingContextKey
-    )
+    lyrics.ProcessingPending !== true
+    && lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
+    && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
+    && lyrics.ProcessingContextKey === processingContextKey
   ) {
     return lyrics;
   }
@@ -364,6 +366,10 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     lyrics.fetchProvider = firstProvider;
     lyrics.sourceDisplayName = firstProvider === "spicy" ? "Spicy Lyrics" : "Apple Music";
     lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
+
+    // Same entry schema as the main fetch path: sidecar the provider
+    // translation before any processing so the lanes stay consistent.
+    captureSourceTranslations(lyrics);
 
     if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
       await ProcessLyrics(lyrics, { updatePageClasses: false });
