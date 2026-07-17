@@ -20,8 +20,8 @@ export function resolveHanLanguageTag(
   iso2Language?: string,
   characterForm: ChineseCharacterForm = "original",
 ): HanLanguageTag | null {
-  const primary = String(language ?? "").toLocaleLowerCase();
-  const iso2 = String(iso2Language ?? "").toLocaleLowerCase();
+  const primary = String(language ?? "").toLowerCase();
+  const iso2 = String(iso2Language ?? "").toLowerCase();
   if (Kana.test(text)) return "ja";
   if (JapaneseLanguages.has(primary) || JapaneseLanguages.has(iso2)) return Han.test(text) ? "ja" : null;
   if (ChineseLanguages.has(primary) || ChineseLanguages.has(iso2)) return Han.test(text) ? resolveChineseTag(text, characterForm) : null;

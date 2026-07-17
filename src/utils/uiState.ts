@@ -44,6 +44,7 @@ if (_uiState.japaneseReadingMode === undefined) {
       ? "both"
       : "furigana"
     : "romaji";
+  saveUiStateBlob(_uiState);
 }
 if (_uiState.koreanDisplayMode === undefined) {
   if (_uiState.koreanSeparators === true && _uiState.koreanRomanizationMode !== "pronunciation") {

@@ -64,7 +64,7 @@ function clamp(value: number, min = 0, max = 100): number {
 
 export function normalizeLyricsComparisonText(value: string): string {
   const simplified = convertChineseText(String(value || "").normalize("NFKC"), "simplified");
-  return simplified.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  return simplified.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function syllableText(syllables: any[]): string {

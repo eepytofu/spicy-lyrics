@@ -50,7 +50,7 @@ export function toCssFontFamilyStack(value: string): string {
 }
 
 function normalizedFamilyName(value: string): string {
-  return value.replace(/^["']|["']$/g, "").trim().toLocaleLowerCase();
+  return value.replace(/^["']|["']$/g, "").trim().toLowerCase();
 }
 
 /**

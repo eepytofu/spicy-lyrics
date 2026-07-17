@@ -13,7 +13,7 @@ const nonEmptyText = (value: unknown): string | undefined =>
 function normalizeLanguageTag(value: unknown): string | undefined {
   const tag = nonEmptyText(value)?.replace(/_/g, "-");
   if (!tag) return undefined;
-  const lower = tag.toLocaleLowerCase();
+  const lower = tag.toLowerCase();
   if (["zh-cn", "zh-sg", "zh-hans", "cmn-hans"].includes(lower)) return "zh-Hans";
   if (["zh-tw", "zh-hk", "zh-mo", "zh-hant", "cmn-hant"].includes(lower)) return "zh-Hant";
   if (["ja", "jpn"].includes(lower)) return "ja";
@@ -24,7 +24,7 @@ function normalizeLanguageTag(value: unknown): string | undefined {
 function providerTranslationLanguage(text: string | undefined, declared: unknown): string | undefined {
   const normalized = normalizeLanguageTag(declared);
   if (!text) return normalized;
-  if (normalized && normalized.toLocaleLowerCase() !== "zh") return normalized;
+  if (normalized && normalized.toLowerCase() !== "zh") return normalized;
   const han = resolveHanLanguageTag(text, normalized, normalized);
   if (han) return han;
   if (/[가-힯]/u.test(text)) return "ko";

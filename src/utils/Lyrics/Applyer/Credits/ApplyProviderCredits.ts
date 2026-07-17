@@ -32,7 +32,7 @@ export function normalizeProviderCredits(data: any): ProviderCredit[] {
       : "";
     const userId = /^\d+$/.test(rawUserId) ? rawUserId : undefined;
     const credit = { role, name, provider, ...(userId ? { userId } : {}) };
-    const key = `${credit.provider}\u0000${credit.role}\u0000${credit.name.toLocaleLowerCase()}\u0000${credit.userId ?? ""}`;
+    const key = `${credit.provider}\u0000${credit.role}\u0000${credit.name.toLowerCase()}\u0000${credit.userId ?? ""}`;
     if (seen.has(key)) return [];
     seen.add(key);
     return [credit];

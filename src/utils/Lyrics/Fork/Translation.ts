@@ -118,7 +118,7 @@ export function normalizeCompare(value: string | undefined | null): string {
     .normalize("NFKC")
     .normalize("NFKD")
     .replace(/\p{M}+/gu, "")
-    .toLocaleLowerCase()
+    .toLowerCase()
     .replace(/ң/g, "n")
     .replace(/ŋ/g, "n")
     .replace(/[‘’]/g, "'")
