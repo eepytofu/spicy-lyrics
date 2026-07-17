@@ -212,18 +212,32 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
 
   const normalizedSurface = kataToHira(surface);
   const chars = Array.from(normalizedSurface);
+  // targetStart/targetEnd are added to entry.start (a UTF-16 index from
+  // String.prototype.indexOf), so they must be UTF-16 offsets, not code
+  // points — otherwise furigana drifts on non-BMP kanji (e.g. 𠮷).
+  const utf16Offsets: number[] = [];
+  {
+    let offset = 0;
+    for (const char of chars) {
+      utf16Offsets.push(offset);
+      offset += char.length;
+    }
+    utf16Offsets.push(offset);
+  }
 
   if (normalizedSurface.includes("々") && KanjiLikeSequenceTest.test(normalizedSurface)) {
-    return [{ text: kana, targetStart: 0, targetEnd: chars.length }];
+    return [{ text: kana, targetStart: 0, targetEnd: normalizedSurface.length }];
   }
 
   if (KanjiLikeSequenceTest.test(normalizedSurface) && chars.length > 1) {
-    return [{ text: kana, targetStart: 0, targetEnd: chars.length }];
+    return [{ text: kana, targetStart: 0, targetEnd: normalizedSurface.length }];
   }
 
   const segments: TokenFuriganaReading[] = [];
   let kanaCursor = 0;
   let charIndex = 0;
+  let kanjiRunCount = 0;
+  let coveredRunCount = 0;
 
   while (charIndex < chars.length) {
     const char = chars[charIndex];
@@ -242,6 +256,7 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
     const start = charIndex;
     while (charIndex < chars.length && KanjiLikeCharTest.test(chars[charIndex])) charIndex += 1;
     const end = charIndex;
+    kanjiRunCount += 1;
     const followingKana: string[] = [];
     for (let i = charIndex; i < chars.length && KanaCharTest.test(chars[i]); i += 1) {
       followingKana.push(chars[i]);
@@ -258,8 +273,15 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
     const text = kana.slice(readingStart, kanaCursor);
     if (!text) continue;
 
-    segments.push({ text, targetStart: start, targetEnd: end });
+    coveredRunCount += 1;
+    segments.push({ text, targetStart: utf16Offsets[start], targetEnd: utf16Offsets[end] });
   }
+
+  // When a token has several separate kanji runs but only some of them
+  // received a reading, the per-run split is unreliable (e.g. 手伝う dumps the
+  // whole reading onto 手). Bail out so the caller falls back to one
+  // whole-token ruby segment, which is how publishers typeset such words.
+  if (kanjiRunCount > 1 && coveredRunCount < kanjiRunCount) return [];
 
   return segments;
 }

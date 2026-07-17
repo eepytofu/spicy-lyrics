@@ -50,12 +50,19 @@ export function hasFurigana(entry: JapaneseReadable | undefined): boolean {
  * is drawn once for every intersecting fragment.
  */
 export function hasFuriganaCrossingTimedUnits(readingPlan: RenderPlan | undefined): boolean {
-  const ruby = (readingPlan?.furigana || []) as Array<{ start?: number; end?: number }>;
+  const ruby = (readingPlan?.furigana || []) as Array<{
+    start?: number;
+    end?: number;
+    canonicalRange?: { startCp: number; endCp: number };
+  }>;
   const sourceUnits = readingPlan?.sourceUnits || [];
-  return ruby.some((segment) =>
-    typeof segment.start === "number" && typeof segment.end === "number" &&
-    !sourceUnits.some((unit) => segment.start! >= unit.canonicalRange.startCp && segment.end! <= unit.canonicalRange.endCp)
-  );
+  return ruby.some((segment) => {
+    // Accept both raw {start,end} segments and annotation {canonicalRange} segments.
+    const start = segment.canonicalRange?.startCp ?? segment.start;
+    const end = segment.canonicalRange?.endCp ?? segment.end;
+    if (typeof start !== "number" || typeof end !== "number") return false;
+    return !sourceUnits.some((unit) => start >= unit.canonicalRange.startCp && end <= unit.canonicalRange.endCp);
+  });
 }
 
 export function isJapaneseEntry(entry: JapaneseReadable | undefined, isJapaneseLyrics?: boolean): boolean {

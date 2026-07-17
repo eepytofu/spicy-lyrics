@@ -351,7 +351,7 @@ const postProcessSyllableRomanization = async (
             delete syllable.TransliteratedText;
             delete syllable.RomajiSpaceBefore;
           }
-          group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.plan.furigana || [] };
+          group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.furigana };
           group.ReadingRenderPlan = packageResult.plan;
           delete group.RomanizedText;
           delete group.TransliteratedText;

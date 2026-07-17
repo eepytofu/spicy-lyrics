@@ -38,7 +38,7 @@ export async function processJapanesePackageLine(
   times: Array<{ StartTime?: number; EndTime?: number }>,
   romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {}
-): Promise<{ plan: RenderPlan; romaji: string }> {
+): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[] }> {
   const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, romajiPromise, spans, options);
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
   if (!romaji) throw new Error("Japanese fallback processor produced no reading");
@@ -62,7 +62,7 @@ export async function processJapanesePackageLine(
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
   if (!validation.valid) throw new Error(validation.errors.join("; "));
-  return { plan, romaji };
+  return { plan, romaji, furigana: reading?.furigana || [] };
 }
 
 export async function processJapanesePackageTextTarget(

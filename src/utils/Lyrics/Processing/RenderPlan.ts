@@ -20,12 +20,14 @@ export class DefaultRenderPlanBuilder implements RenderPlanBuilder {
         logicalGroupId: unit.logicalGroupId,
       }))
     );
+    const furigana = annotations.flatMap((annotation) => annotation.furigana ?? []);
     return {
       lineId: line.id,
       sourceUnits: canonical.spanMappings,
       readingUnits,
       timedReadingUnits,
       joinedDisplayText: readingUnits.map((unit) => unit.text).join(""),
+      ...(furigana.length > 0 ? { furigana } : {}),
     };
   }
 }
