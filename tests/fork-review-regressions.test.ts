@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import { annotateKoreanLine } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
+import { romanizeCantonese } from "../src/utils/Lyrics/Fork/Romanization.ts";
 import type { ParsedLine, ReadingAnnotation } from "../src/utils/Lyrics/Processing/Model.ts";
 
 function charSpans(text: string): ParsedLine {
@@ -75,4 +76,9 @@ test("korean annotation stays aligned when normalization inserts whitespace", ()
     annotation.units.map((u) => u.text),
     ["sa", "rang", " hap", "ni", "da"],
   );
+});
+
+test("jyutping tone strip preserves digits in passthrough latin tokens", async () => {
+  assert.equal(await romanizeCantonese("唱 mp3 歌", "yue", true, false), "coeng mp3 go");
+  assert.equal(await romanizeCantonese("唱歌", "yue", true, false), "coeng go");
 });

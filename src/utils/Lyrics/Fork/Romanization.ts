@@ -94,7 +94,8 @@ export async function romanizeCantonese(
   for (let index = 0; index < text.length;) {
     const phrase = JYUTPING_PHRASE_KEYS.find((key) => text.startsWith(key, index));
     if (phrase) {
-      parts.push(JYUTPING_PHRASES[phrase]);
+      const reading = JYUTPING_PHRASES[phrase];
+      parts.push(tones ? reading : stripJyutpingTones(reading));
       index += phrase.length;
       continue;
     }
@@ -117,12 +118,14 @@ export async function romanizeCantonese(
 
     const list = getJyutpingList(char);
     const reading = list?.[0]?.[1] || char;
-    if (reading.trim()) parts.push(reading);
+    // Strip tones per reading (not on the joined result) so passthrough Latin
+    // tokens keep their digits — e.g. "mp3" must not become "mp".
+    if (reading.trim()) parts.push(tones ? reading : stripJyutpingTones(reading));
     index += char.length;
   }
 
   const result = parts.join(" ").replace(/\s+/g, " ").trim();
-  return (tones ? result : stripJyutpingTones(result)) || undefined;
+  return result || undefined;
 }
 
 export function stripJyutpingTones(text: string): string {
