@@ -1,55 +1,77 @@
-# Spicy Lyrics external-source Worker
+# External-source Worker
 
-One Cloudflare Worker serves AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music lyrics. AMLL DB is returned as TTML for Spicy Lyrics' established TTML parser; the other providers return native JSON. Word timings, duet/background-vocal roles, translations, and romanization are preserved when the source supplies them.
+This optional Cloudflare Worker connects Spicy Lyrics to AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music. It matches Spotify track metadata against each service and returns data the extension already knows how to parse.
 
-## Deploy
+AMLL TTML DB responses stay as TTML. QQ Music, KuGou, and NetEase Cloud Music are converted to native Spicy Lyrics `Static`, `Line`, or `Syllable` JSON so timing, translations, romanization, vocal roles, and available contributor metadata can survive the round trip.
 
-Prerequisites: Node.js 20 or newer and a Cloudflare account.
+## Deploy your own Worker
+
+Requirements:
+
+- Node.js 22.12 or newer.
+- A Cloudflare account with Workers enabled.
+- Wrangler authentication for the account that will own the deployment.
 
 ```powershell
 cd worker
-npm install
+npm ci
 npm test
 npm run typecheck
 npx wrangler login
 npm run deploy
 ```
 
-Wrangler prints a URL similar to:
+Wrangler prints an origin similar to:
 
 ```text
 https://spicy-lyrics-external-sources.<your-subdomain>.workers.dev
 ```
 
-To choose another Worker name, change `name` in `wrangler.toml` before deploying. A custom domain can also be attached from Cloudflare Dashboard under **Workers & Pages > your Worker > Settings > Domains & Routes**.
+To use another Worker name, edit `name` in `wrangler.toml` before deployment. Custom domains can be attached later through the Cloudflare dashboard.
 
-## Connect Spicy Lyrics
+## Connect the extension
 
-1. Open Spicy Lyrics settings.
-2. Open **Lyrics > Manage Sources**.
-3. Paste the Worker URL into **External Sources Worker URL**. Use only the origin; do not append `/v1/lyrics`.
-4. Enable AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music, then arrange their priority with the arrow buttons.
+1. Open **Spicy Lyrics Settings → Sources**.
+2. Open **Lyrics Sources → Manage Sources**.
+3. Paste the Worker origin into **External Sources Worker**. Do not append `/v1/lyrics`.
+4. Enable AMLL TTML DB, QQ Music, KuGou, or NetEase Cloud Music and arrange their priority.
 
-The four endpoints are:
+The extension stores the configured origin locally. Do not commit a deployed URL, account identifier, or token to this repository.
 
-```text
-GET /v1/lyrics/amlldb/:spotifyTrackId
-GET /v1/lyrics/qq/:spotifyTrackId
-GET /v1/lyrics/kugou/:spotifyTrackId
-GET /v1/lyrics/netease/:spotifyTrackId
-```
+## HTTP contract
 
-Spicy Lyrics adds `title`, repeated `artist_name`, `album`, and `duration` (seconds) query parameters automatically. Example:
+All lyric routes accept `GET` and have the same shape:
+
+| Provider            | Route                                | Success body |
+| ------------------- | ------------------------------------ | ------------ |
+| AMLL TTML DB        | `/v1/lyrics/amlldb/:spotifyTrackId`  | TTML         |
+| QQ Music            | `/v1/lyrics/qq/:spotifyTrackId`      | Native JSON  |
+| KuGou               | `/v1/lyrics/kugou/:spotifyTrackId`   | Native JSON  |
+| NetEase Cloud Music | `/v1/lyrics/netease/:spotifyTrackId` | Native JSON  |
+
+Required query data:
+
+- `title`
+- one or more `artist_name` values, or the legacy comma-separated `artist`
+- `duration` in seconds
+
+`album` is optional but improves matching. The extension supplies these parameters automatically.
 
 ```text
 /v1/lyrics/qq/spotify-id?title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
-The AMLL DB route returns TTML; QQ Music, KuGou, and NetEase Cloud Music return native `Static`, `Line`, or `Syllable` Spicy Lyrics JSON. A `404` means no sufficiently close match was found; a `502` means an upstream service failed.
+Successful responses include `Cache-Control: public, max-age=3600`. Provider JSON can include `SourceMatch` and `ProviderCredits`. AMLL TTML keeps its body unchanged and exposes match metadata through the URL-encoded `X-Spicy-Lyrics-Match` header.
 
-QQ Music, KuGou, and NetEase Cloud Music include `SourceMatch` metadata for Smart Match. AMLL keeps its TTML body and exposes equivalent URL-encoded JSON through the `X-Spicy-Lyrics-Match` response header. Older Workers and custom servers remain compatible but use neutral match confidence when they provide no metadata.
+Expected errors:
 
-Native provider JSON may also include a `ProviderCredits` array when contributor metadata is already present in the lyric response. NetEase Cloud Music synced-lyrics and translation entries retain their user IDs for profile links; QQ Music and KuGou `[by:]` entries remain plain text. This does not make an additional provider request.
+| Status | Meaning                                                              |
+| ------ | -------------------------------------------------------------------- |
+| `400`  | Required metadata or the track ID is malformed.                      |
+| `404`  | The route is unknown or no sufficiently close lyric match was found. |
+| `502`  | An upstream lyric service failed while handling the request.         |
+
+The Worker allows cross-origin `GET` and `OPTIONS` requests. It does not currently implement authentication or rate limiting. That is acceptable for a personal deployment you understand and monitor; add Cloudflare access or rate controls before operating it as a high-traffic public service.
 
 ## Local development
 
@@ -57,11 +79,25 @@ Native provider JSON may also include a `ProviderCredits` array when contributor
 npm run dev
 ```
 
-Set the extension's Worker URL to `http://localhost:8787`. Live provider tests make real requests and are opt-in:
+Wrangler normally serves the Worker at `http://localhost:8787`. The extension accepts HTTP only for localhost, so set **External Sources Worker** to that origin while testing.
+
+Run the offline test and typecheck gates before deployment:
+
+```powershell
+npm test
+npm run typecheck
+npx wrangler deploy --dry-run
+```
+
+Live provider tests make real network requests and are opt-in:
 
 ```powershell
 $env:LIVE_PROVIDER_TESTS = "1"
 npm test
 ```
 
-These providers use unofficial upstream endpoints. Availability can change, and you should review the providers' terms before operating a public service.
+Provider interfaces are unofficial and may change without warning. Review the applicable service terms and avoid logging response bodies, private deployment details, or user data unnecessarily.
+
+## License and attribution
+
+The Worker is part of the repository's AGPL-3.0-only project. Provider-specific attribution and retained third-party notices are listed in [NOTICE.md](NOTICE.md). The adapted QQ compatibility module also retains its own GPL-3.0 notice and license copy.
