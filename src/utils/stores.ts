@@ -103,7 +103,7 @@ export const $timelineOutsideMediaContent = persistAtom<boolean>(
 export const $playbackOffset = persistAtom<number>("playbackOffset", 0);
 export const $lyricsSourceOrder = persistAtom<string>(
   "lyricsSourceOrder",
-  JSON.stringify(["spicy", "amlldb", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease"])
+  JSON.stringify(["spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "spotify", "lrclib"])
 );
 export const $disabledLyricsSources = persistAtom<string>(
   "disabledLyricsSources",

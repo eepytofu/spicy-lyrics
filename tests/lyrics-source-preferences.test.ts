@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DEFAULT_LYRICS_SOURCE_ORDER,
   getLyricsSourceDefinition,
   normalizeLyricsSourceOrder,
   normalizeLyricsServerUrl,
   parseCustomLyricsServers,
   resolveLyricsSourceLabel,
 } from "../src/utils/Lyrics/LyricsSourcePreferences.ts";
+
+test("default source priority ends with Spotify then LRCLIB", () => {
+  assert.deepEqual(DEFAULT_LYRICS_SOURCE_ORDER.slice(-2), ["spotify", "lrclib"]);
+  assert.deepEqual(normalizeLyricsSourceOrder("[]").slice(-2), ["spotify", "lrclib"]);
+});
 
 test("source order retains valid custom servers and restores built-ins", () => {
   const custom = parseCustomLyricsServers('[{"id":"custom:one","name":"One","url":"https://one.example/api"}]');

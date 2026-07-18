@@ -49,6 +49,7 @@ import {
   type LyricsSourceProviderId,
 } from "./LyricsSourcePreferences.ts";
 import { publishLyricsInteropSnapshot } from "./Interop.ts";
+import { isLyricsSourceCacheCompatible } from "./LyricsSourceCache.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -92,23 +93,12 @@ function lyricsSourceCacheSignature(): string {
   });
 }
 
-function isExternalProviderLyrics(lyrics: any): boolean {
-  return !!lyrics && typeof lyrics === "object" && typeof lyrics.fetchProvider === "string";
-}
-
 function isSourceCacheCompatible(lyrics: any): boolean {
-  if (!lyrics || typeof lyrics !== "object") return false;
-  if (lyrics.source === "ldb") {
-    return lyrics.TranslationSidecarSchemaVersion === TRANSLATION_SIDECAR_SCHEMA_VERSION;
-  }
-  if (isExternalProviderLyrics(lyrics)) {
-    return lyrics.LyricsSourceCacheSignature === lyricsSourceCacheSignature();
-  }
-  // Cached payloads from before integrated providers used native source codes
-  // without fetchProvider/signature. They must be refreshed so disabled sources
-  // (especially aml) cannot leak through after preferences change.
-  if (["spl", "aml", "spt"].includes(lyrics.source)) return false;
-  return true;
+  return isLyricsSourceCacheCompatible(
+    lyrics,
+    lyricsSourceCacheSignature(),
+    TRANSLATION_SIDECAR_SCHEMA_VERSION
+  );
 }
 
 function currentProcessingContextKey(): string {

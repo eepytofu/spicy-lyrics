@@ -22,7 +22,7 @@ export type CustomLyricsServer = {
 type LyricsSourceDefinition = { label: string; description: string };
 
 export const DEFAULT_LYRICS_SOURCE_ORDER: LyricsSourceProviderId[] = [
-  "spicy", "amlldb", "musixmatch", "apple", "spotify", "lrclib", "qq", "kugou", "netease",
+  "spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "spotify", "lrclib",
 ];
 
 export const DEFAULT_DISABLED_LYRICS_SOURCES: LyricsSourceProviderId[] = [
@@ -85,7 +85,7 @@ export function normalizeLyricsSourceOrder(value: unknown, customServers: Custom
   const valid = new Set<string>([...BUILT_IN_LYRICS_SOURCE_IDS, ...customServers.map(({ id }) => id)]);
   const normalized = parseStringArray(value).filter((id): id is LyricsSourceProviderId => valid.has(id));
   const deduped = [...new Set(normalized)];
-  for (const id of BUILT_IN_LYRICS_SOURCE_IDS) if (!deduped.includes(id)) deduped.push(id);
+  for (const id of DEFAULT_LYRICS_SOURCE_ORDER) if (!deduped.includes(id)) deduped.push(id);
   for (const { id } of customServers) if (!deduped.includes(id)) deduped.push(id);
   return deduped;
 }

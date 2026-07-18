@@ -1,5 +1,6 @@
 import fetchLyrics, { LyricsStore, ShowQueueLoader } from "../../utils/Lyrics/fetchLyrics.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
+import { bindCoalescedSourceSettingsRefresh } from "../../utils/Lyrics/SourceSettingsRefresh.ts";
 import {
   $chineseTones,
   $chineseCharacterForm,
@@ -1049,6 +1050,8 @@ const queueProcessingSettingsRefresh = (): void => {
   processingSettingsRevision++;
   void runQueuedProcessingSettingsRefresh();
 };
+
+bindCoalescedSourceSettingsRefresh(queueProcessingSettingsRefresh);
 
 $chineseCharacterForm.listen(queueProcessingSettingsRefresh);
 $chineseTranslitMode.listen(queueProcessingSettingsRefresh);

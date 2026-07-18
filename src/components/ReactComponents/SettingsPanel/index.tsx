@@ -1,21 +1,19 @@
 import { useState } from "react";
-import AppearanceSection from "./AppearanceSection.tsx";
-import BackgroundSection from "./BackgroundSection.tsx";
-import CacheSection from "./CacheSection.tsx";
-import DeveloperSection from "./DeveloperSection.tsx";
-import InterfaceSection from "./InterfaceSection.tsx";
-import LyricsSection from "./LyricsSection.tsx";
-import PlaybackSection from "./PlaybackSection.tsx";
+import AdvancedSection from "./AdvancedSection.tsx";
+import AppearanceLayoutSection from "./AppearanceLayoutSection.tsx";
+import LanguagesSection from "./LanguagesSection.tsx";
+import LyricsControlsSection from "./LyricsControlsSection.tsx";
+import SourcesSection from "./SourcesSection.tsx";
+import TranslationsSection from "./TranslationsSection.tsx";
 import { FilterDropdown, SearchBar } from "./components.tsx";
 
 const SECTIONS = [
-  "Background",
-  "Lyrics Display",
-  "Playback",
-  "Appearance",
-  "Interface",
-  "Developer",
-  "Cache",
+  "Lyrics & Controls",
+  "Languages & Readings",
+  "Translations",
+  "Sources",
+  "Appearance & Layout",
+  "Advanced",
 ];
 
 export default function SettingsPanel() {
@@ -29,13 +27,12 @@ export default function SettingsPanel() {
         <FilterDropdown sections={SECTIONS} value={sectionFilter} onChange={setSectionFilter} />
       </div>
 
-      <BackgroundSection query={query} sectionFilter={sectionFilter} />
-      <LyricsSection query={query} sectionFilter={sectionFilter} />
-      <PlaybackSection query={query} sectionFilter={sectionFilter} />
-      <AppearanceSection query={query} sectionFilter={sectionFilter} />
-      <InterfaceSection query={query} sectionFilter={sectionFilter} />
-      <DeveloperSection query={query} sectionFilter={sectionFilter} />
-      <CacheSection query={query} sectionFilter={sectionFilter} />
+      <LyricsControlsSection query={query} sectionFilter={sectionFilter} />
+      <LanguagesSection query={query} sectionFilter={sectionFilter} />
+      <TranslationsSection query={query} sectionFilter={sectionFilter} />
+      <SourcesSection query={query} sectionFilter={sectionFilter} />
+      <AppearanceLayoutSection query={query} sectionFilter={sectionFilter} />
+      <AdvancedSection query={query} sectionFilter={sectionFilter} />
     </div>
   );
 }

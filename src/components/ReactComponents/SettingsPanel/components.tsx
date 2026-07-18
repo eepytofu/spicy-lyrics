@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export function matches(query: string, label: string, description?: string): boolean {
@@ -22,15 +22,31 @@ export function Row({
   disabledReason?: string;
   stacked?: boolean;
 }) {
+  const labelId = useId();
+  const descriptionId = useId();
+  const labelledChildren = React.Children.map(children, (child) => {
+    if (!React.isValidElement(child)) return child;
+    return React.cloneElement(child as React.ReactElement<Record<string, unknown>>, {
+      "aria-labelledby": labelId,
+      ...(description ? { "aria-describedby": descriptionId } : {}),
+    });
+  });
+
   return (
     <div
       className={`sl-sp-row sl-list-row${disabled ? " sl-sp-row--disabled" : ""}${stacked ? " sl-sp-row--stacked" : ""}`}
     >
       <div className="sl-sp-label-wrap">
-        <span className="sl-sp-label">{label}</span>
-        {description && <span className="sl-sp-description">{description}</span>}
+        <span className="sl-sp-label" id={labelId}>
+          {label}
+        </span>
+        {description && (
+          <span className="sl-sp-description" id={descriptionId}>
+            {description}
+          </span>
+        )}
       </div>
-      <div className="sl-sp-control">{children}</div>
+      <div className="sl-sp-control">{labelledChildren}</div>
       {disabled && disabledReason && <div className="sl-sp-row-tooltip">{disabledReason}</div>}
     </div>
   );
@@ -39,18 +55,30 @@ export function Row({
 export function Toggle({
   checked,
   onChange,
+  disabled,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 }) {
   return (
     <label className="sl-sp-toggle">
       <input
         type="checkbox"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.currentTarget.checked)}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
+        aria-describedby={ariaDescribedBy}
       />
-      <span className="sl-sp-toggle-track" />
+      <span className="sl-sp-toggle-track" aria-hidden="true" />
     </label>
   );
 }
@@ -61,12 +89,18 @@ export function Select({
   labels,
   onChange,
   disabled,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: string;
   options: string[];
   labels?: string[];
   onChange: (v: string) => void;
   disabled?: boolean;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 }) {
   return (
     <select
@@ -74,6 +108,9 @@ export function Select({
       value={value}
       onChange={(e) => onChange(e.currentTarget.value)}
       disabled={disabled}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
+      aria-describedby={ariaDescribedBy}
     >
       {options.map((opt, i) => (
         <option key={opt} value={opt}>
@@ -100,6 +137,8 @@ export function Slider({
   unit,
   onChange,
   disabled,
+  "aria-labelledby": ariaLabelledBy,
+  "aria-describedby": ariaDescribedBy,
 }: {
   value: number;
   min: number;
@@ -109,6 +148,8 @@ export function Slider({
   unit?: string;
   onChange: (v: number) => void;
   disabled?: boolean;
+  "aria-labelledby"?: string;
+  "aria-describedby"?: string;
 }) {
   // Keep in sync with the thumb width in settings-panel.css.
   const THUMB = 16;
@@ -151,6 +192,8 @@ export function Slider({
           value={clamped}
           onChange={(e) => onChange(Number(e.currentTarget.value))}
           disabled={disabled}
+          aria-labelledby={ariaLabelledBy}
+          aria-describedby={ariaDescribedBy}
         />
       </div>
       <div className="sl-sp-slider-meta">
@@ -170,7 +213,11 @@ export function Slider({
 }
 
 export function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <p className="sl-sp-section-title">{children}</p>;
+  return <h2 className="sl-sp-section-title">{children}</h2>;
+}
+
+export function SubsectionTitle({ children }: { children: React.ReactNode }) {
+  return <h3 className="sl-sp-subsection-title">{children}</h3>;
 }
 
 export function SearchBar({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -199,6 +246,7 @@ export function SearchBar({ value, onChange }: { value: string; onChange: (v: st
         className="sl-sp-search"
         type="text"
         placeholder="Search settings…"
+        aria-label="Search settings"
         value={value}
         onChange={(e) => onChange(e.currentTarget.value)}
         spellCheck={false}
@@ -312,6 +360,7 @@ export function FilterDropdown({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={value === "All" ? "Filter settings by section" : `Settings section: ${value}`}
       >
         <svg
           className="sl-sp-filter-icon"

@@ -314,7 +314,7 @@ async function main() {
       {
         Registered: false,
         Button: (
-          (('documentPictureInPicture' in window) && ($popupLyricsAllowed.get()))
+          ('documentPictureInPicture' in window)
             ? new SpotifyPlayer.Playbar.Button(
               "Spicy Popup Lyrics",
               Icons.PiPMode,
@@ -325,6 +325,7 @@ async function main() {
                   OpenPopupLyrics();
                 }
               },
+              false,
               false,
               false
             )
@@ -394,7 +395,8 @@ async function main() {
 
   Global.Event.listen("pagecontainer:available", () => {
     if (!ButtonList) return;
-    for (const button of ButtonList) {
+    for (const [index, button] of ButtonList.entries()) {
+      if (index === 2 && !$popupLyricsAllowed.get()) continue;
       if (!button.Registered) {
         if (button.Button) button.Button.register();
         button.Registered = true;
@@ -410,10 +412,26 @@ async function main() {
     fullscreenButton.element.id = "SpicyLyrics_FullscreenButton";
 
     const popupLyricsButton = ButtonList[2].Button;
-    if (popupLyricsButton && ('documentPictureInPicture' in window) && $popupLyricsAllowed.get()) {
+    if (popupLyricsButton && ('documentPictureInPicture' in window)) {
       popupLyricsButton.element.style.order = "100000";
       popupLyricsButton.element.id = "SpicyLyrics_PopupLyricsButton";
     }
+
+    const syncPopupLyricsButton = () => {
+      const popupEntry = ButtonList[2];
+      if (!popupEntry?.Button) return;
+      if ($popupLyricsAllowed.get()) {
+        if (!popupEntry.Registered) {
+          popupEntry.Button.register();
+          popupEntry.Registered = true;
+        }
+      } else if (popupEntry.Registered) {
+        popupEntry.Button.deregister();
+        popupEntry.Registered = false;
+      }
+    };
+
+    syncPopupLyricsButton();
 
     const hideUnwantedButtons = (container: Element) => {
       for (const element of container.children) {
@@ -421,6 +439,10 @@ async function main() {
 
         const isFullscreen = testId === "fullscreen-mode-button";
         const isPip = ('documentPictureInPicture' in window) && $popupLyricsAllowed.get() && testId === "pip-toggle-button";
+        if (testId === "pip-toggle-button" && !isPip) {
+          (element as HTMLElement).style.removeProperty("display");
+          continue;
+        }
         const isGenericControl =
           element.classList.contains("control-button") &&
           !element.classList.contains("volume-bar__icon-button") &&
@@ -437,6 +459,15 @@ async function main() {
     };
 
     let observer: MutationObserver | null = null;
+
+    $popupLyricsAllowed.listen((allowed) => {
+      syncPopupLyricsButton();
+      if (!allowed && IsPIP) void ClosePopupLyrics();
+      const controlsContainer = document.querySelector<HTMLElement>(
+        ".main-nowPlayingBar-extraControls"
+      );
+      if (controlsContainer) hideUnwantedButtons(controlsContainer);
+    });
 
     const startObservingDOM = () => {
       const controlsContainer = document.querySelector<HTMLElement>(
@@ -765,12 +796,24 @@ async function main() {
       if (!$prefetchNextLyrics.get()) return;
       if (prefetchTimer) clearTimeout(prefetchTimer);
       prefetchTimer = setTimeout(async () => {
+        prefetchTimer = null;
+        if (!$prefetchNextLyrics.get()) return;
         const nextUri = await getNextTrackUri();
         if (!nextUri || nextUri === SpotifyPlayer.GetUri() || nextUri === lastPrefetchedUri) return;
         lastPrefetchedUri = nextUri;
         void PrefetchLyrics(nextUri);
       }, delayMs);
     }
+
+    $prefetchNextLyrics.listen((enabled) => {
+      if (!enabled) {
+        if (prefetchTimer) clearTimeout(prefetchTimer);
+        prefetchTimer = null;
+        lastPrefetchedUri = null;
+        return;
+      }
+      void scheduleNextLyricsPrefetch(0);
+    });
 
     async function onSongChange(event: any) {
       playbackLogger.debug("Song change pipeline");
