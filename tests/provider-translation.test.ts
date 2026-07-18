@@ -126,6 +126,18 @@ test("legacy duplicate translation values resolve to one provider lane", () => {
   });
 });
 
+test("provider language recognizes the Hangul script without overmatching past modern syllables", () => {
+  assert.equal(resolveTranslationSidecars({
+    ProviderTranslatedText: "\u{D7A3}",
+  }).providerLanguage, "ko");
+  assert.equal(resolveTranslationSidecars({
+    ProviderTranslatedText: "\u1100\u1161",
+  }).providerLanguage, "ko");
+  assert.equal(resolveTranslationSidecars({
+    ProviderTranslatedText: "\u{D7A4}",
+  }).providerLanguage, undefined);
+});
+
 test("provider language uses source metadata and script fallback", () => {
   assert.equal(resolveTranslationSidecars({
     ProviderTranslatedText: "萬事皆是徒勞",

@@ -27,7 +27,7 @@ function providerTranslationLanguage(text: string | undefined, declared: unknown
   if (normalized && normalized.toLowerCase() !== "zh") return normalized;
   const han = resolveHanLanguageTag(text, normalized, normalized);
   if (han) return han;
-  if (/[가-힯]/u.test(text)) return "ko";
+  if (/\p{Script=Hangul}/u.test(text)) return "ko";
   return normalized;
 }
 
