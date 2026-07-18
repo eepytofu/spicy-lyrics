@@ -53,7 +53,13 @@ const storage = new Map<string, string>();
   disconnect(): void {}
 };
 
-const { appendLineExtras, appendSyllableRomanizedBelow, hasFuriganaCrossingTimedUnits, isJapaneseEntry } = await import(
+const {
+  appendFuriganaText,
+  appendLineExtras,
+  appendSyllableRomanizedBelow,
+  isJapaneseEntry,
+  renderBaseTextWithReadings,
+} = await import(
   "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
 );
 const { $japaneseReadingMode } = await import("../src/utils/uiState.ts");
@@ -100,17 +106,45 @@ test("plan romaji follows Japanese reading display mode", () => {
   }
 });
 
-test("cross-fragment compound ruby requires whole-line rendering", () => {
-  const planWithSplitCompound = {
-    ...plan,
-    sourceUnits: [
-      { spanId: "0", canonicalRange: { startCp: 0, endCp: 1 } },
-      { spanId: "1", canonicalRange: { startCp: 1, endCp: 4 } },
-    ],
-    furigana: [{ start: 0, end: 2, reading: "おぼつか" }],
-  };
-  assert.equal(hasFuriganaCrossingTimedUnits(planWithSplitCompound), true);
-  assert.equal(hasFuriganaCrossingTimedUnits({ ...planWithSplitCompound, sourceUnits: [{ spanId: "0", canonicalRange: { startCp: 0, endCp: 4 } }] }), false);
+test("timed-group suppression removes only the selected line segment", () => {
+  $japaneseReadingMode.set("furigana");
+  const line = new FakeElement();
+  renderBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    {
+      Text: "生生",
+      JapaneseReading: {
+        sourceText: "生生",
+        furigana: [
+          { start: 0, end: 1, reading: "せい", lineSegmentKey: "0:1\u0000せい" },
+          { start: 1, end: 2, reading: "せい", lineSegmentKey: "1:2\u0000せい" },
+        ],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true, suppressedFuriganaKeys: ["0:1\u0000せい"] },
+  );
+
+  const renderedReadings = line.children
+    .flatMap((cluster) => cluster.children)
+    .filter((child) => child.className.includes("furigana-reading") && child.textContent === "せい");
+  assert.equal(renderedReadings.length, 1);
+});
+
+test("adjacent ruby clusters are packed while isolated ruby can overhang", () => {
+  const adjacent = new FakeElement();
+  appendFuriganaText(adjacent as unknown as HTMLElement, "極星", [
+    { start: 0, end: 1, reading: "きょく" },
+    { start: 1, end: 2, reading: "ぼし" },
+  ]);
+  assert.equal(adjacent.children.length, 2);
+  assert.equal(adjacent.children.every((cluster) => cluster.classList.values.has("furigana-cluster-packed")), true);
+
+  const isolated = new FakeElement();
+  appendFuriganaText(isolated as unknown as HTMLElement, "極の星", [
+    { start: 0, end: 1, reading: "きょく" },
+    { start: 2, end: 3, reading: "ほし" },
+  ]);
+  assert.equal(isolated.children.some((cluster) => cluster.classList.values.has("furigana-cluster-packed")), false);
 });
 
 test("an explicit Chinese reading route overrides an embedded kana island", () => {

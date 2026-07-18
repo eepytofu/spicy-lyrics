@@ -65,12 +65,24 @@ export type ReadingUnit = {
   readonly timingRefs: readonly string[];
 };
 
+export type PlanFuriganaSegment =
+  | {
+      readonly canonicalRange: TextRange;
+      readonly reading: string;
+      readonly provenance?: ReadingProvenance;
+    }
+  | {
+      readonly start: number;
+      readonly end: number;
+      readonly reading: string;
+    };
+
 export type ReadingAnnotation = {
   readonly processor: string;
   readonly mode: string;
   readonly provenance: ReadingProvenance;
   readonly units: readonly ReadingUnit[];
-  readonly furigana?: readonly unknown[];
+  readonly furigana?: readonly PlanFuriganaSegment[];
 };
 
 export type TimedReadingUnit = {
@@ -87,7 +99,7 @@ export type RenderPlan = {
   readonly timedReadingUnits: readonly TimedReadingUnit[];
   readonly joinedDisplayText: string;
   readonly translation?: string;
-  readonly furigana?: readonly unknown[];
+  readonly furigana?: readonly PlanFuriganaSegment[];
   readonly primaryScript?: "Japanese" | "Chinese";
 };
 

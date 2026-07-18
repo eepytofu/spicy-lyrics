@@ -26,8 +26,8 @@ export type ReadingRenderOptions = {
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
   reserveFurigana?: boolean;
-  /** Readings drawn once by an enclosing timed furigana group; member words skip their own copy. */
-  suppressedRubyReadings?: readonly string[];
+  /** Full-line segment identities drawn once by an enclosing timed furigana group. */
+  suppressedFuriganaKeys?: readonly string[];
 };
 
 type SyllableLike = JapaneseReadable & {
@@ -43,28 +43,6 @@ export function getJapaneseReading(entry: JapaneseReadable | undefined): Japanes
 
 export function hasFurigana(entry: JapaneseReadable | undefined): boolean {
   return (getJapaneseReading(entry)?.furigana.length || 0) > 0;
-}
-
-/**
- * Ruby geometry belongs to the complete Japanese line, not karaoke fragments.
- * A renderer can safely re-base only ruby fully contained by one timed source
- * unit. Crossing ruby must use the whole-line path; otherwise its full reading
- * is drawn once for every intersecting fragment.
- */
-export function hasFuriganaCrossingTimedUnits(readingPlan: RenderPlan | undefined): boolean {
-  const ruby = (readingPlan?.furigana || []) as Array<{
-    start?: number;
-    end?: number;
-    canonicalRange?: { startCp: number; endCp: number };
-  }>;
-  const sourceUnits = readingPlan?.sourceUnits || [];
-  return ruby.some((segment) => {
-    // Accept both raw {start,end} segments and annotation {canonicalRange} segments.
-    const start = segment.canonicalRange?.startCp ?? segment.start;
-    const end = segment.canonicalRange?.endCp ?? segment.end;
-    if (typeof start !== "number" || typeof end !== "number") return false;
-    return !sourceUnits.some((unit) => start >= unit.canonicalRange.startCp && end <= unit.canonicalRange.endCp);
-  });
 }
 
 export function isJapaneseEntry(entry: JapaneseReadable | undefined, isJapaneseLyrics?: boolean): boolean {
@@ -160,8 +138,11 @@ export function renderBaseTextWithReadings(
   const reading = getJapaneseReading(entry);
 
   if (shouldRenderFurigana(entry, options) && reading) {
-    const segments = options.suppressedRubyReadings?.length
-      ? reading.furigana.filter((segment) => !options.suppressedRubyReadings!.includes(segment.reading))
+    const segments = options.suppressedFuriganaKeys?.length
+      ? reading.furigana.filter((segment) =>
+          segment.lineSegmentKey === undefined
+          || !options.suppressedFuriganaKeys!.includes(segment.lineSegmentKey)
+        )
       : reading.furigana;
     if (segments.length > 0) {
       element.classList.add("has-furigana");

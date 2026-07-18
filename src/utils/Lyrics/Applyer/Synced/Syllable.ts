@@ -20,6 +20,8 @@ import {
   getInterludeTimePadding,
   getLyricsBetweenShow,
   setRomanizedStatus,
+  type SyllableLead,
+  type TimedGroupWindow,
 } from "../../lyrics.ts";
 import { CreateLyricsContainer, DestroyAllLyricsContainers } from "../CreateLyricsContainer.ts";
 import { initLyricsVirtualizer } from "../../LyricsVirtualizer.ts";
@@ -172,7 +174,7 @@ const EMPTY_TIMED_FURIGANA: TimedFuriganaGroups = { groups: [], bySpanId: new Ma
  */
 const createTimedFuriganaGroup = (
   group: TimedFuriganaGroup
-): { root: HTMLSpanElement; anchor: HTMLSpanElement; reading: HTMLSpanElement } => {
+): { root: HTMLSpanElement; anchor: HTMLSpanElement } => {
   const root = document.createElement("span");
   root.classList.add("word-group", "semantic-word-group", "timed-furigana-group", "has-furigana");
   root.dataset.timedFuriganaGroup = group.id;
@@ -187,13 +189,69 @@ const createTimedFuriganaGroup = (
   reading.classList.add("furigana-reading", "timed-furigana-reading");
   reading.textContent = group.reading;
   anchor.appendChild(reading);
-  return { root, anchor, reading };
+  return { root, anchor };
 };
 
 /** Latest animator entry registered for the current line (just-created word). */
-const lastRegisteredWordEntry = (): any => {
+const lastRegisteredWordEntry = (): SyllableLead | undefined => {
   const lead = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
   return lead?.[lead.length - 1];
+};
+
+type TimedFuriganaRenderState = {
+  root: HTMLSpanElement | null;
+  groupId: string | undefined;
+  times: TimedGroupWindow | null;
+};
+
+const createTimedFuriganaRenderState = (): TimedFuriganaRenderState => ({
+  root: null,
+  groupId: undefined,
+  times: null,
+});
+
+const resetTimedFuriganaRenderState = (state: TimedFuriganaRenderState): void => {
+  state.root = null;
+  state.groupId = undefined;
+  state.times = null;
+};
+
+const appendTimedFuriganaMember = (
+  lineElement: HTMLElement,
+  word: HTMLElement,
+  syllable: SyllableData,
+  group: TimedFuriganaGroup,
+  state: TimedFuriganaRenderState
+): void => {
+  if (!state.root || group.id !== state.groupId) {
+    const timedGroup = createTimedFuriganaGroup(group);
+    lineElement.appendChild(timedGroup.root);
+    (word.querySelector(".furigana-cluster") ?? word).appendChild(timedGroup.anchor);
+    state.root = timedGroup.root;
+    state.groupId = group.id;
+
+    const entry = lastRegisteredWordEntry();
+    if (entry) {
+      entry.TimedRubyAnchorElement = timedGroup.anchor;
+      entry.TimedRubyAnchorOffsetEm = group.rubyCenterCh - Array.from(syllable.Text || "").length / 2;
+      state.times = {
+        start: entry.StartTime,
+        firstEnd: entry.EndTime,
+        lastStart: entry.StartTime,
+        end: entry.EndTime,
+      };
+      entry.TimedGroupTimes = state.times;
+    }
+  } else {
+    const entry = lastRegisteredWordEntry();
+    if (entry && state.times) {
+      entry.TimedGroupTimes = state.times;
+      state.times.lastStart = ConvertTime(syllable.StartTime);
+      state.times.end = ConvertTime(syllable.EndTime);
+    }
+  }
+
+  state.root.appendChild(word);
 };
 
 const appendGroupedWord = (
@@ -414,10 +472,7 @@ export function ApplySyllableLyrics(
       ? timedFuriganaGroups(line.Lead.ReadingRenderPlan)
       : EMPTY_TIMED_FURIGANA;
     const leadTexts = line.Lead.Syllables.map((s) => s.Text || "");
-    let currentTimedFuriganaBase: HTMLSpanElement | null = null;
-    let currentTimedFuriganaGroupId: string | undefined;
-    let currentTimedFuriganaEntry: any = null;
-    let currentTimedFuriganaTimes: any = null;
+    const leadTimedFuriganaState = createTimedFuriganaRenderState();
 
     line.Lead.Syllables.forEach((lead, iL, aL) => {
       if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
@@ -433,47 +488,12 @@ export function ApplySyllableLyrics(
         iL,
         aL,
         timedFuriganaGroup
-          ? { ...leadRenderOptions, suppressedRubyReadings: [timedFuriganaGroup.reading] }
+          ? { ...leadRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
           : leadRenderOptions,
         UseRomanized
       );
       if (timedFuriganaGroup) {
-        if (!currentTimedFuriganaBase || timedFuriganaGroup.id !== currentTimedFuriganaGroupId) {
-          const timedGroup = createTimedFuriganaGroup(timedFuriganaGroup);
-          lineElem.appendChild(timedGroup.root);
-          (word.querySelector(".furigana-cluster") ?? word).appendChild(timedGroup.anchor);
-          currentTimedFuriganaBase = timedGroup.root;
-          currentTimedFuriganaGroupId = timedFuriganaGroup.id;
-          // The animator drives the shared ruby across the whole group's
-          // time window through the first member's entry.
-          currentTimedFuriganaEntry = lastRegisteredWordEntry();
-          if (currentTimedFuriganaEntry) {
-            currentTimedFuriganaEntry.TimedRubyElement = timedGroup.reading;
-            currentTimedFuriganaEntry.TimedRubyAnchorElement = timedGroup.anchor;
-            // Anchor distance from the host word's center in host-font em,
-            // used to cancel scale-induced sway on long compounds.
-            currentTimedFuriganaEntry.TimedRubyAnchorOffsetEm =
-              timedFuriganaGroup.rubyCenterCh - Array.from(lead.Text || "").length / 2;
-            // One shared window object per group: every member entry points
-            // at it, so all members and the ruby animate as one unit while
-            // each keeps its own gradient sweep and timing ownership.
-            currentTimedFuriganaTimes = {
-              start: currentTimedFuriganaEntry.StartTime,
-              firstEnd: currentTimedFuriganaEntry.EndTime,
-              lastStart: currentTimedFuriganaEntry.StartTime,
-              end: currentTimedFuriganaEntry.EndTime,
-            };
-            currentTimedFuriganaEntry.TimedGroupTimes = currentTimedFuriganaTimes;
-          }
-        } else {
-          const memberEntry = lastRegisteredWordEntry();
-          if (memberEntry && currentTimedFuriganaTimes) {
-            memberEntry.TimedGroupTimes = currentTimedFuriganaTimes;
-            currentTimedFuriganaTimes.lastStart = ConvertTime(lead.StartTime);
-            currentTimedFuriganaTimes.end = ConvertTime(lead.EndTime);
-          }
-        }
-        currentTimedFuriganaBase.appendChild(word);
+        appendTimedFuriganaMember(lineElem, word, lead, timedFuriganaGroup, leadTimedFuriganaState);
         currentWordGroup = null;
         currentSemanticGroupId = undefined;
         return;
@@ -481,19 +501,16 @@ export function ApplySyllableLyrics(
       // Authored whitespace spans between members stay inside the open group
       // so the ruby is not split into duplicates.
       if (
-        currentTimedFuriganaBase &&
+        leadTimedFuriganaState.root &&
         !(lead.Text || "").trim() &&
-        timedGroupContinuesAt(leadTexts, leadTimedFurigana, iL + 1, currentTimedFuriganaGroupId)
+        timedGroupContinuesAt(leadTexts, leadTimedFurigana, iL + 1, leadTimedFuriganaState.groupId)
       ) {
-        currentTimedFuriganaBase.appendChild(word);
+        leadTimedFuriganaState.root.appendChild(word);
         currentWordGroup = null;
         currentSemanticGroupId = undefined;
         return;
       }
-      currentTimedFuriganaBase = null;
-      currentTimedFuriganaGroupId = undefined;
-      currentTimedFuriganaEntry = null;
-      currentTimedFuriganaTimes = null;
+      resetTimedFuriganaRenderState(leadTimedFuriganaState);
 
       const semanticGroupId = leadLogicalGroupIds.get(String(iL));
       if (leadUsesSemanticGroups && semanticGroupId) {
@@ -557,10 +574,7 @@ export function ApplySyllableLyrics(
           ? timedFuriganaGroups(bg.ReadingRenderPlan)
           : EMPTY_TIMED_FURIGANA;
         const bgTexts = bg.Syllables.map((s) => s.Text || "");
-        let currentBGTimedFuriganaBase: HTMLSpanElement | null = null;
-        let currentBGTimedFuriganaGroupId: string | undefined;
-        let currentBGTimedFuriganaEntry: any = null;
-        let currentBGTimedFuriganaTimes: any = null;
+        const bgTimedFuriganaState = createTimedFuriganaRenderState();
 
         bg.Syllables.forEach((bw, bI, bA) => {
           if (isRtl(bw.Text) && !lineE.classList.contains("rtl")) {
@@ -573,59 +587,28 @@ export function ApplySyllableLyrics(
             bI,
             bA,
             timedFuriganaGroup
-              ? { ...bgWordRenderOptions, suppressedRubyReadings: [timedFuriganaGroup.reading] }
+              ? { ...bgWordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
               : bgWordRenderOptions,
             UseRomanized,
             true
           );
           if (timedFuriganaGroup) {
-            if (!currentBGTimedFuriganaBase || timedFuriganaGroup.id !== currentBGTimedFuriganaGroupId) {
-              const timedGroup = createTimedFuriganaGroup(timedFuriganaGroup);
-              lineE.appendChild(timedGroup.root);
-              (word.querySelector(".furigana-cluster") ?? word).appendChild(timedGroup.anchor);
-              currentBGTimedFuriganaBase = timedGroup.root;
-              currentBGTimedFuriganaGroupId = timedFuriganaGroup.id;
-              currentBGTimedFuriganaEntry = lastRegisteredWordEntry();
-              if (currentBGTimedFuriganaEntry) {
-                currentBGTimedFuriganaEntry.TimedRubyElement = timedGroup.reading;
-                currentBGTimedFuriganaEntry.TimedRubyAnchorElement = timedGroup.anchor;
-                currentBGTimedFuriganaEntry.TimedRubyAnchorOffsetEm =
-                  timedFuriganaGroup.rubyCenterCh - Array.from(bw.Text || "").length / 2;
-                currentBGTimedFuriganaTimes = {
-                  start: currentBGTimedFuriganaEntry.StartTime,
-                  firstEnd: currentBGTimedFuriganaEntry.EndTime,
-                  lastStart: currentBGTimedFuriganaEntry.StartTime,
-                  end: currentBGTimedFuriganaEntry.EndTime,
-                };
-                currentBGTimedFuriganaEntry.TimedGroupTimes = currentBGTimedFuriganaTimes;
-              }
-            } else {
-              const memberEntry = lastRegisteredWordEntry();
-              if (memberEntry && currentBGTimedFuriganaTimes) {
-                memberEntry.TimedGroupTimes = currentBGTimedFuriganaTimes;
-                currentBGTimedFuriganaTimes.lastStart = ConvertTime(bw.StartTime);
-                currentBGTimedFuriganaTimes.end = ConvertTime(bw.EndTime);
-              }
-            }
-            currentBGTimedFuriganaBase.appendChild(word);
+            appendTimedFuriganaMember(lineE, word, bw, timedFuriganaGroup, bgTimedFuriganaState);
             currentBGWordGroup = null;
             currentBGSemanticGroupId = undefined;
             return;
           }
           if (
-            currentBGTimedFuriganaBase &&
+            bgTimedFuriganaState.root &&
             !(bw.Text || "").trim() &&
-            timedGroupContinuesAt(bgTexts, bgTimedFurigana, bI + 1, currentBGTimedFuriganaGroupId)
+            timedGroupContinuesAt(bgTexts, bgTimedFurigana, bI + 1, bgTimedFuriganaState.groupId)
           ) {
-            currentBGTimedFuriganaBase.appendChild(word);
+            bgTimedFuriganaState.root.appendChild(word);
             currentBGWordGroup = null;
             currentBGSemanticGroupId = undefined;
             return;
           }
-          currentBGTimedFuriganaBase = null;
-          currentBGTimedFuriganaGroupId = undefined;
-          currentBGTimedFuriganaEntry = null;
-          currentBGTimedFuriganaTimes = null;
+          resetTimedFuriganaRenderState(bgTimedFuriganaState);
 
           const semanticGroupId = bgLogicalGroupIds.get(String(bI));
           if (bgUsesSemanticGroups && semanticGroupId) {

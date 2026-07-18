@@ -11,26 +11,6 @@ import { annotateJapaneseLine } from "./JapaneseAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "../RenderPlan.ts";
 import type { ParsedLine, RenderPlan } from "../Model.ts";
 
-function codePointsBefore(text: string, utf16Index: number): number {
-  return Array.from(text.slice(0, utf16Index)).length;
-}
-
-/** Kept for the package-era acceptance test; the fallback uses UTF-16 source spans. */
-export function furiganaContainedByTimingSpan(
-  displayText: string,
-  timingSpan: Pick<JapaneseTimedTextSpan, "start" | "end">,
-  furigana: Array<FuriganaSegment | { start: number; end: number; reading: string }>
-): Array<{ start: number; end: number; reading: string }> {
-  const sourceStartCp = codePointsBefore(displayText, timingSpan.start);
-  const sourceEndCp = codePointsBefore(displayText, timingSpan.end);
-  return furigana.flatMap((item) => {
-    const startCp = codePointsBefore(displayText, item.start);
-    const endCp = codePointsBefore(displayText, item.end);
-    if (startCp < sourceStartCp || endCp > sourceEndCp) return [];
-    return [{ start: item.start - timingSpan.start, end: item.end - timingSpan.start, reading: item.reading }];
-  });
-}
-
 export async function processJapanesePackageLine(
   displayText: string,
   syllables: JapaneseReadable[],

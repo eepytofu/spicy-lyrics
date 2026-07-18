@@ -58,10 +58,20 @@ export interface LineAnimatorStore {
   [key: string]: any;
 }
 
+export type TimedGroupWindow = {
+  start: number;
+  firstEnd: number;
+  lastStart: number;
+  end: number;
+};
+
 // Define the Lead item interface for syllables
 export interface SyllableLead {
   HTMLElement: HTMLElement;
   RomajiElement?: HTMLElement;
+  TimedRubyAnchorElement?: HTMLElement;
+  TimedRubyAnchorOffsetEm?: number;
+  TimedGroupTimes?: TimedGroupWindow;
   StartTime: number;
   EndTime: number;
   TotalTime: number;

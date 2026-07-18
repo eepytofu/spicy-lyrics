@@ -51,7 +51,7 @@ export { clearTranslationCache };
 export { acceptRomanization };
 export const LYRICS_PROCESSING_VERSION = 34;
 // v2: render plans carry line-level furigana used by timed furigana groups.
-export const READING_PLAN_SCHEMA_VERSION = 2;
+export const READING_PLAN_SCHEMA_VERSION = 3;
 
 // Constants
 const RomajiPromise: Promise<void> | undefined =

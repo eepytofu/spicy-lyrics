@@ -4,6 +4,18 @@ import {
   buildJapaneseLineTextMap,
   okuriganaAnchoredKanjiRunReading,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
+import {
+  furiganaSegmentKey,
+  utf16FuriganaSegmentKey,
+} from "../src/utils/Lyrics/Processing/Japanese/FuriganaIdentity.ts";
+
+test("furigana identity matches UTF-16 readings to code-point render plans", () => {
+  const source = "😀今日";
+  assert.equal(
+    utf16FuriganaSegmentKey(source, 2, 4, "きょう"),
+    furiganaSegmentKey(1, 3, "きょう"),
+  );
+});
 
 test("okurigana anchoring keeps maximal kanji reading prefix", () => {
   assert.equal(okuriganaAnchoredKanjiRunReading("だいきらい", 0, "い"), "だいきら");

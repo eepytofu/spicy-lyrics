@@ -32,6 +32,7 @@ test("crossing ruby groups every intersecting timed span", () => {
   const result = timedFuriganaGroups(plan);
   assert.equal(result.groups.length, 1);
   assert.deepEqual(result.groups[0].spanIds, ["0", "1"]);
+  assert.equal(result.groups[0].segmentKey, "0:2\u0000うんめい");
   assert.equal(result.groups[0].reading, "うんめい");
   assert.equal(result.groups[0].rubyCenterCh, 1);
   assert.equal(result.bySpanId.get("0"), result.groups[0]);

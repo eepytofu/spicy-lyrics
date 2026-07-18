@@ -4,6 +4,7 @@ import { easeSinOut } from "d3-ease";
 import { $currentLyricsType, $simpleLyricsMode, $simpleLyricsModeRenderingType } from "../../../../utils/stores.ts";
 import { isSpicySidebarMode } from "../../../../components/Utils/SidebarLyrics.ts";
 import { LyricsObject, SimpleLyricsMode_LetterEffectsStrengthConfig, preHiddenDotLineMs } from "../../lyrics.ts";
+import type { SyllableLead, TimedGroupWindow } from "../../lyrics.ts";
 import { BlurMultiplier, SidebarBlurMultiplier, timeOffset } from "../Shared.ts";
 import { setOnNewElementMounted } from "../../LyricsVirtualizer.ts";
 import { Spring } from "../../../../modules/Spring.ts";
@@ -45,8 +46,6 @@ const TimedGroupScaleHold = 0.7;
 const TimedGroupGlowHold = 0.6;
 const TimedGroupLiftHold = 0.9;
 
-type TimedGroupWindow = { start: number; firstEnd: number; lastStart: number; end: number };
-
 /**
  * Envelope shared by a timed furigana group's ruby and its member words:
  * rise with the first member's curve, hold at each channel's peak through
@@ -79,42 +78,22 @@ const timedGroupEnvelope = (
 
 /**
  * The host word is group-driven (unified member animation), so the ruby
- * simply inherits its scale, lift, and glow. Only two things stay
- * animator-owned here: the karaoke fill sweep over the group window, and
- * cancelling the anchor displacement caused by the host word scaling about
- * its own center (which would otherwise sway long compounds).
+ * simply inherits its scale, lift, and glow. The animator only cancels the
+ * anchor displacement caused by the host word scaling about its own center,
+ * which would otherwise sway long compounds.
  */
-const applyTimedRubyState = (
-  word: {
-    TimedRubyElement?: HTMLElement;
-    TimedRubyAnchorElement?: HTMLElement;
-    TimedRubyAnchorOffsetEm?: number;
-    TimedGroupTimes?: TimedGroupWindow;
-    StartTime: number;
-    EndTime: number;
-  },
-  position: number,
+const applyTimedRubyAnchorState = (
+  word: SyllableLead,
   hostWordScale: number
 ): void => {
-  const ruby = word.TimedRubyElement;
-  const times = word.TimedGroupTimes;
-  if (!ruby || !times) return;
+  const anchor = word.TimedRubyAnchorElement;
+  if (!anchor || typeof word.TimedRubyAnchorOffsetEm !== "number") return;
   // Simple lyrics mode stubs word motion; the ruby stays static there too.
   if ($simpleLyricsMode.get()) return;
 
-  const anchor = word.TimedRubyAnchorElement;
   const safeHost = Math.max(hostWordScale || 1, 0.001);
-  if (anchor && typeof word.TimedRubyAnchorOffsetEm === "number") {
-    const tx = ((1 - safeHost) / safeHost) * word.TimedRubyAnchorOffsetEm;
-    setStyleIfChanged(anchor, "transform", `translate3d(${tx}em, 0, 0)`, 0);
-  }
-  const sweep =
-    position <= times.start
-      ? -20
-      : position >= times.end
-        ? 100
-        : -20 + 120 * Clamp((position - times.start) / Math.max(times.end - times.start, 1), 0, 1);
-  setStyleIfChanged(ruby, "--tfg-gradient-position", `${sweep}%`, 0.5);
+  const tx = ((1 - safeHost) / safeHost) * word.TimedRubyAnchorOffsetEm;
+  setStyleIfChanged(anchor, "transform", `translate3d(${tx}em, 0, 0)`, 0);
 };
 
 const ScaleRange = [
@@ -862,7 +841,7 @@ export function Animate(position: number): void {
             if (word.RomajiElement) {
               word.RomajiElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
             }
-            applyTimedRubyState(word, ProcessedPosition, currentScale);
+            applyTimedRubyAnchorState(word, currentScale);
 
             setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
             // Use translate3d to ensure GPU-accelerated transforms
@@ -1505,7 +1484,7 @@ export function Animate(position: number): void {
               );
               setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
               //}
-              applyTimedRubyState(word, ProcessedPosition, currentScale);
+              applyTimedRubyAnchorState(word, currentScale);
               if (word.RomajiElement) {
                 word.RomajiElement.style.setProperty("--gradient-position", "100%");
               }

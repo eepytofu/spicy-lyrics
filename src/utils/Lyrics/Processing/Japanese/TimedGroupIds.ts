@@ -1,4 +1,5 @@
-import type { RenderPlan } from "../../Model.ts";
+import type { PlanFuriganaSegment, RenderPlan } from "../Model.ts";
+import { furiganaSegmentKey } from "./FuriganaIdentity.ts";
 
 /** Timed unit IDs are provider owner IDs, never array positions. */
 export function timedLogicalGroupIds(plan: RenderPlan | undefined): Map<string, string> {
@@ -7,6 +8,7 @@ export function timedLogicalGroupIds(plan: RenderPlan | undefined): Map<string, 
 
 export type TimedFuriganaGroup = {
   id: string;
+  segmentKey: string;
   reading: string;
   spanIds: readonly string[];
   /**
@@ -31,19 +33,13 @@ export type TimedFuriganaGroups = {
  */
 export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFuriganaGroups {
   const sourceUnits = plan?.sourceUnits || [];
-  const ruby = (plan?.furigana || []) as Array<{
-    start?: number;
-    end?: number;
-    reading?: string;
-    canonicalRange?: { startCp: number; endCp: number };
-  }>;
+  const ruby = plan?.furigana || [];
   const groups: TimedFuriganaGroup[] = [];
   const bySpanId = new Map<string, TimedFuriganaGroup>();
 
   ruby.forEach((segment, index) => {
-    const start = segment.canonicalRange?.startCp ?? segment.start;
-    const end = segment.canonicalRange?.endCp ?? segment.end;
-    if (typeof start !== "number" || typeof end !== "number" || end <= start || !segment.reading) return;
+    const { start, end } = planFuriganaRange(segment);
+    if (end <= start || !segment.reading) return;
 
     const intersecting = sourceUnits.filter((unit) =>
       start < unit.canonicalRange.endCp && end > unit.canonicalRange.startCp
@@ -55,6 +51,7 @@ export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFurigana
 
     const group: TimedFuriganaGroup = {
       id: `timed-ruby-${index}`,
+      segmentKey: furiganaSegmentKey(start, end, segment.reading),
       reading: segment.reading,
       spanIds: intersecting.map((unit) => unit.spanId),
       rubyCenterCh: start - intersecting[0].canonicalRange.startCp + (end - start) / 2,
@@ -64,6 +61,12 @@ export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFurigana
   });
 
   return { groups, bySpanId };
+}
+
+function planFuriganaRange(segment: PlanFuriganaSegment): { start: number; end: number } {
+  return "canonicalRange" in segment
+    ? { start: segment.canonicalRange.startCp, end: segment.canonicalRange.endCp }
+    : { start: segment.start, end: segment.end };
 }
 
 /**

@@ -16,11 +16,14 @@ import {
 import { cleanInvisibles } from "../Fork/TextDetection.ts";
 import { normalizeChineseProviderJapaneseText } from "../ChineseCharacterConversion.ts";
 import type { RenderPlan } from "../Processing/Model.ts";
+import { utf16FuriganaSegmentKey } from "../Processing/Japanese/FuriganaIdentity.ts";
 
 export type FuriganaSegment = {
   start: number;
   end: number;
   reading: string;
+  /** Stable full-line code-point range and reading identity. */
+  lineSegmentKey?: string;
 };
 
 export type JapaneseReading = {
@@ -600,20 +603,30 @@ export async function applyJapaneseReadingToSyllables(
     }
 
     const localFurigana = reading.furigana
-      .filter((segment) => {
+      .map((segment) => ({
+        segment,
+        lineSegmentKey: utf16FuriganaSegmentKey(
+          reading.sourceText,
+          segment.start,
+          segment.end,
+          segment.reading,
+        ),
+      }))
+      .filter(({ segment }) => {
         const key = `${segment.start}:${segment.end}:${segment.reading}`;
         if (assignedFuriganaKeys.has(key)) return false;
         if (!rangesOverlap(segment.start, segment.end, syllStart, syllEnd)) return false;
         assignedFuriganaKeys.add(key);
         return true;
       })
-      .map((segment) => ({
+      .map(({ segment, lineSegmentKey }) => ({
         start: Math.max(0, segment.start - syllStart),
         end: Math.max(
           Math.min(syllEnd, segment.end) - syllStart,
           Math.max(0, segment.start - syllStart) + 1
         ),
         reading: segment.reading,
+        lineSegmentKey,
       }));
 
     if (localFurigana.length > 0 || syllableRomaji) {
