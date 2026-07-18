@@ -3,7 +3,7 @@ import { attachSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries } from "./shared";
 
 export function decryptQrc(hex: string): string | undefined {
   try {
@@ -50,6 +50,10 @@ function qrcSidecarAsLrc(value: string | undefined): string | undefined {
 
 type SearchSong = { id: number; title: string; artists: string[]; album: string; durationMs?: number };
 
+function assessSearchSong(track: Parameters<LyricsProvider>[0], song: SearchSong) {
+  return assessCandidate(track, { title: song.title, artists: song.artists, album: song.album, durationMs: song.durationMs });
+}
+
 function decodeCdata(value: string): string {
   try { return decodeURIComponent(value); } catch { return value; }
 }
@@ -73,8 +77,8 @@ export async function searchQq(track: Parameters<LyricsProvider>[0]): Promise<Se
     const response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json;charset=utf-8", Referer: "https://y.qq.com/", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body) });
     if (!response.ok) continue;
     const json = await response.json<any>();
-    for (const item of json?.req?.data?.body?.song?.list ?? []) {
-      if (!item?.id || !(item.title ?? item.songname)) continue;
+    const addItem = (item: any) => {
+      if (!item?.id || !(item.title ?? item.songname)) return;
       found.set(Number(item.id), {
         id: Number(item.id),
         title: item.title ?? item.songname,
@@ -82,13 +86,17 @@ export async function searchQq(track: Parameters<LyricsProvider>[0]): Promise<Se
         album: item.album?.name ?? item.albumname ?? "",
         durationMs: Number(item.interval) ? Number(item.interval) * 1000 : undefined,
       });
+    };
+    for (const item of json?.req?.data?.body?.song?.list ?? []) {
+      addItem(item);
+      for (const grouped of item?.grp ?? item?.group ?? []) addItem(grouped);
     }
-    if ([...found.values()].some((song) => candidateScore(track, song.title, song.artists, song.durationMs) >= 45)) break;
+    if ([...found.values()].some((song) => isStrongCandidate(assessSearchSong(track, song)))) break;
   }
-  if (!found.size) {
+  if (![...found.values()].some((song) => isAcceptableCandidate(assessSearchSong(track, song)))) {
     for (const song of await searchQqLegacy(track)) found.set(song.id, song);
   }
-  return [...found.values()].sort((a, b) => candidateScore(track, b.title, b.artists, b.durationMs) - candidateScore(track, a.title, a.artists, a.durationMs));
+  return [...found.values()].sort((a, b) => assessSearchSong(track, b).score - assessSearchSong(track, a).score);
 }
 
 export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsProvider>[0]): Promise<any | undefined> {
@@ -107,7 +115,7 @@ export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsPro
 
 export const qqProvider: LyricsProvider = async (track) => {
   for (const song of await searchQq(track)) {
-    if (candidateScore(track, song.title, song.artists, song.durationMs) < 45) continue;
+    if (!isAcceptableCandidate(assessSearchSong(track, song))) continue;
     const data = await fetchQqLyric(song, track); const primary = qrcContent(decryptQrc(data?.lyric ?? "")); if (!primary) continue;
     const rawTranslation = qrcContent(decryptQrc(data?.trans ?? ""));
     const translation = qrcSidecarAsLrc(rawTranslation);

@@ -41,6 +41,15 @@ export type ProviderMatchMetadata = {
   durationMs?: number;
   score: number;
   confidence: number;
+  coherent?: boolean;
+  evidence?: {
+    title: number;
+    artists: number | null;
+    album: number | null;
+    albumArtists: number | null;
+    duration: number | null;
+    versionConflict: boolean;
+  };
   method: string;
 };
 

@@ -2,7 +2,7 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
-import { candidateScore, fetchWithTimeout, matchMetadata, searchQueries } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries } from "./shared";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
 
@@ -25,7 +25,10 @@ async function eapi<T>(endpoint: string, path: string, payload: unknown): Promis
 }
 
 type Song = { id: number; name: string; artists: string[]; album: string; durationMs?: number };
-async function search(track: Parameters<LyricsProvider>[0]): Promise<Song[]> {
+function assessSong(track: Parameters<LyricsProvider>[0], song: Song) {
+  return assessCandidate(track, { title: song.name, artists: song.artists, album: song.album, durationMs: song.durationMs });
+}
+export async function searchNetease(track: Parameters<LyricsProvider>[0]): Promise<Song[]> {
   const found = new Map<number, Song>();
   for (const keyword of searchQueries(track)) {
     const body = await eapi<any>("https://interface.music.163.com/eapi/batch", "/api/search/song/list/page", {
@@ -35,9 +38,9 @@ async function search(track: Parameters<LyricsProvider>[0]): Promise<Song[]> {
       const song = resource?.baseInfo?.simpleSongData; if (!song?.id || !song?.name) continue;
       found.set(Number(song.id), { id: Number(song.id), name: song.name, artists: (song.ar ?? []).map((artist: any) => artist.name).filter(Boolean), album: song.al?.name ?? "", durationMs: Number(song.dt) || undefined });
     }
-    if ([...found.values()].some((song) => candidateScore(track, song.name, song.artists, song.durationMs) >= 45)) break;
+    if ([...found.values()].some((song) => isStrongCandidate(assessSong(track, song)))) break;
   }
-  return [...found.values()].sort((a, b) => candidateScore(track, b.name, b.artists, b.durationMs) - candidateScore(track, a.name, a.artists, a.durationMs));
+  return [...found.values()].sort((a, b) => assessSong(track, b).score - assessSong(track, a).score);
 }
 
 export function parseYrc(value: string): TimedLine[] {
@@ -77,8 +80,8 @@ export function neteaseProviderCredits(body: any): ProviderCredit[] {
 }
 
 export const neteaseProvider: LyricsProvider = async (track) => {
-  for (const song of await search(track)) {
-    if (candidateScore(track, song.name, song.artists, song.durationMs) < 45) continue;
+  for (const song of await searchNetease(track)) {
+    if (!isAcceptableCandidate(assessSong(track, song))) continue;
     const body = await eapi<any>("https://interface3.music.163.com/eapi/song/lyric/v1", "/api/song/lyric/v1", {
       id: song.id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0,
     });

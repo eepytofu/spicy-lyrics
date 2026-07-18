@@ -8,6 +8,12 @@ The QQ Music QRC compatibility module at `src/crypto/qrc-eslyric.ts` is adapted 
 
 A copy of GPLv3 is included at [LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only.txt).
 
+## Lyricify Lyrics Helper
+
+The staged metadata-query ladder and candidate-assessment design in `src/providers/shared.ts`, grouped QQ Music result handling, and KuGou catalog-first hash-bound lyric lookup are adapted from [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper), Copyright 2023 XY Wang (WXRIW), under the Apache License 2.0. The Spicy Lyrics implementation adds independent scoring, diagnostics, artist splitting, album evidence, version-conflict safeguards, cover-safety gates, and an HTTPS KuGou catalog request.
+
+A copy of Apache License 2.0 is included at [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
+
 ## Beautiful Lyrics lineage
 
 The service layout was informed by [Beautiful Lyrics Reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) and its [Beautiful Lyrics](https://github.com/surfbryce/beautiful-lyrics) lineage. Provider matching, parsing, and conversion in this Worker were implemented for Spicy Lyrics' own data model.

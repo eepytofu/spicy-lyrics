@@ -27,11 +27,6 @@ describe("live upstream providers", () => {
     expect(result?.Type).toBe("Syllable");
   }, 30000);
 
-  live("KuGou returns native lyrics", async () => {
-    const result = await kugouProvider({ id: "test", title: "逝去日子", artists: ["Beyond"], album: "", durationMs: 225000 });
-    expect(result?.Type).toBe("Syllable");
-  }, 30000);
-
   live("NetEase Cloud Music returns native lyrics", async () => {
     const result = await neteaseProvider({ id: "personal-fixture", title: "乐鸣东方", artists: ["洛天依"], album: "", durationMs: 240_000 });
     expect(["Syllable", "Line"]).toContain(result?.Type);
@@ -49,5 +44,36 @@ describe("live upstream providers", () => {
       expect.objectContaining({ role: "syncedLyrics", name: "Hendrix_u", provider: "netease" }),
       expect.objectContaining({ role: "translation", name: "冰霜暗月", provider: "netease" }),
     ]));
+  }, 30000);
+
+  live("KuGou retrieves the exact DJ fixture through catalog hash matching", async () => {
+    const track = {
+      id: "personal-dj-fixture",
+      title: "大東北我的家鄉(DJ何鵬版)",
+      artists: ["何玉"],
+      album: "大東北我的家鄉",
+      durationMs: 246_806,
+    };
+    const [qq, netease, kugou] = await Promise.all([
+      qqProvider(track),
+      neteaseProvider(track),
+      kugouProvider(track),
+    ]);
+
+    expect(["Syllable", "Line"]).toContain(netease?.Type);
+    expect(kugou?.Type).toBe("Syllable");
+    expect(Array.isArray(kugou?.Content) ? kugou.Content.length : 0).toBeGreaterThan(40);
+    expect(kugou?.SourceMatch).toMatchObject({
+      title: "大东北我的家乡 (DJ何鹏版)",
+      artists: ["何玉"],
+      album: "大东北我的家乡",
+      durationMs: 246_000,
+      method: "catalog-hash",
+      evidence: { versionConflict: false },
+    });
+    if (qq) {
+      expect(qq.Type).toBe("Syllable");
+      expect(qq.SourceMatch?.evidence?.versionConflict).toBe(false);
+    }
   }, 30000);
 });
