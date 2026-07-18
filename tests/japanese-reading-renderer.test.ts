@@ -182,6 +182,38 @@ test("Chinese-dominant mixed readings stay visible in Japanese furigana mode", (
   assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true);
 });
 
+test("active Chinese reading plans render contextual spaces between timing units", () => {
+  const line = new FakeElement();
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [{ Text: "\u4e0d" }, { Text: "\u4f1a" }, { Text: "\u5427\uff1f" }],
+    "\u4e0d\u4f1a\u5427\uff1f",
+    undefined,
+    undefined,
+    undefined,
+    [{}, {}, {}],
+    {
+      ...plan,
+      primaryScript: "Chinese",
+      joinedDisplayText: "b\u00f9 hu\u00ec b\u0101 \uff1f",
+      timedReadingUnits: [
+        { spanId: "0", canonicalRange: { startCp: 0, endCp: 1 }, text: "b\u00f9", logicalGroupId: "cn-0" },
+        { spanId: "1", canonicalRange: { startCp: 1, endCp: 2 }, text: " hu\u00ec", logicalGroupId: "cn-1" },
+        { spanId: "2", canonicalRange: { startCp: 2, endCp: 4 }, text: " b\u0101 \uff1f", logicalGroupId: "cn-2" },
+      ],
+    },
+    { useRomanized: true, isJapaneseLyrics: false },
+  );
+
+  const row = line.children.find((child) => child.className.includes("reading-plan-row"));
+  assert.ok(row);
+  assert.deepEqual(row.children.map((group) => group.style.marginLeft), ["", "0.25em", "0.25em"]);
+  assert.deepEqual(
+    row.children.map((group) => group.children[0]?.textContent),
+    ["b\u00f9", "hu\u00ec", "b\u0101 \uff1f"],
+  );
+});
+
 test("provider and built-in translations share markup but keep independent lanes", () => {
   const line = new FakeElement();
   appendLineExtras(

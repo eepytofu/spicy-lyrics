@@ -49,8 +49,8 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 34;
-// v2: render plans carry line-level furigana used by timed furigana groups.
+export const LYRICS_PROCESSING_VERSION = 35;
+// v3: render plans carry typed timed-group metadata and exact furigana identities.
 export const READING_PLAN_SCHEMA_VERSION = 3;
 
 // Constants

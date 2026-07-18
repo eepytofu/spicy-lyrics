@@ -1,6 +1,7 @@
 import {
   annotateJapaneseTextTarget,
   applyJapaneseReadingToSyllables,
+  prepareJapaneseLineAnalysis,
   type FuriganaSegment,
   type JapaneseAnalysisOptions,
   type JapaneseReadable,
@@ -19,7 +20,16 @@ export async function processJapanesePackageLine(
   romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {}
 ): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[] }> {
-  const reading = await applyJapaneseReadingToSyllables(displayText, undefined, syllables, romajiPromise, spans, options);
+  const analysis = await prepareJapaneseLineAnalysis(displayText, undefined, romajiPromise, options);
+  const reading = await applyJapaneseReadingToSyllables(
+    displayText,
+    undefined,
+    syllables,
+    romajiPromise,
+    spans,
+    options,
+    analysis,
+  );
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
   if (!romaji) throw new Error("Japanese fallback processor produced no reading");
 
@@ -37,7 +47,7 @@ export async function processJapanesePackageLine(
     })),
   };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, options);
+  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, options, analysis);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);

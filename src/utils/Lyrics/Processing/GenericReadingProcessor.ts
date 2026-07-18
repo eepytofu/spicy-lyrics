@@ -22,12 +22,29 @@ function align(chunks: string[], display: string): string[] {
 
 function alignChineseTimedUnits(chunks: string[], display: string): string[] {
   const tokens = display.trim().split(/\s+/u).filter(Boolean);
-  if (tokens.length !== chunks.length) return align(chunks, display);
+  const withTimedBoundaries = (units: string[]) => units.map(
+    (unit, index) => index === 0 || !unit ? unit : ` ${unit}`,
+  );
 
-  // A full-line pinyin pass has the context needed for polyphonic characters.
-  // Keep each timed source unit as its timing owner, but take its reading from
-  // that contextual result instead of an isolated per-character fallback.
-  return tokens.map((token, index) => index === 0 ? token : ` ${token}`);
+  if (tokens.length === chunks.length) return withTimedBoundaries(tokens);
+
+  const chunkTokenCounts = chunks.map(
+    (chunk) => chunk.trim().split(/\s+/u).filter(Boolean).length,
+  );
+  const timedTokenCount = chunkTokenCounts.reduce((sum, count) => sum + count, 0);
+  if (timedTokenCount === tokens.length) {
+    // A provider span can own several reading tokens, such as a Han character plus punctuation.
+    // Reuse that token geometry while taking pronunciation from the contextual full-line pass.
+    let cursor = 0;
+    const contextualChunks = chunkTokenCounts.map((count) => {
+      const chunk = tokens.slice(cursor, cursor + count).join(" ");
+      cursor += count;
+      return chunk;
+    });
+    return withTimedBoundaries(contextualChunks);
+  }
+
+  return align(chunks, display);
 }
 
 export function buildTimedGenericPlan(group: any, display: string, processor: string): RenderPlan | undefined {
