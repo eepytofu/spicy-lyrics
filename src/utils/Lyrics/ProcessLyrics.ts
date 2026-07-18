@@ -26,8 +26,8 @@ import {
   type ScriptBranchDocContext,
 } from "./Fork/TextDetection.ts";
 import {
-  pinyinOptionsForToneMode,
   romanizeCantonese,
+  romanizeMandarin,
   romanizeCyrillic,
   romanizeKoreanForDisplay,
 } from "./Fork/Romanization.ts";
@@ -39,7 +39,7 @@ import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcesso
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/RenderPlan.ts";
 import { processJapanesePackageLine, processJapanesePackageTextTarget } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
-import { romanizeChineseDominantCjkText } from "./Processing/CjkLanguageRouting.ts";
+import { buildCjkReadingContextText, romanizeChineseDominantCjkText } from "./Processing/CjkLanguageRouting.ts";
 import {
   preserveProviderReading,
   restoreProviderReading,
@@ -49,7 +49,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 35;
+export const LYRICS_PROCESSING_VERSION = 36;
 // v3: render plans carry typed timed-group metadata and exact furigana identities.
 export const READING_PLAN_SCHEMA_VERSION = 3;
 
@@ -80,11 +80,9 @@ const ScriptResidualTests: Record<RomanizationBranch, RegExp> = {
 const ResidualScriptTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
 
 // Load Packages
-RetrievePackage("pinyin", "4.0.0", "mjs").catch(() => {});
 RetrievePackage("GreekRomanization", "1.0.0", "js").catch(() => {});
 
 type RomanizationPackages = {
-  pinyin?: any;
   greekRomanization?: any;
 };
 
@@ -95,8 +93,6 @@ const loadPackagesForScripts = async (
   for (const script of scripts) {
     if (script === "Japanese") {
       await RomajiPromise;
-    } else if (script === "Chinese" && chineseTranslitMode !== "jyutping") {
-      packages.pinyin = await RetrievePackage("pinyin", "4.0.0", "mjs");
     } else if (script === "Greek") {
       packages.greekRomanization = await RetrievePackage("GreekRomanization", "1.0.0", "js");
     }
@@ -106,15 +102,12 @@ const loadPackagesForScripts = async (
 
 const romanizeChineseText = async (
   text: string,
-  pinyin: any,
   primaryLanguage: string
 ): Promise<string> => {
   if (chineseTranslitMode === "jyutping") {
     return (await romanizeCantonese(text, primaryLanguage, true, chineseTones)) ?? text;
   }
-  if (!pinyin) return text;
-  const result = pinyin.pinyin(text, pinyinOptionsForToneMode(pinyin, chineseTones));
-  return result.join(" ");
+  return romanizeMandarin(text, chineseTones);
 };
 
 const romanizeKoreanText = (text: string): string => romanizeKoreanForDisplay(text, koreanDisplayMode).display;
@@ -303,7 +296,11 @@ const postProcessSyllableRomanization = async (
       if (isJapaneseLine) group.ReadingPrimaryScript = "Japanese";
       else if (isChineseLine) group.ReadingPrimaryScript = "Chinese";
 
-      const lineText = isJapaneseLine ? joinSyllables(syllables, true) : spacedLineText;
+      const lineText = isChineseLine
+        ? buildCjkReadingContextText(syllables)
+        : isJapaneseLine
+          ? joinSyllables(syllables, true)
+          : spacedLineText;
       const groupHasKorean = syllables.some((s: any) => KoreanTextTest.test(s.Text || ""));
       const japaneseMap = isJapaneseLine && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
       const effectiveLineText = japaneseMap?.lineText ?? lineText;
@@ -452,7 +449,7 @@ const romanizeEntry = async (
     (ItemChineseTest.test(text) || JapaneseTextTest.test(text));
   if (chineseDominantCjk) {
     text = await romanizeChineseDominantCjkText(text, {
-      romanizeHan: (run) => romanizeChineseText(run, packages.pinyin, primaryLanguage),
+      romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
       romanizeKana: async (run) => (await analyzeJapaneseLine(run, undefined, RomajiPromise))?.romaji,
     });
     changed = text !== target.Text;
@@ -465,7 +462,7 @@ const romanizeEntry = async (
       continue;
     } else if (script === "Chinese") {
       if (ItemChineseTest.test(text)) {
-        text = await romanizeChineseText(text, packages.pinyin, primaryLanguage);
+        text = await romanizeChineseText(text, primaryLanguage);
         changed = true;
       }
     } else if (script === "Korean") {

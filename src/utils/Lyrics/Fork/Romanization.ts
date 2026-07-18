@@ -14,6 +14,7 @@ import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
 import { G2p } from "korean-pronunciation";
+import { pinyin } from "pinyin-pro";
 import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
 import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
 
@@ -132,16 +133,14 @@ export function stripJyutpingTones(text: string): string {
   return text.replace(/(?<=[a-zA-Z])[1-6]/g, "");
 }
 
-export function pinyinOptionsForToneMode(pinyin: any, tones: boolean): Record<string, any> {
-  // segment:true resolves polyphones via the package's word segmentation
-  // (音乐→yuè, 银行→háng, 一切→qiè); group:false keeps one syllable per Han
-  // char so karaoke syllable alignment survives. Verified against the CDN
-  // artifact pkgs.spikerko.org/pinyin/pinyin@4.0.0.mjs (2026-07-06).
-  const options: Record<string, any> = { segment: true, group: false };
-  const api = pinyin?.pinyin ?? pinyin?.default ?? pinyin;
-  const style = tones ? api?.STYLE_TONE : api?.STYLE_NORMAL;
-  if (style !== undefined) options.style = style;
-  return options;
+export function romanizeMandarin(text: string, tones = true): string {
+  const readings = pinyin(text, {
+    type: "array",
+    toneType: tones ? "symbol" : "none",
+    toneSandhi: false,
+    nonZh: "consecutive",
+  });
+  return readings.join(" ").replace(/\s+/gu, " ").trim();
 }
 
 // ─── Cyrillic (BGN/PCGN) ──────────────────────────────────────────────────────

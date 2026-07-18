@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTimedGenericPlan } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
+import { buildCjkReadingContextText } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
+import { romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
 
-test("Chinese timed readings use contextual full-line pinyin with visible spaces", () => {
+test("Chinese timed readings remove provider boundaries before contextual Pinyin", () => {
   const source = Array.from("空杯如行舟浪荡醉梦里走");
   const isolated = ["kōng", "bēi", "rú", "háng", "zhōu", "làng", "dàng", "zuì", "mèng", "lǐ", "zǒu"];
+  const partOfWord = [true, true, true, true, false, true, true, true, true, true, false];
   const group = {
     StartTime: 0,
     EndTime: 11,
@@ -13,18 +16,30 @@ test("Chinese timed readings use contextual full-line pinyin with visible spaces
       RomanizedText: isolated[index],
       StartTime: index,
       EndTime: index + 1,
-      IsPartOfWord: index < source.length - 1,
+      IsPartOfWord: partOfWord[index],
     })),
   };
 
-  const expected = "kōng bēi rú xíng zhōu làng dàng zuì mèng lǐ zǒu";
+  const contextText = buildCjkReadingContextText(group.Syllables);
+  const expected = romanizeMandarin(contextText);
   const plan = buildTimedGenericPlan(group, expected, "Chinese");
 
+  assert.equal(contextText, "空杯如行舟浪荡醉梦里走");
+  assert.equal(expected, "kōng bēi rú xíng zhōu làng dàng zuì mèng lǐ zǒu");
   assert.ok(plan);
   assert.equal(plan.joinedDisplayText, expected);
   assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), [
     "kōng", " bēi", " rú", " xíng", " zhōu", " làng", " dàng", " zuì", " mèng", " lǐ", " zǒu",
   ]);
+});
+
+test("Chinese context reconstruction preserves authored Latin word spaces", () => {
+  assert.equal(buildCjkReadingContextText([
+    { Text: "一起", IsPartOfWord: true },
+    { Text: "sing", IsPartOfWord: false },
+    { Text: "along", IsPartOfWord: false },
+    { Text: "吧", IsPartOfWord: false },
+  ]), "一起 sing along 吧");
 });
 
 test("TIAN TIAN keeps contextual pinyin spacing across unequal AMLL timing units", () => {

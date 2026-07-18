@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildKoreanLineTextFromSyllables,
-  pinyinOptionsForToneMode,
+  romanizeMandarin,
   pronounceKoreanHangul,
   romanizeKorean,
   romanizeKoreanDisplayPieces,
@@ -109,13 +109,18 @@ test("Chinese tone toggle strips only Jyutping tone digits", async () => {
   assert.equal(stripJyutpingTones("nei5 hou2 remix 2026"), "nei hou remix 2026");
 });
 
-test("Chinese tone toggle selects pinyin style when the package exposes constants", () => {
-  const pinyin = { STYLE_TONE: 1, STYLE_NORMAL: 0 };
-  assert.deepEqual(pinyinOptionsForToneMode(pinyin, true), { segment: true, group: false, style: 1 });
-  assert.deepEqual(pinyinOptionsForToneMode(pinyin, false), { segment: true, group: false, style: 0 });
-  assert.deepEqual(pinyinOptionsForToneMode({ pinyin }, true), { segment: true, group: false, style: 1 });
-  assert.deepEqual(pinyinOptionsForToneMode({ pinyin }, false), { segment: true, group: false, style: 0 });
-  assert.deepEqual(pinyinOptionsForToneMode({}, true), { segment: true, group: false });
+test("Mandarin phrase readings keep lexical context without confusing bank usage", () => {
+  assert.equal(romanizeMandarin("\u884c\u821f"), "x\u00edng zh\u014du");
+  assert.equal(romanizeMandarin("\u884c\u6d41\u6c34"), "x\u00edng li\u00fa shu\u01d0");
+  assert.equal(romanizeMandarin("\u884c\u4e91\u6d41\u6c34"), "x\u00edng y\u00fan li\u00fa shu\u01d0");
+  assert.equal(romanizeMandarin("\u94f6\u884c\u6d41\u6c34"), "y\u00edn h\u00e1ng li\u00fa shu\u01d0");
+});
+
+test("Mandarin tone toggle preserves dictionary tones instead of applying sandhi", () => {
+  assert.equal(romanizeMandarin("\u4e0d\u8fc7\u4e00\u5207"), "b\u00f9 gu\u00f2 y\u012b qi\u00e8");
+  assert.equal(romanizeMandarin("\u4e0d\u8fc7\u4e00\u5207", false), "bu guo yi qie");
+  assert.equal(romanizeMandarin("ABC\u4e2d\u6587 test"), "ABC zh\u014dng w\u00e9n test");
+  assert.equal(romanizeMandarin("\u5427\uff1f"), "ba \uff1f");
 });
 
 test("Korean spelling-mode corpus", () => {

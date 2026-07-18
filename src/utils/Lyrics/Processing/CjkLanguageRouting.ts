@@ -10,8 +10,26 @@ type ChineseDominantProcessors = {
   romanizeKana: (text: string) => string | undefined | Promise<string | undefined>;
 };
 
+type TimedReadingTextUnit = {
+  Text?: string;
+  IsPartOfWord?: boolean;
+};
+
 const HanCharTest = /\p{Script=Han}/u;
 const KanaCharTest = /\p{Script=Hiragana}|\p{Script=Katakana}/u;
+const LatinCharTest = /\p{Script=Latin}/u;
+
+export function buildCjkReadingContextText(syllables: TimedReadingTextUnit[]): string {
+  return syllables.reduce((lineText, syllable, index) => {
+    const text = syllable.Text || "";
+    if (index === 0) return text;
+
+    const previousText = syllables[index - 1]?.Text || "";
+    const preserveAuthoredWordSpace = syllable.IsPartOfWord !== true &&
+      (LatinCharTest.test(previousText) || LatinCharTest.test(text));
+    return `${lineText}${preserveAuthoredWordSpace ? " " : ""}${text}`;
+  }, "");
+}
 
 function runKind(char: string): CjkReadingRunKind {
   if (HanCharTest.test(char)) return "Han";
