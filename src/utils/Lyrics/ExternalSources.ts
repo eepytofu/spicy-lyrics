@@ -297,7 +297,7 @@ async function parseServerResponse(response: Response, info: TrackLyricsInfo, pr
   return parsed.synced.length ? stamp(buildLine(parsed.synced, info.durationMs, provider, label), provider, label, match) : stamp(buildStatic(parsed.plain, provider, label), provider, label, match);
 }
 
-async function fetchWorker(info: TrackLyricsInfo, provider: "amlldb" | "qq" | "kugou" | "netease"): Promise<ExternalLyricsResult | null> {
+async function fetchWorker(info: TrackLyricsInfo, provider: "amlldb" | "qq" | "kugou" | "netease" | "soda"): Promise<ExternalLyricsResult | null> {
   const base = normalizeLyricsServerUrl($externalLyricsWorkerUrl.get()); if (!base) return null;
   try { return await parseServerResponse(await fetch(serverRequestUrl(base, info, provider)), info, provider, getLyricsSourceDefinition(provider, []).label); }
   catch (error) { console.error(`[SpicyLyrics] ${provider} Worker failed`, error); return null; }
@@ -325,7 +325,7 @@ async function fetchProviderResult(
     provider === "spotify" ? fetchSpotify(info) :
     provider === "musixmatch" ? fetchMusixmatch(info) :
     provider === "lrclib" ? fetchLrclib(info) :
-    provider === "amlldb" || provider === "qq" || provider === "kugou" || provider === "netease" ? fetchWorker(info, provider) : fetchCustom(info, provider);
+    provider === "amlldb" || provider === "qq" || provider === "kugou" || provider === "netease" || provider === "soda" ? fetchWorker(info, provider) : fetchCustom(info, provider);
 }
 
 type ProviderEntry = {

@@ -1,8 +1,8 @@
 # External-source Worker
 
-This optional Cloudflare Worker connects Spicy Lyrics to AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music. It matches Spotify track metadata against each service and returns data the extension already knows how to parse.
+This optional Cloudflare Worker connects Spicy Lyrics to AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. It matches Spotify track metadata against each service and returns data the extension already knows how to parse.
 
-AMLL TTML DB responses stay as TTML. QQ Music, KuGou, and NetEase Cloud Music are converted to native Spicy Lyrics `Static`, `Line`, or `Syllable` JSON so timing, translations, romanization, vocal roles, and available contributor metadata can survive the round trip.
+AMLL TTML DB responses stay as TTML. QQ Music, KuGou, NetEase Cloud Music, and Soda Music are converted to native Spicy Lyrics `Static`, `Line`, or `Syllable` JSON so timing, translations, romanization, vocal roles, and available contributor metadata can survive the round trip.
 
 ## Deploy your own Worker
 
@@ -34,7 +34,7 @@ To use another Worker name, edit `name` in `wrangler.toml` before deployment. Cu
 1. Open **Spicy Lyrics Settings → Sources**.
 2. Open **Lyrics Sources → Manage Sources**.
 3. Paste the Worker origin into **External Sources Worker**. Do not append `/v1/lyrics`.
-4. Enable AMLL TTML DB, QQ Music, KuGou, or NetEase Cloud Music and arrange their priority.
+4. Enable AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, or Soda Music and arrange their priority.
 
 The extension stores the configured origin locally. Do not commit a deployed URL, account identifier, or token to this repository.
 
@@ -48,6 +48,7 @@ All lyric routes accept `GET` and have the same shape:
 | QQ Music            | `/v1/lyrics/qq/:spotifyTrackId`      | Native JSON  |
 | KuGou               | `/v1/lyrics/kugou/:spotifyTrackId`   | Native JSON  |
 | NetEase Cloud Music | `/v1/lyrics/netease/:spotifyTrackId` | Native JSON  |
+| Soda Music          | `/v1/lyrics/soda/:spotifyTrackId`    | Native JSON  |
 
 Required query data:
 
@@ -97,6 +98,8 @@ npm test
 ```
 
 Provider interfaces are unofficial and may change without warning. Review the applicable service terms and avoid logging response bodies, private deployment details, or user data unnecessarily.
+
+KuGou catalog discovery uses its upstream mobile HTTP endpoint because that hostname does not currently provide a usable HTTPS connection. The request contains only the title, artist, and album search text. Lyric retrieval remains HTTPS, and the Worker never sends Spotify credentials, cookies, or account data to KuGou.
 
 ## License and attribution
 

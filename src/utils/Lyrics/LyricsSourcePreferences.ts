@@ -8,6 +8,7 @@ export const BUILT_IN_LYRICS_SOURCE_IDS = [
   "qq",
   "kugou",
   "netease",
+  "soda",
 ] as const;
 
 export type BuiltInLyricsSourceId = (typeof BUILT_IN_LYRICS_SOURCE_IDS)[number];
@@ -22,11 +23,11 @@ export type CustomLyricsServer = {
 type LyricsSourceDefinition = { label: string; description: string };
 
 export const DEFAULT_LYRICS_SOURCE_ORDER: LyricsSourceProviderId[] = [
-  "spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "spotify", "lrclib",
+  "spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "soda", "spotify", "lrclib",
 ];
 
 export const DEFAULT_DISABLED_LYRICS_SOURCES: LyricsSourceProviderId[] = [
-  "lrclib", "amlldb", "qq", "kugou", "netease",
+  "lrclib", "amlldb", "qq", "kugou", "netease", "soda",
 ];
 
 export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, LyricsSourceDefinition> = {
@@ -39,6 +40,7 @@ export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, L
   qq: { label: "QQ Music", description: "Word-synced QRC lyrics." },
   kugou: { label: "KuGou", description: "Word-synced KRC lyrics." },
   netease: { label: "NetEase Cloud Music", description: "Word-synced YRC or line-synced LRC lyrics." },
+  soda: { label: "Soda Music", description: "Soda Music KRC, QRC, YRC, LRC, or plain lyrics." },
 };
 
 function parseStringArray(value: unknown): string[] {
@@ -109,13 +111,14 @@ export function getLyricsSourceDefinition(id: LyricsSourceProviderId, customServ
 const SOURCE_LABELS: Record<string, string> = {
   spl: "Spicy Lyrics Community", spt: "Spotify", aml: "Apple Music",
   spicy: "Spicy Lyrics", musixmatch: "Musixmatch", apple: "Apple Music",
-  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "KuGou", netease: "NetEase Cloud Music",
+  spotify: "Spotify", lrclib: "LRCLIB", amlldb: "AMLL TTML DB", qq: "QQ Music", kugou: "KuGou", netease: "NetEase Cloud Music", soda: "Soda Music",
 };
 
 const CANONICAL_EXTERNAL_SOURCE_LABELS: Record<string, string> = {
   qq: SOURCE_LABELS.qq,
   kugou: SOURCE_LABELS.kugou,
   netease: SOURCE_LABELS.netease,
+  soda: SOURCE_LABELS.soda,
 };
 
 export function resolveLyricsSourceLabel(source?: string, displayName?: string, fetchProvider?: string): string | null {

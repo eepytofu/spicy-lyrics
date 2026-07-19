@@ -64,11 +64,44 @@ function stripSoftTitleSuffix(value: string): string {
   return result;
 }
 
+function scriptProfile(value: string): string {
+  return [
+    /\p{Script=Latin}/u.test(value) ? "latin" : "",
+    /\p{Script=Han}/u.test(value) ? "han" : "",
+    /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(value) ? "kana" : "",
+    /\p{Script=Hangul}/u.test(value) ? "hangul" : "",
+  ].filter(Boolean).join("-");
+}
+
+function bracketArtistAlternatives(value: string): string[] {
+  const alternatives: string[] = [];
+  const pattern = /\(([^()]*)\)|\[([^[\]]*)\]|（([^（）]*)）|【([^【】]*)】/gu;
+  for (const match of value.matchAll(pattern)) {
+    const inner = match.slice(1).find((part) => typeof part === "string")?.trim() ?? "";
+    const outer = `${value.slice(0, match.index)} ${value.slice((match.index ?? 0) + match[0].length)}`.trim();
+    const innerProfile = scriptProfile(inner);
+    const outerProfile = scriptProfile(outer);
+    // Artist profiles commonly expose localized names as `A (B)`. Only split
+    // the pair when the scripts differ, so labels such as `(Official)` do not
+    // become independent artist identities.
+    if (inner && outer && innerProfile && outerProfile && innerProfile !== outerProfile) {
+      alternatives.push(inner, outer);
+    }
+  }
+  return alternatives;
+}
+
 function artistForms(value: string): string[] {
   const withoutOfficial = value.replace(/official(?:\s*(?:account|channel|music))?\s*$/iu, "");
   const withoutCjkInfinity = value.replace(/(?<=\p{Script=Han})infinity\s*$/iu, "");
   const pieces = value.split(artistSeparator);
-  return unique([value, withoutOfficial, withoutCjkInfinity, ...pieces].map(normalize));
+  return unique([
+    value,
+    withoutOfficial,
+    withoutCjkInfinity,
+    ...pieces,
+    ...bracketArtistAlternatives(value),
+  ].map(normalize));
 }
 
 function versionConflict(wanted: string, candidate: string): boolean {
@@ -185,7 +218,9 @@ function durationEvidence(wanted?: number, candidate?: number): number | null {
 
 export type TrackCandidate = {
   title: string;
+  titleAliases?: string[];
   artists: string[];
+  artistAliases?: string[];
   album?: string;
   albumArtists?: string[];
   durationMs?: number;
@@ -230,9 +265,18 @@ export function searchQueries(track: TrackMetadata): string[] {
 }
 
 export function assessCandidate(track: TrackMetadata, candidate: TrackCandidate): CandidateAssessment {
-  const conflict = versionConflict(track.title, candidate.title);
-  const title = candidate.title.trim() ? nameEvidence(track.title, candidate.title) : 0;
-  const artists = artistEvidence(track.artists, candidate.artists);
+  const titleForms = unique([candidate.title, ...(candidate.titleAliases ?? [])]);
+  const titleEvidence = titleForms.map((value) => ({
+    value,
+    evidence: nameEvidence(track.title, value),
+  })).sort((left, right) => right.evidence - left.evidence);
+  const selectedTitle = titleEvidence[0]?.value ?? candidate.title;
+  const conflict = versionConflict(track.title, selectedTitle);
+  const title = titleEvidence[0]?.evidence ?? 0;
+  const artists = artistEvidence(track.artists, [
+    ...candidate.artists,
+    ...(candidate.artistAliases ?? []),
+  ]);
   const album = track.album.trim() && candidate.album?.trim() ? nameEvidence(track.album, candidate.album) : null;
   const albumArtists = candidate.albumArtists?.length ? artistEvidence(track.artists, candidate.albumArtists) : null;
   const duration = durationEvidence(track.durationMs, candidate.durationMs);
@@ -287,8 +331,16 @@ export function candidateScore(track: TrackMetadata, title: string, artists: str
   return assessCandidate(track, { title, artists, durationMs, album }).score;
 }
 
-export function matchMetadata(track: TrackMetadata, title: string, artists: string[], durationMs: number | undefined, method: string, album?: string): ProviderMatchMetadata {
-  const assessment = assessCandidate(track, { title, artists, album, durationMs });
+export function matchMetadata(
+  track: TrackMetadata,
+  title: string,
+  artists: string[],
+  durationMs: number | undefined,
+  method: string,
+  album?: string,
+  aliases?: Pick<TrackCandidate, "titleAliases" | "artistAliases">,
+): ProviderMatchMetadata {
+  const assessment = assessCandidate(track, { title, artists, album, durationMs, ...aliases });
   return {
     title,
     artists,

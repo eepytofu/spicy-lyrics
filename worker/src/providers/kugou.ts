@@ -3,6 +3,7 @@ import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
 import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries } from "./shared";
+import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
 
@@ -10,7 +11,7 @@ export function decryptKrc(encoded: string): string | undefined {
   try {
     const input = Buffer.from(encoded, "base64"); if (input.subarray(0, 4).toString("ascii") !== "krc1") return undefined;
     const zipped = Buffer.alloc(input.length - 4); for (let index = 4; index < input.length; index += 1) zipped[index - 4] = input[index] ^ KEY[(index - 4) % KEY.length];
-    return inflateSync(zipped).toString("utf8");
+    return inflateSync(zipped).toString("utf8").replace(/^\uFEFF/u, "");
   } catch { return undefined; }
 }
 
@@ -25,10 +26,11 @@ export function parseKrc(value: string): TimedLine[] {
     }
   } catch { /* malformed optional sidecar */ }
   const lines: TimedLine[] = [];
+  const offset = lyricOffset(value);
   for (const row of value.split(/\r?\n/)) {
     const header = /^\[(\d+),(\d+)\](.*)$/.exec(row.trim()); if (!header) continue;
-    const lineStart = Number(header[1]);
-    const words = [...header[3].matchAll(/<(\d+),(\d+),(?:\d+)>(.*?)(?=<\d+,\d+,\d+>|$)/g)].flatMap((match) => match[3] ? [{ text: match[3], startMs: lineStart + Number(match[1]), durationMs: Number(match[2]) }] : []);
+    const lineStart = Math.max(0, Number(header[1]) + offset);
+    const words = parseLeadingTimedWords(header[3], /<(\d+),(\d+),(?:\d+)>/g, lineStart);
     if (words.length) { const index = lines.length; lines.push({ startMs: lineStart, durationMs: Number(header[2]), words, translation: translations[index]?.[0], romanization: romanizations[index]?.[0] }); }
   }
   return lines;
@@ -40,6 +42,7 @@ export type KugouSong = {
   artists: string[];
   album: string;
   durationMs?: number;
+  catalog: "mobile-http";
 };
 
 export type KugouCandidate = {
@@ -80,33 +83,16 @@ function assessKugouCandidate(track: Parameters<LyricsProvider>[0], song: KugouS
 export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Promise<KugouSong[]> {
   const queries = searchQueries(track);
   const found = new Map<string, KugouSong>();
-  for (const keyword of queries) {
-    const url = new URL("https://songsearch.kugou.com/song_search_v2");
-    url.search = new URLSearchParams({
-      keyword,
-      page: "1",
-      pagesize: "20",
-      userid: "-1",
-      clientver: "",
-      platform: "WebFilter",
-      filter: "2",
-      iscorrection: "1",
-      privilege_filter: "0",
-    }).toString();
-    const response = await fetchWithTimeout(url.toString(), {
-      headers: { Referer: "https://www.kugou.com/", "User-Agent": "Mozilla/5.0" },
-    });
-    if (!response.ok) continue;
-    let body: any;
-    try { body = await response.json<any>(); }
-    catch { continue; }
+  const addResults = (items: any[], catalog: KugouSong["catalog"]) => {
     const addSong = (item: any) => {
       const hash = String(item?.FileHash ?? item?.hash ?? "").trim();
       const title = String(item?.SongName ?? item?.songname ?? "").trim();
       if (!hash || !title) return;
       const singer = String(item?.SingerName ?? item?.singername ?? "");
       const durationSeconds = Number(item?.Duration ?? item?.duration);
-      found.set(hash.toLowerCase(), {
+      const key = hash.toLowerCase();
+      if (found.has(key)) return;
+      found.set(key, {
         hash,
         title,
         artists: kugouArtists(singer),
@@ -114,12 +100,39 @@ export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Pr
         durationMs: Number.isFinite(durationSeconds) && durationSeconds > 0
           ? Math.round(durationSeconds * 1000)
           : undefined,
+        catalog,
       });
     };
-    for (const item of body?.data?.lists ?? body?.data?.info ?? []) {
+    for (const item of items) {
       addSong(item);
       for (const grouped of item?.Grp ?? item?.group ?? []) addSong(grouped);
     }
+  };
+  const requestCatalog = async (url: URL, catalog: KugouSong["catalog"]): Promise<void> => {
+    try {
+      const response = await fetchWithTimeout(url.toString(), {
+        headers: { Referer: "https://www.kugou.com/", "User-Agent": "Mozilla/5.0" },
+      });
+      if (!response.ok) return;
+      const body = await response.json<any>();
+      addResults(body?.data?.lists ?? body?.data?.info ?? [], catalog);
+    } catch { /* try the next catalog/query */ }
+  };
+
+  for (const keyword of queries) {
+    // Lyricify's mobile catalog exposes variants that KuGou WebFilter omits.
+    // Its HTTPS hostname currently fails certificate validation, so this
+    // catalog request intentionally uses the upstream HTTP endpoint. It
+    // receives only the metadata query, never a Spotify ID or credential.
+    const mobileUrl = new URL("http://mobilecdn.kugou.com/api/v3/search/song");
+    mobileUrl.search = new URLSearchParams({
+      format: "json",
+      keyword,
+      page: "1",
+      pagesize: "20",
+      showtype: "1",
+    }).toString();
+    await requestCatalog(mobileUrl, "mobile-http");
     if ([...found.values()].some((song) => isStrongCandidate(assessKugouSong(track, song)))) break;
   }
   return [...found.values()].sort((a, b) => assessKugouSong(track, b).score - assessKugouSong(track, a).score);
@@ -132,7 +145,7 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
     man: "yes",
     client: "pc",
     keyword: song.title,
-    duration: String(track.durationMs),
+    duration: String(song.durationMs ?? track.durationMs),
     hash: song.hash,
   }).toString();
   const response = await fetchWithTimeout(url.toString(), {
@@ -180,7 +193,14 @@ export const kugouProvider: LyricsProvider = async (track) => {
       if (result) return {
         ...result,
         ...(ProviderCredits.length ? { ProviderCredits } : {}),
-        SourceMatch: matchMetadata(track, song.title, song.artists, song.durationMs, "catalog-hash", song.album),
+        SourceMatch: matchMetadata(
+          track,
+          song.title,
+          song.artists,
+          song.durationMs,
+          `catalog-hash-${song.catalog}`,
+          song.album,
+        ),
       };
     }
   }

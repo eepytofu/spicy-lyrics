@@ -23,6 +23,30 @@ describe("provider candidate matching", () => {
     expect(candidateScore(track("Example", ["星尘Infinity"]), "Example", ["星尘"], 240_000)).toBeGreaterThanOrEqual(100);
   });
 
+  it("uses provider-supplied localized aliases without replacing canonical metadata", () => {
+    const assessment = assessCandidate(track("瑠璃の鳥", ["霜月はるか"], 284_000), {
+      title: "琉璃之鸟",
+      titleAliases: ["瑠璃の鳥"],
+      artists: ["霜月遥"],
+      artistAliases: ["霜月遥 (霜月はるか)", "Haruka Shimotsuki"],
+      durationMs: 284_200,
+    });
+
+    expect(assessment.evidence.title).toBe(1);
+    expect(assessment.evidence.artists).toBeGreaterThanOrEqual(0.85);
+    expect(isStrongCandidate(assessment)).toBe(true);
+  });
+
+  it("does not turn same-script bracket labels into artist aliases", () => {
+    const assessment = assessCandidate(track("Signal", ["官方"]), {
+      title: "Signal",
+      artists: ["主唱 (官方)"],
+      durationMs: 240_000,
+    });
+
+    expect(assessment.evidence.artists).toBe(0);
+  });
+
   it("records a DJ or remix difference without vetoing otherwise strong identity evidence", () => {
     expect(versionTags("Example (DJ Remix)")).toEqual(new Set(["remix", "dj"]));
     const assessment = assessCandidate(track("Example (DJ Remix)"), {

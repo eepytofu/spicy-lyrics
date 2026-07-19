@@ -1,6 +1,11 @@
 import type { NativeLyrics, ProviderId, TimedLine, TimedWord } from "./types";
 
-const labels: Record<ProviderId, string> = { qq: "QQ Music", kugou: "KuGou", netease: "NetEase Cloud Music" };
+const labels: Record<ProviderId, string> = {
+  qq: "QQ Music",
+  kugou: "KuGou",
+  netease: "NetEase Cloud Music",
+  soda: "Soda Music",
+};
 const NETEASE_INSTRUMENTAL_SENTINEL = "纯音乐请欣赏";
 
 function normalizeMarkerText(text: string): string {
@@ -83,14 +88,43 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
 
 export function parseLrc(text: string): Array<{ startMs: number; text: string }> {
   const output: Array<{ startMs: number; text: string }> = [];
+  const offset = Number(/^\s*\[offset\s*:\s*([+-]?\d+)\s*\]\s*$/im.exec(text)?.[1] ?? 0);
   for (const row of text.split(/\r?\n/)) {
-    const timestamps = [...row.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
-    const content = row.replace(/\[[^\]]+\]/g, "").trim();
+    const timestamps: Array<{ minutes: number; seconds: number }> = [];
+    let cursor = 0;
+    while (cursor < row.length) {
+      const timestamp = /^\s*\[(\d+):(\d+(?:\.\d+)?)\]/u.exec(row.slice(cursor));
+      if (!timestamp) break;
+      timestamps.push({ minutes: Number(timestamp[1]), seconds: Number(timestamp[2]) });
+      cursor += timestamp[0].length;
+    }
+    // Only leading numeric tags are timestamps. Bracketed lyric text such as
+    // `[Chorus]`, punctuation, and later inline tags belong to the lyric.
+    const content = row.slice(cursor).trim();
     for (const timestamp of timestamps) {
-      if (content) output.push({ startMs: Math.round((Number(timestamp[1]) * 60 + Number(timestamp[2])) * 1000), text: content });
+      if (content) output.push({
+        startMs: Math.max(0, Math.round((timestamp.minutes * 60 + timestamp.seconds) * 1000) + offset),
+        text: content,
+      });
     }
   }
   return output.sort((a, b) => a.startMs - b.startMs);
+}
+
+export function toStaticLyrics(text: string, provider: ProviderId): NativeLyrics | undefined {
+  const Lines = text.split(/\r?\n/).flatMap((row) => {
+    if (/^\s*\[(?:ar|al|ti|by|offset|language)\s*:/iu.test(row)) return [];
+    const value = row.replace(/^(?:\[\d+:\d+(?:\.\d+)?\])+/u, "").trim();
+    return value ? [{ Text: value }] : [];
+  });
+  if (!Lines.length || isInstrumentalSentinelDocument(Lines.map((line) => line.Text), provider)) return undefined;
+  return {
+    Type: "Static",
+    Lines,
+    source: provider,
+    fetchProvider: provider,
+    sourceDisplayName: labels[provider],
+  };
 }
 
 export function toLineLyrics(
@@ -140,4 +174,28 @@ export function attachSidecars(lines: TimedLine[], translation?: string, romaniz
     return best?.text;
   };
   return lines.map((line) => ({ ...line, translation: closest(translations, line.startMs), romanization: closest(romanizations, line.startMs) }));
+}
+
+export function attachTimedSidecars(
+  lines: TimedLine[],
+  translations: TimedLine[] = [],
+  romanizations: TimedLine[] = [],
+): TimedLine[] {
+  const closest = (items: TimedLine[], start: number) => {
+    let best: TimedLine | undefined;
+    let distance = 1500;
+    for (const item of items) {
+      const next = Math.abs(item.startMs - start);
+      if (next < distance) {
+        best = item;
+        distance = next;
+      }
+    }
+    return best?.words.map((word) => word.text).join("").trim() || undefined;
+  };
+  return lines.map((line) => ({
+    ...line,
+    translation: closest(translations, line.startMs),
+    romanization: closest(romanizations, line.startMs),
+  }));
 }

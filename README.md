@@ -9,17 +9,26 @@ A personal, source-only fork of [Spicy Lyrics](https://github.com/Spikerko/spicy
 
 > [!CAUTION]
 > Yes, it is vibecoded and may contain some slop. I am learning by building, so read the code before relying on it or deploying the optional Worker. Maintenance happens when curiosity, free time, and the weekly coding limit are all in the same room.
+>
+> Japanese and Chinese lyrics and readings receive the deepest testing in this fork. Romanization for other languages remains best-effort and may have less fixture coverage.
 
 ## What this fork changes
 
-- **More lyric sources and explicit selection rules.** Smart Match weighs track confidence, timing health, lyric agreement, sync detail, and source order. Sync Type First and Strict Priority are also available. Every source can be enabled, disabled, and reordered.
-- **Context-aware Chinese readings.** Mandarin uses the bundled Pinyin Pro engine and reconstructs whole-line context across provider timing chunks. That keeps compounds such as `行舟` on `xíng zhōu` instead of letting an arbitrary timing boundary turn it into `háng zhōu`. Cantonese Jyutping and local Simplified or Traditional conversion are also available.
-- **Japanese readings that keep karaoke timing.** Romaji, furigana, or both can be generated locally. Furigana that crosses timed syllables is rendered as one compound annotation while the original syllables keep their own timing. The ruby follows the karaoke now; it no longer eats the whole line for breakfast.
-- **Per-line language routing.** Mixed Chinese and Japanese tracks can choose the appropriate reading path line by line. Korean pronunciation modes and Russian or Ukrainian romanization are included too.
-- **Separate translation lanes.** Translations supplied by the selected lyric source can be shown independently from the optional Google fallback. Google fills only uncovered lines instead of overwriting source translations.
-- **Fork-specific controls.** The settings panel adds custom installed font stacks, Han glyph variants, source diagnostics, copy formats, quick reading and translation controls, playback offset, next-track prefetching, and layout options. Compatible local extensions can read a sanitized `window.SpicyLyricsInterop` snapshot.
+### Added features
 
-Built-in source support includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, and LRCLIB. A self-hosted Worker adds AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music.
+- **More lyric sources and explicit selection rules.** Smart Match weighs track confidence, timing health, lyric agreement, sync detail, and source order. Sync Type First and Strict Priority are also available. Every source can be enabled, disabled, and reordered.
+- **Local multilingual readings.** Mandarin Pinyin, Cantonese Jyutping, Japanese romaji and furigana, Korean reading modes, and Russian or Ukrainian romanization are available. Mixed Chinese and Japanese tracks are routed line by line.
+- **Separate translation lanes.** Translations supplied by the selected lyric source can be shown independently from the optional Google fallback. Google fills only uncovered lines.
+- **Fork-specific controls and interop.** The settings panel adds custom installed font stacks, Han glyph variants, source diagnostics, copy formats, quick reading and translation controls, playback offset, next-track prefetching, and layout options. Compatible local extensions can read a sanitized `window.SpicyLyricsInterop` snapshot.
+
+### Compatibility and correctness work
+
+- **Chinese reading context survives provider timing chunks.** Timed fragments are reconstructed into line context before Mandarin conversion with the bundled Pinyin Pro engine. This improves phrase-aware readings, but polyphonic characters still depend on dictionary coverage and can have edge cases.
+- **Japanese compound annotations preserve karaoke timing.** Furigana that crosses timed syllables is rendered as one annotation while the original syllables retain their timing and progression.
+- **Provider translations remain provider-owned.** Source translations are normalized into their own display lane instead of being overwritten or mislabeled as generated translations.
+- **Chinese-service text is normalized conservatively.** Optional Simplified, Traditional, and Japanese-form repair is limited by source and language evidence rather than being applied to every Han character line.
+
+Built-in source support includes Spicy Lyrics, Musixmatch, Apple Music, Spotify, and LRCLIB. A self-hosted Worker adds AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music.
 
 ## Install from source
 
@@ -64,7 +73,7 @@ For a custom installed font stack, enable **Use System Font** and list fonts in 
 
 ### Optional external sources
 
-No shared Worker URL is bundled. To use AMLL TTML DB, QQ Music, KuGou, or NetEase Cloud Music, deploy your own Worker:
+No shared Worker URL is bundled. To use AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, or Soda Music, deploy your own Worker:
 
 ```powershell
 cd worker
@@ -75,7 +84,7 @@ npx wrangler login
 npm run deploy
 ```
 
-In Spicy Lyrics, open **Settings → Sources → Lyrics Sources → Manage Sources**. Paste only the Worker origin into **External Sources Worker**, then enable and arrange the four providers. Do not append `/v1/lyrics`.
+In Spicy Lyrics, open **Settings → Sources → Lyrics Sources → Manage Sources**. Paste only the Worker origin into **External Sources Worker**, then enable and arrange the five providers. Do not append `/v1/lyrics`.
 
 See [worker/README.md](worker/README.md) for the route contract, local development, caching, and operational caveats.
 
@@ -122,6 +131,7 @@ The optional Worker is a small self-hosted compatibility proxy. It currently has
 - [amarinne/spicy-lyrics](https://github.com/amarinne/spicy-lyrics): primary fork base and lyrics-processing pipeline.
 - [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics): source-manager, custom-server, and custom-font references.
 - [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource): QQ Music, KuGou, and NetEase Cloud Music compatibility reference.
+- [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper): provider search, matching, retrieval, and timed-lyrics parsing reference for the external-source Worker.
 - [MuttonString/Furigana](https://github.com/MuttonString/Furigana) and [Hxjjxg/Furigana-api-fixed](https://github.com/Hxjjxg/Furigana-api-fixed): Japanese character-repair references for lyrics from Chinese services.
 - [Kuroshiro](https://github.com/hexenq/kuroshiro), [Kuromoji.js](https://github.com/takuyaa/kuromoji.js), [Pinyin Pro](https://github.com/zh-lx/pinyin-pro), and [OpenCC.js](https://github.com/nk2028/opencc-js): local reading analysis and CJK conversion.
 - [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db): community TTML database.

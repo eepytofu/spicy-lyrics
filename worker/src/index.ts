@@ -1,9 +1,15 @@
 import { kugouProvider } from "./providers/kugou";
 import { neteaseProvider } from "./providers/netease";
 import { qqProvider } from "./providers/qq";
+import { sodaProvider } from "./providers/soda";
 import type { LyricsProvider, ProviderId, TrackMetadata } from "./types";
 
-const providers: Record<ProviderId, LyricsProvider> = { qq: qqProvider, kugou: kugouProvider, netease: neteaseProvider };
+const providers: Record<ProviderId, LyricsProvider> = {
+  qq: qqProvider,
+  kugou: kugouProvider,
+  netease: neteaseProvider,
+  soda: sodaProvider,
+};
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",
@@ -28,7 +34,7 @@ function metadata(url: URL, id: string): TrackMetadata | undefined {
 export default {
   async fetch(request: Request): Promise<Response> {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
-    const url = new URL(request.url); const match = /^\/v1\/lyrics\/(amlldb|qq|kugou|netease)\/([^/]+)$/.exec(url.pathname);
+    const url = new URL(request.url); const match = /^\/v1\/lyrics\/(amlldb|qq|kugou|netease|soda)\/([^/]+)$/.exec(url.pathname);
     if (request.method !== "GET" || !match) return new Response("Not found", { status: 404, headers: cors });
     const provider = match[1] as ProviderId | "amlldb";
     let trackId: string;

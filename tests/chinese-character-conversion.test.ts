@@ -33,7 +33,7 @@ test("normalizes Chinese-provider variants to Japanese forms for analysis", () =
 });
 
 test("limits Japanese kanji repair to built-in Chinese lyric providers", () => {
-  for (const provider of ["qq", "kugou", "netease"]) {
+  for (const provider of ["qq", "kugou", "netease", "soda"]) {
     assert.equal(isChineseLyricsProvider({ fetchProvider: provider }), true, provider);
   }
   assert.equal(isChineseLyricsProvider({ source: "NETEASE" }), true);

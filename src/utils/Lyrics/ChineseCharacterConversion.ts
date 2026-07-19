@@ -13,7 +13,7 @@ const toSimplified = ConverterBuilder(TraditionalToCnPreset)({ from: "t", to: "c
 const toTraditional = ConverterBuilder(CnToTraditionalPreset)({ from: "cn", to: "tw" });
 let toJapanese: ((text: string) => string) | undefined;
 
-const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease"]);
+const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease", "soda"]);
 
 function codePoints(value: string): string[] {
   return Array.from(value);

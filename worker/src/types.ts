@@ -1,4 +1,4 @@
-export type ProviderId = "qq" | "kugou" | "netease";
+export type ProviderId = "qq" | "kugou" | "netease" | "soda";
 
 export type ProviderCreditRole = "syncedLyrics" | "lyrics" | "translation" | "romanization" | "credit";
 export type ProviderCredit = {

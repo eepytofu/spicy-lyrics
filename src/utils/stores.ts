@@ -44,13 +44,27 @@ function migrateSettingsKeys(blob: Record<string, any>): Record<string, any> {
   }
   try {
     const order = JSON.parse(blob.lyricsSourceOrder);
-    if (Array.isArray(order) && !order.includes("amlldb")) {
-      const qqIndex = order.indexOf("qq");
-      order.splice(qqIndex < 0 ? order.length : qqIndex, 0, "amlldb");
-      blob.lyricsSourceOrder = JSON.stringify(order);
-      const disabled = JSON.parse(blob.disabledLyricsSources ?? "[]");
-      blob.disabledLyricsSources = JSON.stringify(Array.isArray(disabled) ? [...new Set([...disabled, "amlldb"])] : ["amlldb"]);
-      changed = true;
+    if (Array.isArray(order)) {
+      const newlyDisabled: string[] = [];
+      if (!order.includes("amlldb")) {
+        const qqIndex = order.indexOf("qq");
+        order.splice(qqIndex < 0 ? order.length : qqIndex, 0, "amlldb");
+        newlyDisabled.push("amlldb");
+      }
+      if (!order.includes("soda")) {
+        const neteaseIndex = order.indexOf("netease");
+        const spotifyIndex = order.indexOf("spotify");
+        order.splice(neteaseIndex >= 0 ? neteaseIndex + 1 : spotifyIndex >= 0 ? spotifyIndex : order.length, 0, "soda");
+        newlyDisabled.push("soda");
+      }
+      if (newlyDisabled.length) {
+        blob.lyricsSourceOrder = JSON.stringify(order);
+        const disabled = JSON.parse(blob.disabledLyricsSources ?? "[]");
+        blob.disabledLyricsSources = JSON.stringify(
+          Array.isArray(disabled) ? [...new Set([...disabled, ...newlyDisabled])] : newlyDisabled
+        );
+        changed = true;
+      }
     }
   } catch { /* malformed source preferences are normalized by the source manager */ }
   if (changed) saveSettingsBlob(blob);
@@ -103,11 +117,11 @@ export const $timelineOutsideMediaContent = persistAtom<boolean>(
 export const $playbackOffset = persistAtom<number>("playbackOffset", 0);
 export const $lyricsSourceOrder = persistAtom<string>(
   "lyricsSourceOrder",
-  JSON.stringify(["spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "spotify", "lrclib"])
+  JSON.stringify(["spicy", "amlldb", "musixmatch", "apple", "qq", "kugou", "netease", "soda", "spotify", "lrclib"])
 );
 export const $disabledLyricsSources = persistAtom<string>(
   "disabledLyricsSources",
-  JSON.stringify(["lrclib", "amlldb", "qq", "kugou", "netease"])
+  JSON.stringify(["lrclib", "amlldb", "qq", "kugou", "netease", "soda"])
 );
 export const $ignoreMusixmatchWordSync = persistAtom<boolean>("ignoreMusixmatchWordSync", true);
 export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", false);
