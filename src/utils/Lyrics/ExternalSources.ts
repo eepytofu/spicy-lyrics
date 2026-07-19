@@ -24,6 +24,7 @@ import {
   type LyricsCandidate,
   type LyricsMatchMetadata,
 } from "./LyricsCandidateSelector.ts";
+import { externalSourceRequestUrl } from "./ExternalSourceRequest.ts";
 import { normalizedDisplayText } from "./TextCompare.ts";
 
 type TrackLyricsInfo = {
@@ -264,14 +265,6 @@ async function fetchLrclib(info: TrackLyricsInfo): Promise<ExternalLyricsResult 
   } catch (error) { console.error("[SpicyLyrics] LRCLIB failed", error); return null; }
 }
 
-function serverRequestUrl(base: string, info: TrackLyricsInfo, provider?: string): string {
-  const root = base.trim().replace(/\/+$/, "");
-  const url = new URL(provider ? `${root}/v1/lyrics/${provider}/${encodeURIComponent(info.id)}` : `${root}/${encodeURIComponent(info.id)}`);
-  url.searchParams.set("title", info.title); url.searchParams.set("artist", info.artist); url.searchParams.set("album", info.album); url.searchParams.set("duration", String(info.durationMs / 1000));
-  info.artists.forEach((artist) => url.searchParams.append("artist_name", artist));
-  return url.toString();
-}
-
 function responseMatch(response: Response): LyricsMatchMetadata | undefined {
   const encoded = response.headers.get("X-Spicy-Lyrics-Match");
   if (!encoded) return undefined;
@@ -299,13 +292,13 @@ async function parseServerResponse(response: Response, info: TrackLyricsInfo, pr
 
 async function fetchWorker(info: TrackLyricsInfo, provider: "amlldb" | "qq" | "kugou" | "netease" | "soda"): Promise<ExternalLyricsResult | null> {
   const base = normalizeLyricsServerUrl($externalLyricsWorkerUrl.get()); if (!base) return null;
-  try { return await parseServerResponse(await fetch(serverRequestUrl(base, info, provider)), info, provider, getLyricsSourceDefinition(provider, []).label); }
+  try { return await parseServerResponse(await fetch(externalSourceRequestUrl(base, info, provider)), info, provider, getLyricsSourceDefinition(provider, []).label); }
   catch (error) { console.error(`[SpicyLyrics] ${provider} Worker failed`, error); return null; }
 }
 
 async function fetchCustom(info: TrackLyricsInfo, provider: LyricsSourceProviderId): Promise<ExternalLyricsResult | null> {
   const server = parseCustomLyricsServers($customLyricsServers.get()).find((entry) => entry.id === provider); if (!server) return null;
-  try { return await parseServerResponse(await fetch(serverRequestUrl(server.url, info)), info, provider, server.name); }
+  try { return await parseServerResponse(await fetch(externalSourceRequestUrl(server.url, info)), info, provider, server.name); }
   catch (error) { console.error(`[SpicyLyrics] custom server ${server.name} failed`, error); return null; }
 }
 

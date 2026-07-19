@@ -95,6 +95,27 @@ describe("live upstream providers", () => {
     });
   }, 30000);
 
+  live("KuGou keeps a strong DJ catalog match when the lyric record shortens its title", async () => {
+    const result = await kugouProvider({
+      id: "nanshan-dj-fixture",
+      title: "南山雪 - Dj降调版",
+      artists: ["祥嘞嘞", "无名"],
+      album: "南山雪 (Dj降调版)",
+      durationMs: 202_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(Array.isArray(result?.Content) ? result.Content.length : 0).toBeGreaterThan(40);
+    expect(result?.SourceMatch).toMatchObject({
+      title: "南山雪 (DJ降调版)",
+      artists: ["祥嘞嘞"],
+      album: "南山雪",
+      durationMs: 201_000,
+      method: "catalog-hash-mobile-http",
+      evidence: { versionConflict: false },
+    });
+  }, 30000);
+
   live("KuGou mobile catalog retrieves a Japanese catalog track omitted by WebFilter", async () => {
     const result = await kugouProvider({
       id: "japanese-catalog-fixture",

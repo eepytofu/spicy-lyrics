@@ -16,7 +16,7 @@ A personal, source-only fork of [Spicy Lyrics](https://github.com/Spikerko/spicy
 
 ### Added features
 
-- **More lyric sources and explicit selection rules.** Smart Match weighs track confidence, timing health, lyric agreement, sync detail, and source order. Sync Type First and Strict Priority are also available. Every source can be enabled, disabled, and reordered.
+- **More lyric sources and explicit selection rules.** Smart Match compares track confidence, timing health, lyric agreement, and sync detail, then uses source order only to break equal-quality ties. Sync Type First and Strict Priority are also available. Every source can be enabled, disabled, and reordered.
 - **Local multilingual readings.** Mandarin Pinyin, Cantonese Jyutping, Japanese romaji and furigana, Korean reading modes, and Russian or Ukrainian romanization are available. Mixed Chinese and Japanese tracks are routed line by line.
 - **Separate translation lanes.** Translations supplied by the selected lyric source can be shown independently from the optional Google fallback. Google fills only uncovered lines.
 - **Fork-specific controls and interop.** The settings panel adds custom installed font stacks, Han glyph variants, source diagnostics, copy formats, quick reading and translation controls, playback offset, next-track prefetching, and layout options. Compatible local extensions can read a sanitized `window.SpicyLyricsInterop` snapshot.

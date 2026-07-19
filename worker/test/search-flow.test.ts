@@ -1,5 +1,11 @@
+import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { searchKugouCandidates, searchKugouSongs } from "../src/providers/kugou";
+import {
+  isKugouCandidateCompatible,
+  kugouProvider,
+  searchKugouCandidates,
+  searchKugouSongs,
+} from "../src/providers/kugou";
 import { neteaseProvider, searchNetease } from "../src/providers/netease";
 import { fetchQqLyric, qqProvider, searchQq } from "../src/providers/qq";
 import { searchSoda, sodaProvider } from "../src/providers/soda";
@@ -7,6 +13,17 @@ import { searchSoda, sodaProvider } from "../src/providers/soda";
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+const KRC_KEY = Uint8Array.from([
+  0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47,
+  0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69,
+]);
+
+function encodeKrc(value: string): string {
+  const compressed = deflateSync(Buffer.from(value, "utf8"));
+  const encrypted = Buffer.from(compressed.map((byte, index) => byte ^ KRC_KEY[index % KRC_KEY.length]));
+  return Buffer.concat([Buffer.from("krc1", "ascii"), encrypted]).toString("base64");
+}
 
 describe("provider search flow", () => {
   it("continues past a weak first query and includes QQ grouped variants", async () => {
@@ -396,6 +413,110 @@ describe("provider search flow", () => {
     expect(lyricHash).toBe("wanted-hash");
     expect(lyricDuration).toBe("239400");
     expect(candidates[0]?.id).toBe("wanted");
+  });
+
+  it("accepts an omitted KuGou child version only under a strong hash-bound catalog match", () => {
+    const track = {
+      id: "spotify-id",
+      title: "南山雪 - Dj降调版",
+      artists: ["祥嘞嘞", "无名"],
+      album: "南山雪 (Dj降调版)",
+      durationMs: 202_000,
+    };
+    const song = {
+      hash: "31ee30ce0e4d7c2ac753cf7a896255cc",
+      title: "南山雪 (DJ降调版)",
+      artists: ["祥嘞嘞"],
+      album: "南山雪",
+      durationMs: 201_000,
+      catalog: "mobile-http" as const,
+    };
+
+    expect(isKugouCandidateCompatible(track, song, {
+      id: "base-title",
+      accesskey: "key",
+      song: "南山雪",
+      singer: "祥嘞嘞",
+      duration: 201_613,
+    })).toBe(true);
+    expect(isKugouCandidateCompatible(track, song, {
+      id: "explicit-conflict",
+      accesskey: "key",
+      song: "南山雪 (Live版)",
+      singer: "祥嘞嘞",
+      duration: 201_613,
+    })).toBe(false);
+    expect(isKugouCandidateCompatible(track, song, {
+      id: "wrong-title",
+      accesskey: "key",
+      song: "北山雨",
+      singer: "祥嘞嘞",
+      duration: 201_613,
+    })).toBe(false);
+    expect(isKugouCandidateCompatible(track, song, {
+      id: "wrong-artist",
+      accesskey: "key",
+      song: "南山雪",
+      singer: "其他歌手",
+      duration: 201_613,
+    })).toBe(false);
+  });
+
+  it("retrieves the hash-bound KuGou KRC when the lyric record shortens the DJ title", async () => {
+    let downloads = 0;
+    const rawKrc = [
+      "[offset:0]",
+      "[180,2100]<0,500,0>南<500,500,0>山<1000,500,0>雪<1500,600,0>飞满天",
+      "[2490,2200]<0,500,0>似<500,500,0>我<1000,600,0>挂念<1600,600,0>你无边",
+      "[5000,2200]<0,500,0>白<500,500,0>了<1000,500,0>夜<1500,700,0>冷了心",
+    ].join("\n");
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.hostname === "mobilecdn.kugou.com") {
+        return new Response(JSON.stringify({ data: { info: [{
+          FileHash: "31ee30ce0e4d7c2ac753cf7a896255cc",
+          SongName: "南山雪 (DJ降调版)",
+          SingerName: "祥嘞嘞",
+          AlbumName: "南山雪",
+          Duration: 201,
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.pathname === "/search") {
+        expect(url.searchParams.get("hash")).toBe("31ee30ce0e4d7c2ac753cf7a896255cc");
+        return new Response(JSON.stringify({ candidates: [{
+          id: "425768330",
+          accesskey: "key",
+          song: "南山雪",
+          singer: "祥嘞嘞",
+          duration: 201_613,
+        }] }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      downloads += 1;
+      return new Response(JSON.stringify({ content: encodeKrc(rawKrc) }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }));
+
+    const result = await kugouProvider({
+      id: "spotify-id",
+      title: "南山雪 - Dj降调版",
+      artists: ["祥嘞嘞", "无名"],
+      album: "南山雪 (Dj降调版)",
+      durationMs: 202_000,
+    });
+
+    expect(downloads).toBe(1);
+    expect(result?.Type).toBe("Syllable");
+    expect(result?.Content).toHaveLength(3);
+    expect(result?.SourceMatch).toMatchObject({
+      title: "南山雪 (DJ降调版)",
+      artists: ["祥嘞嘞"],
+      album: "南山雪",
+      durationMs: 201_000,
+      method: "catalog-hash-mobile-http",
+      evidence: { versionConflict: false },
+    });
   });
 
   it("retrieves Soda KRC as native syllable lyrics and validates the detail track", async () => {

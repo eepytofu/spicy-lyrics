@@ -138,11 +138,11 @@ export default function LyricsSourcesManager() {
   const selectionSummary = selectionDiagnostics
     ? selectionDiagnostics.candidates
         .slice()
-        .sort((left, right) => right.totalScore - left.totalScore)
+        .sort((left, right) => right.selectionScore - left.selectionScore)
         .slice(0, 3)
         .map(
           (candidate) =>
-            `${sourceLabel(candidate.provider)} ${candidate.totalScore}: ${candidate.reasons.join(", ")}`
+            `${sourceLabel(candidate.provider)} score ${candidate.selectionScore}: ${candidate.reasons.join(", ")}`
         )
         .join(" | ")
     : "";

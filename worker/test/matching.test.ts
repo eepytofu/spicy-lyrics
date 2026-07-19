@@ -115,6 +115,107 @@ describe("provider candidate matching", () => {
     expect(isStrongCandidate(assessment)).toBe(true);
   });
 
+  it("accepts one omitted reference credit only when provider artists are a safe subset", () => {
+    const wanted = {
+      ...track("南山雪 - Dj降调版", ["祥嘞嘞", "无名"], 202_000),
+      album: "南山雪 (Dj降调版)",
+    };
+    const provider = assessCandidate(wanted, {
+      title: "南山雪 (DJ降调版)",
+      artists: ["祥嘞嘞"],
+      album: "南山雪",
+      durationMs: 201_000,
+    });
+    const conflicting = assessCandidate(wanted, {
+      title: "南山雪 (DJ降调版)",
+      artists: ["祥嘞嘞", "其他歌手"],
+      album: "南山雪",
+      durationMs: 201_000,
+    });
+
+    expect(provider.evidence.artists).toBe(0.88);
+    expect(provider.evidence.album).toBe(0.65);
+    expect(provider.score).toBeGreaterThan(94);
+    expect(isStrongCandidate(provider)).toBe(true);
+    expect(conflicting.evidence.artists).toBeLessThan(0.85);
+    expect(isStrongCandidate(conflicting)).toBe(false);
+  });
+
+  it("generalizes safe artist subsets to three or more reference artists", () => {
+    const wanted = track("Collaboration", ["Lead", "Guest", "Producer"]);
+    const missingOne = assessCandidate(wanted, {
+      title: "Collaboration",
+      artists: ["Lead", "Guest"],
+      durationMs: 240_000,
+    });
+    const missingTwo = assessCandidate(wanted, {
+      title: "Collaboration",
+      artists: ["Lead"],
+      durationMs: 240_000,
+    });
+
+    expect(missingOne.evidence.artists).toBe(0.88);
+    expect(missingTwo.evidence.artists).toBe(0.4);
+  });
+
+  it("keeps extra provider artists below a very-high identity match", () => {
+    const oneExtra = assessCandidate(track("Collaboration", ["Lead"]), {
+      title: "Collaboration",
+      artists: ["Lead", "Guest"],
+      durationMs: 240_000,
+    });
+    const severalExtras = assessCandidate(track("Collaboration", ["Lead"]), {
+      title: "Collaboration",
+      artists: ["Lead", "Guest", "Producer"],
+      durationMs: 240_000,
+    });
+    const extraOnDuet = assessCandidate(track("Collaboration", ["Lead", "Guest"]), {
+      title: "Collaboration",
+      artists: ["Lead", "Guest", "Producer"],
+      durationMs: 240_000,
+    });
+
+    expect(oneExtra.evidence.artists).toBe(0.75);
+    expect(severalExtras.evidence.artists).toBe(0.65);
+    expect(extraOnDuet.evidence.artists).toBe(0.75);
+    expect(isStrongCandidate(oneExtra)).toBe(false);
+    expect(isStrongCandidate(extraOnDuet)).toBe(false);
+  });
+
+  it("splits common featured-artist separators into identities", () => {
+    for (const artists of [
+      "Lead feat. Guest",
+      "Lead ft. Guest",
+      "Lead featuring Guest",
+      "Lead / Guest",
+      "Lead & Guest",
+      "Lead、Guest",
+      "Lead x Guest",
+    ]) {
+      const assessment = assessCandidate(track("Collaboration", ["Lead", "Guest"]), {
+        title: "Collaboration",
+        artists: [artists],
+        durationMs: 240_000,
+      });
+      expect(assessment.evidence.artists, artists).toBe(1);
+    }
+  });
+
+  it("does not treat two different album qualifiers as the same album", () => {
+    const wanted = {
+      ...track("Signal", ["Lead"]),
+      album: "Signal (DJ版)",
+    };
+    const assessment = assessCandidate(wanted, {
+      title: "Signal",
+      artists: ["Lead"],
+      album: "Signal (Live版)",
+      durationMs: 240_200,
+    });
+
+    expect(assessment.evidence.album).toBeLessThan(0.65);
+  });
+
   it("uses album evidence to separate otherwise similar candidates", () => {
     const wanted = { ...track("Signal", ["Lead"]), album: "Original Album" };
     const matchingAlbum = assessCandidate(wanted, {

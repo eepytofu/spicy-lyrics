@@ -104,6 +104,10 @@ function artistForms(value: string): string[] {
   ].map(normalize));
 }
 
+function artistIdentities(values: string[]): string[] {
+  return unique(values.flatMap((value) => value.split(artistSeparator)).map(normalize));
+}
+
 function versionConflict(wanted: string, candidate: string): boolean {
   const wantedTags = versionTags(wanted);
   const candidateTags = versionTags(candidate);
@@ -174,15 +178,64 @@ function nameEvidence(wanted: string, candidate: string): number {
   return 0;
 }
 
-function artistEvidence(wanted: string[], candidate: string[]): number | null {
+function trailingQualifierBase(value: string): string {
+  let result = simplify(value).trim();
+  let previous = "";
+  while (result && result !== previous) {
+    previous = result;
+    result = result
+      .replace(/\s*(?:\([^()]*\)|\[[^[\]]*\]|（[^（）]*）|【[^【】]*】)\s*$/u, "")
+      .replace(/\s+(?:-|–|—)\s+[^-–—]+$/u, "")
+      .trim();
+  }
+  return normalize(result);
+}
+
+function albumEvidence(wanted: string, candidate: string): number {
+  const direct = nameEvidence(wanted, candidate);
+  if (direct > 0) return direct;
+
+  const normalizedWanted = normalize(wanted);
+  const normalizedCandidate = normalize(candidate);
+  const baseWanted = trailingQualifierBase(wanted);
+  const baseCandidate = trailingQualifierBase(candidate);
+  const wantedDropsToCandidate = baseWanted && baseWanted !== normalizedWanted && baseWanted === normalizedCandidate;
+  const candidateDropsToWanted = baseCandidate && baseCandidate !== normalizedCandidate && baseCandidate === normalizedWanted;
+  return wantedDropsToCandidate || candidateDropsToWanted ? 0.65 : 0;
+}
+
+function artistEvidence(wanted: string[], candidate: string[], aliases: string[] = []): number | null {
   const wantedForms = unique(wanted.flatMap(artistForms));
-  const candidateForms = unique(candidate.flatMap(artistForms));
+  const candidateForms = unique([...candidate, ...aliases].flatMap(artistForms));
   if (!wantedForms.length || !candidateForms.length) return null;
 
   if (wanted.length > 5 && candidateForms.some((artist) => artist === "variousartists" || artist === "群星")) return 0.85;
 
-  const exact = wantedForms.filter((artist) => candidateForms.includes(artist));
-  if (exact.length === wantedForms.length && exact.length === candidateForms.length) return 1;
+  const wantedIdentities = artistIdentities(wanted);
+  const candidateIdentities = artistIdentities(candidate);
+  const exactIdentityCount = wantedIdentities.filter((artist) => candidateIdentities.includes(artist)).length;
+  if (
+    exactIdentityCount === wantedIdentities.length
+    && candidateIdentities.length === wantedIdentities.length
+  ) return 1;
+
+  if (
+    wantedIdentities.length >= 2
+    && candidateIdentities.length + 1 === wantedIdentities.length
+    && candidateIdentities.every((artist) => wantedIdentities.includes(artist))
+  ) {
+    // A provider may omit one secondary playback credit. Lyricify treats that
+    // as a very-high match. Keep the tolerance directional: every returned
+    // identity must belong to the reference metadata, so extra wrong artists
+    // cannot receive the same boost.
+    return 0.88;
+  }
+
+  if (exactIdentityCount === wantedIdentities.length && candidateIdentities.length > wantedIdentities.length) {
+    // Extra provider credits are useful but not equivalent to the reference
+    // artist set. One extra identity is a high match; several are only medium.
+    return candidateIdentities.length === wantedIdentities.length + 1 ? 0.75 : 0.65;
+  }
 
   const perArtist = wanted.map((artist) => {
     const forms = artistForms(artist);
@@ -198,9 +251,15 @@ function artistEvidence(wanted: string[], candidate: string[]): number | null {
     return best;
   });
   const coverage = perArtist.reduce((sum, value) => sum + value, 0) / Math.max(1, perArtist.length);
-  if (coverage >= 0.99) return candidateForms.length > wantedForms.length ? 0.95 : 1;
-  if (coverage >= 0.8) return 0.88;
-  if (coverage >= 0.55) return 0.65;
+  const extraIdentityCap = candidateIdentities.length > wantedIdentities.length
+    ? (candidateIdentities.length === wantedIdentities.length + 1 ? 0.75 : 0.65)
+    : 1;
+  if (coverage >= 0.99) {
+    if (candidateIdentities.length < wantedIdentities.length) return 0.65;
+    return Math.min(1, extraIdentityCap);
+  }
+  if (coverage >= 0.8) return Math.min(0.88, extraIdentityCap);
+  if (coverage >= 0.55) return Math.min(0.65, extraIdentityCap);
   if (coverage > 0) return 0.4;
   return 0;
 }
@@ -275,9 +334,8 @@ export function assessCandidate(track: TrackMetadata, candidate: TrackCandidate)
   const title = titleEvidence[0]?.evidence ?? 0;
   const artists = artistEvidence(track.artists, [
     ...candidate.artists,
-    ...(candidate.artistAliases ?? []),
-  ]);
-  const album = track.album.trim() && candidate.album?.trim() ? nameEvidence(track.album, candidate.album) : null;
+  ], candidate.artistAliases);
+  const album = track.album.trim() && candidate.album?.trim() ? albumEvidence(track.album, candidate.album) : null;
   const albumArtists = candidate.albumArtists?.length ? artistEvidence(track.artists, candidate.albumArtists) : null;
   const duration = durationEvidence(track.durationMs, candidate.durationMs);
   if (!normalize(track.title) || !normalize(candidate.title)) {

@@ -91,6 +91,112 @@ test("smart mode uses word timing as a bonus when candidates are otherwise equal
     candidate("amlldb", 1, wordLyrics(correctRows), 1),
   ], 240_000, "smart");
   assert.equal(result.candidate?.provider, "amlldb");
+  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "amlldb")?.reasons.includes("word-synced timing"));
+  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.reasons.includes("line-synced timing"));
+});
+
+test("smart mode prefers credible word timing with slightly lower track confidence", () => {
+  const result = selectLyricsCandidate([
+    candidate("apple", 0, lineLyrics(correctRows), 1),
+    candidate("qq", 4, wordLyrics(correctRows), 0.9),
+  ], 240_000, "smart");
+
+  assert.equal(result.candidate?.provider, "qq");
+  assert.ok(
+    (result.diagnostics.candidates.find((entry) => entry.provider === "qq")?.totalScore ?? 0)
+      < (result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.totalScore ?? 0),
+  );
+  assert.ok(
+    (result.diagnostics.candidates.find((entry) => entry.provider === "qq")?.selectionScore ?? 0)
+      > (result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.selectionScore ?? 0),
+  );
+});
+
+test("smart mode prefers the verified strong word-timed profile over an exact line match", () => {
+  const result = selectLyricsCandidate([
+    candidate("apple", 3, lineLyrics(correctRows), 1),
+    candidate("kugou", 5, wordLyrics(correctRows), 0.865),
+  ], 240_000, "smart");
+
+  assert.equal(result.candidate?.provider, "kugou");
+  const apple = result.diagnostics.candidates.find((entry) => entry.provider === "apple");
+  const kugou = result.diagnostics.candidates.find((entry) => entry.provider === "kugou");
+  assert.ok((kugou?.selectionScore ?? 0) > (apple?.selectionScore ?? 0));
+  assert.equal(kugou?.trackMatchScore, 86.5);
+});
+
+test("smart mode does not let timing detail rescue a weak track match", () => {
+  const result = selectLyricsCandidate([
+    candidate("apple", 0, lineLyrics(correctRows), 1),
+    candidate("qq", 4, wordLyrics(correctRows), 0.79),
+  ], 240_000, "smart");
+
+  assert.equal(result.candidate?.provider, "apple");
+});
+
+test("smart mode uses the best agreeing timing peer instead of averaging in an offset source", () => {
+  const shiftedRows = correctRows.map(([text, start]) => [text, start + 6] as [string, number]);
+  const result = selectLyricsCandidate([
+    candidate("apple", 0, lineLyrics(shiftedRows), 1),
+    candidate("qq", 4, wordLyrics(correctRows), 0.97),
+    candidate("kugou", 5, wordLyrics(correctRows), 0.97),
+  ], 240_000, "smart");
+
+  assert.equal(result.candidate?.provider, "qq");
+  const qq = result.diagnostics.candidates.find((entry) => entry.provider === "qq");
+  const apple = result.diagnostics.candidates.find((entry) => entry.provider === "apple");
+  assert.equal(qq?.timingAgreementScore, 100);
+  assert.equal(apple?.timingAgreementScore, 30);
+  assert.equal(qq?.reasons.includes("line timing differs from agreeing sources"), false);
+  assert.equal(apple?.reasons.includes("line timing differs from agreeing sources"), true);
+});
+
+test("smart scores stay stable when an unrelated provider appears", () => {
+  const base = [
+    candidate("apple", 0, lineLyrics(correctRows), 1),
+    candidate("qq", 4, wordLyrics(correctRows), 0.97),
+  ];
+  const withoutNoise = selectLyricsCandidate(base, 240_000, "smart");
+  const withNoise = selectLyricsCandidate([
+    ...base,
+    candidate("soda", 6, lineLyrics(wrongRows), 1),
+  ], 240_000, "smart");
+
+  assert.equal(withoutNoise.candidate?.provider, "qq");
+  assert.equal(withNoise.candidate?.provider, "qq");
+  for (const provider of ["apple", "qq"]) {
+    const before = withoutNoise.diagnostics.candidates.find((entry) => entry.provider === provider);
+    const after = withNoise.diagnostics.candidates.find((entry) => entry.provider === provider);
+    assert.equal(after?.totalScore, before?.totalScore);
+    assert.equal(after?.selectionScore, before?.selectionScore);
+    assert.equal(after?.priorityScore, before?.priorityScore);
+  }
+});
+
+test("smart selection is independent of candidate arrival order", () => {
+  const entries = [
+    candidate("apple", 0, lineLyrics(correctRows), 1),
+    candidate("qq", 4, wordLyrics(correctRows), 0.97),
+    candidate("kugou", 5, wordLyrics(correctRows), 0.97),
+    candidate("soda", 6, lineLyrics(wrongRows), 0.95),
+  ];
+
+  assert.equal(selectLyricsCandidate(entries, 240_000, "smart").candidate?.provider, "qq");
+  assert.equal(selectLyricsCandidate([...entries].reverse(), 240_000, "smart").candidate?.provider, "qq");
+});
+
+test("source order breaks a true same-quality tie without changing scores", () => {
+  const result = selectLyricsCandidate([
+    candidate("later", 6, wordLyrics(correctRows), 0.95),
+    candidate("earlier", 2, wordLyrics(correctRows), 0.95),
+  ], 240_000, "smart");
+
+  assert.equal(result.candidate?.provider, "earlier");
+  const later = result.diagnostics.candidates.find((entry) => entry.provider === "later");
+  const earlier = result.diagnostics.candidates.find((entry) => entry.provider === "earlier");
+  assert.equal(later?.totalScore, earlier?.totalScore);
+  assert.equal(later?.selectionScore, earlier?.selectionScore);
+  assert.notEqual(later?.priorityScore, earlier?.priorityScore);
 });
 
 test("smart mode strongly penalizes plain lyrics when a credible synced candidate agrees", () => {
@@ -137,4 +243,13 @@ test("strict mode returns the first valid provider without quality comparison", 
     candidate("qq", 1, wordLyrics(correctRows), 1),
   ], 240_000, "strict");
   assert.equal(result.candidate?.provider, "apple");
+});
+
+test("all modes return an empty diagnostic result when no provider succeeds", () => {
+  for (const mode of ["smart", "syncType", "strict"] as const) {
+    const result = selectLyricsCandidate([], 240_000, mode);
+    assert.equal(result.candidate, null);
+    assert.equal(result.diagnostics.selectedProvider, null);
+    assert.deepEqual(result.diagnostics.candidates, []);
+  }
 });

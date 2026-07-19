@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, searchQueries, versionTags } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -78,6 +78,28 @@ function assessKugouCandidate(track: Parameters<LyricsProvider>[0], song: KugouS
     album: song.album,
     durationMs: candidate.duration || song.durationMs,
   });
+}
+
+export function isKugouCandidateCompatible(
+  track: Parameters<LyricsProvider>[0],
+  song: KugouSong,
+  candidate: KugouCandidate,
+): boolean {
+  const candidateAssessment = assessKugouCandidate(track, song, candidate);
+  if (!isAcceptableCandidate(candidateAssessment)) return false;
+  if (!candidateAssessment.evidence.versionConflict) return true;
+
+  // KuGou's hash-bound lyric search often shortens a catalog title such as
+  // `Song (DJ lowered-key version)` back to `Song`. Trust that omission only
+  // when the selected catalog/hash is already strong and every child field
+  // still corroborates it. An explicit conflicting child tag remains a veto.
+  if (versionTags(candidate.song).size > 0 || !isStrongCandidate(assessKugouSong(track, song))) return false;
+  const childTitle = normalize(candidate.song);
+  const catalogTitle = normalize(song.title);
+  const shortenedCatalogTitle = [...childTitle].length >= 3 && catalogTitle.includes(childTitle);
+  return (candidateAssessment.evidence.title >= 0.7 || shortenedCatalogTitle)
+    && (candidateAssessment.evidence.artists ?? 1) >= 0.85
+    && (candidateAssessment.evidence.duration ?? 1) >= 0.8;
 }
 
 export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Promise<KugouSong[]> {
@@ -185,8 +207,7 @@ export const kugouProvider: LyricsProvider = async (track) => {
   for (const song of await searchKugouSongs(track)) {
     if (!isAcceptableCandidate(assessKugouSong(track, song))) continue;
     for (const candidate of await searchKugouCandidates(track, song)) {
-      const candidateAssessment = assessKugouCandidate(track, song, candidate);
-      if (!isAcceptableCandidate(candidateAssessment) || candidateAssessment.evidence.versionConflict) continue;
+      if (!isKugouCandidateCompatible(track, song, candidate)) continue;
       const raw = await fetchKugouKrc(candidate); if (!raw) continue;
       const result = toSyllableLyrics(parseKrc(raw), "kugou");
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);

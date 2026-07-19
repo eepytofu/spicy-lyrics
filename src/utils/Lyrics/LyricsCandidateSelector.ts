@@ -23,7 +23,10 @@ export type LyricsCandidateAssessment = {
   provider: string;
   format: "Syllable" | "Line" | "Static" | "Unknown";
   totalScore: number;
+  selectionScore: number;
   trackMatchScore: number;
+  structuralTimingScore: number;
+  timingAgreementScore: number;
   timingScore: number;
   textAgreementScore: number;
   syncDetailScore: number;
@@ -180,9 +183,10 @@ function median(values: number[]): number {
 
 function timingAgreementScore(candidate: LyricsCandidate, peers: LyricsCandidate[]): number {
   const candidateLines = lyricsLineSnapshots(candidate.lyrics);
-  const deltas: number[] = [];
+  const peerScores: number[] = [];
   for (const peer of peers) {
     if (peer === candidate || lyricsTextSimilarity(candidate.lyrics, peer.lyrics) < 0.58) continue;
+    const deltas: number[] = [];
     const peerBuckets = new Map<string, number[]>();
     for (const line of lyricsLineSnapshots(peer.lyrics)) {
       if (line.normalized.length < 4 || line.start === undefined) continue;
@@ -198,14 +202,19 @@ function timingAgreementScore(candidate: LyricsCandidate, peers: LyricsCandidate
       const peerStart = peerBuckets.get(line.normalized)?.[index];
       if (peerStart !== undefined) deltas.push(Math.abs(line.start - peerStart));
     }
+    if (deltas.length < 3) continue;
+    const difference = median(deltas);
+    peerScores.push(
+      difference <= 0.75 ? 100
+        : difference <= 1.5 ? 85
+          : difference <= 3 ? 60
+            : difference <= 7 ? 30
+              : 5,
+    );
   }
-  if (deltas.length < 3) return 65;
-  const difference = median(deltas);
-  if (difference <= 0.75) return 100;
-  if (difference <= 1.5) return 85;
-  if (difference <= 3) return 60;
-  if (difference <= 7) return 30;
-  return 5;
+  // One independently agreeing source is enough to corroborate a timing
+  // sequence. A disagreeing peer must not drag down an otherwise exact pair.
+  return peerScores.length ? Math.max(...peerScores) : 65;
 }
 
 function matchScore(match: LyricsMatchMetadata | undefined): number {
@@ -232,7 +241,9 @@ function syncDetailScore(lyrics: any): number {
 function reasonList(track: number, structural: number, timingAgreement: number, agreement: number, format: LyricsCandidateAssessment["format"]): string[] {
   const reasons: string[] = [];
   reasons.push(track >= 85 ? "strong track match" : track < 45 ? "weak track match" : "usable track match");
-  reasons.push(format === "Static" ? "no synced timing" : structural >= 80 ? "healthy timing" : structural < 45 ? "suspicious timing" : "usable timing");
+  reasons.push(format === "Static" ? "no synced timing" : structural >= 85 ? "healthy timing" : structural < 45 ? "suspicious timing" : "usable timing");
+  if (format === "Syllable") reasons.push("word-synced timing");
+  else if (format === "Line") reasons.push("line-synced timing");
   if (agreement >= 78) reasons.push("lyrics agree with other sources");
   else if (agreement < 42) reasons.push("low text agreement");
   if (format !== "Static" && timingAgreement < 45) reasons.push("line timing differs from agreeing sources");
@@ -240,7 +251,6 @@ function reasonList(track: number, structural: number, timingAgreement: number, 
 }
 
 export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs: number): LyricsCandidateAssessment[] {
-  const priorityOrder = [...candidates].sort((left, right) => left.orderIndex - right.orderIndex);
   return candidates.map((candidate) => {
     const track = matchScore(candidate.match);
     const structural = structuralTimingScore(candidate, durationMs);
@@ -249,16 +259,28 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
     const agreement = agreementScore(candidate, candidates);
     const detail = syncDetailScore(candidate.lyrics);
     const format: LyricsCandidateAssessment["format"] = ["Syllable", "Line", "Static"].includes(candidate.lyrics?.Type) ? candidate.lyrics.Type : "Unknown";
-    const priorityRank = priorityOrder.indexOf(candidate);
-    const priority = candidates.length === 1 ? 100 : 100 * (1 - priorityRank / (candidates.length - 1));
+    const priority = clamp(100 - Math.max(0, candidate.orderIndex) * 10);
     const rejected = track < 30 || structural < 25 || detail === 0;
     const plainPenalty = format === "Static" ? PLAIN_LYRICS_PENALTY : 0;
-    const total = rejected ? 0 : clamp(track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.05 + clamp(priority) * 0.05 - plainPenalty);
+    // Source order is a deterministic tie-breaker, not quality evidence. Keep
+    // it out of the total so a provider appearing or disappearing cannot
+    // silently change every remaining candidate's score.
+    const total = rejected ? 0 : clamp(track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.1 - plainPenalty);
+    const credibleWordTiming = format === "Syllable"
+      && track >= 60
+      && structural >= 85
+      && timingAgreement >= 45
+      && agreement >= 55;
+    const malformedWordPenalty = format === "Syllable" && structural < 85 ? 10 : 0;
+    const selectionScore = rejected ? 0 : clamp(total + (credibleWordTiming ? 3 : 0) - malformedWordPenalty);
     return {
       provider: candidate.provider,
       format,
       totalScore: rounded(total),
+      selectionScore: rounded(selectionScore),
       trackMatchScore: rounded(track),
+      structuralTimingScore: rounded(structural),
+      timingAgreementScore: rounded(timingAgreement),
       timingScore: rounded(timing),
       textAgreementScore: rounded(agreement),
       syncDetailScore: detail,
@@ -295,10 +317,8 @@ export function selectLyricsCandidate(
     candidate = [...ordered].sort((left, right) => {
       const leftAssessment = assessmentByProvider.get(left.provider);
       const rightAssessment = assessmentByProvider.get(right.provider);
-      const scoreDifference = (rightAssessment?.totalScore ?? 0) - (leftAssessment?.totalScore ?? 0);
-      if (Math.abs(scoreDifference) > 4) return scoreDifference;
-      const detailDifference = (rightAssessment?.syncDetailScore ?? 0) - (leftAssessment?.syncDetailScore ?? 0);
-      return detailDifference || scoreDifference || left.orderIndex - right.orderIndex;
+      const scoreDifference = (rightAssessment?.selectionScore ?? 0) - (leftAssessment?.selectionScore ?? 0);
+      return scoreDifference || left.orderIndex - right.orderIndex;
     }).find((entry) => !assessmentByProvider.get(entry.provider)?.rejected) ?? null;
   }
   return {
