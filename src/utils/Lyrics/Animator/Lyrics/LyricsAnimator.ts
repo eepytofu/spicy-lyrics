@@ -435,6 +435,93 @@ const createDotSprings = () => {
   };
 };
 
+/**
+ * A backward seek can move a whole syllable line directly from Sung to
+ * NotSung without passing through the Active per-word loop. Reset every
+ * visual owner here so stale word, letter, and romaji gradients cannot remain
+ * painted on an upcoming line.
+ */
+const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => {
+  if (!words) return;
+
+  const simpleMode = $simpleLyricsMode.get();
+  const restingGradient = simpleMode ? "-50%" : "-20%";
+
+  for (const word of words) {
+    if (word.Dot && !word.LetterGroup) {
+      word.AnimatorStore ??= createDotSprings();
+      word.AnimatorStore.Scale.SetGoal(DotScaleSpline.at(0), true);
+      word.AnimatorStore.YOffset.SetGoal(DotYOffsetSpline.at(0), true);
+      word.AnimatorStore.Glow.SetGoal(DotGlowSpline.at(0), true);
+      word.AnimatorStore.Opacity?.SetGoal(DotOpacitySpline.at(0), true);
+
+      if (!simpleMode) {
+        setStyleIfChanged(word.HTMLElement, "scale", `${DotScaleSpline.at(0)}`, 0);
+        setStyleIfChanged(
+          word.HTMLElement,
+          "transform",
+          `translate3d(0, calc(var(--DefaultLyricsSize) * ${DotYOffsetSpline.at(0)}), 0)`,
+          0
+        );
+      }
+      setStyleIfChanged(word.HTMLElement, "opacity", `${DotOpacitySpline.at(0)}`, 0);
+      setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+      setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
+      continue;
+    }
+
+    word.AnimatorStore ??= createWordSprings();
+    word.AnimatorStore.Scale.SetGoal(ScaleSpline.at(0), true);
+    word.AnimatorStore.YOffset.SetGoal(YOffsetSpline.at(0), true);
+    word.AnimatorStore.Glow.SetGoal(GlowSpline.at(0), true);
+
+    if (!simpleMode) {
+      setStyleIfChanged(word.HTMLElement, "scale", `${ScaleSpline.at(0)}`, 0);
+      setStyleIfChanged(
+        word.HTMLElement,
+        "transform",
+        `translate3d(0, calc(var(--DefaultLyricsSize) * ${YOffsetSpline.at(0)}), 0)`,
+        0
+      );
+      applyTimedRubyAnchorState(word, ScaleSpline.at(0));
+      word.HTMLElement.style.setProperty("--gradient-position", restingGradient);
+    } else {
+      word.HTMLElement.style.animation = "none";
+      word.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
+    }
+    word.RomajiElement?.style.setProperty("--gradient-position", restingGradient);
+    setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+    setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
+    word.SLMAnimated = false;
+    word.PreSLMAnimated = false;
+
+    for (const letter of word.Letters || []) {
+      letter.AnimatorStore ??= createLetterSprings();
+      letter.AnimatorStore.Scale.SetGoal(LetterScaleSpline.at(0), true);
+      letter.AnimatorStore.YOffset.SetGoal(LetterYOffsetSpline.at(0), true);
+      letter.AnimatorStore.Glow.SetGoal(GlowSpline.at(0), true);
+
+      if (!simpleMode) {
+        setStyleIfChanged(letter.HTMLElement, "scale", `${LetterScaleSpline.at(0)}`, 0);
+        setStyleIfChanged(
+          letter.HTMLElement,
+          "transform",
+          `translate3d(0, calc(var(--DefaultLyricsSize) * ${LetterYOffsetSpline.at(0) * 2}), 0)`,
+          0
+        );
+        letter.HTMLElement.style.setProperty("--gradient-position", restingGradient);
+      } else {
+        letter.HTMLElement.style.animation = "none";
+        letter.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
+      }
+      setStyleIfChanged(letter.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+      setStyleIfChanged(letter.HTMLElement, "--text-shadow-opacity", "0%", 0);
+      letter.SLMAnimated = false;
+      letter.PreSLMAnimated = false;
+    }
+  }
+};
+
 // DotGroup Springs Function - for animating the entire dotGroup element
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _createDotGroupSprings = () => {
@@ -1365,6 +1452,7 @@ export function Animate(position: number): void {
           }
         }
       } else if (lineState === "NotSung") {
+        const enteredNotSung = !line.HTMLElement.classList.contains("NotSung");
         line.HTMLElement.classList.add("NotSung");
         line.HTMLElement.classList.remove("Sung");
         if (line.HTMLElement.classList.contains("Active")) {
@@ -1373,65 +1461,7 @@ export function Animate(position: number): void {
         if (line.DotLine && !line.HTMLElement.classList.contains("pre-hidden")) {
           line.HTMLElement.classList.add("pre-hidden");
         }
-        /* const words = line.Syllables.Lead;
-              for (const word of words) {
-                  if (word.AnimatorStore && !word.Dot) {
-                       word.AnimatorStore.Scale.SetGoal(ScaleSpline.at(0));
-                       word.AnimatorStore.YOffset.SetGoal(YOffsetSpline.at(0));
-                       word.AnimatorStore.Glow.SetGoal(GlowSpline.at(0));
-                        const currentScale = word.AnimatorStore.Scale.Step(deltaTime);
-                        const currentYOffset = word.AnimatorStore.YOffset.Step(deltaTime);
-                        const currentGlow = word.AnimatorStore.Glow.Step(deltaTime);
-                        word.HTMLElement.style.transform = `translateY(calc(var(--DefaultLyricsSize) * ${currentYOffset}))`;
-                        word.HTMLElement.style.scale = `${currentScale}`;
-                        if (!word.LetterGroup) {
-                          word.HTMLElement.style.setProperty("--gradient-position", `-20%`);
-                          word.HTMLElement.style.setProperty("--text-shadow-blur-radius", `${4 + (2 * currentGlow * 1)}px`);
-                          word.HTMLElement.style.setProperty("--text-shadow-opacity", `${Math.min(currentGlow * 35, 100)}%`);
-                        }
-                  } else if (word.AnimatorStore && word.Dot && !word.LetterGroup) { // Handle dot reset
-                      word.AnimatorStore.Scale.SetGoal(DotScaleSpline.at(0));
-                      word.AnimatorStore.YOffset.SetGoal(DotYOffsetSpline.at(0));
-                      word.AnimatorStore.Glow.SetGoal(DotGlowSpline.at(0));
-                      word.AnimatorStore.Opacity.SetGoal(DotOpacitySpline.at(0));
-
-                      const currentScale = word.AnimatorStore.Scale.Step(deltaTime);
-                      const currentYOffset = word.AnimatorStore.YOffset.Step(deltaTime);
-                      const currentGlow = word.AnimatorStore.Glow.Step(deltaTime);
-                      const currentOpacity = word.AnimatorStore.Opacity.Step(deltaTime);
-
-                      word.HTMLElement.style.transform = `translateY(calc(var(--DefaultLyricsSize) * ${currentYOffset}))`;
-                      word.HTMLElement.style.scale = `${currentScale}`;
-                      word.HTMLElement.style.opacity = `${currentOpacity}`;
-                      word.HTMLElement.style.setProperty("--text-shadow-blur-radius", `${4 + (6 * currentGlow)}px`);
-                      word.HTMLElement.style.setProperty("--text-shadow-opacity", `${currentGlow * 90}%`);
-                  } else if (word.LetterGroup) {
-                     for (let k = 0; k < word.Letters.length; k++) {
-                      const letter = word.Letters[k];
-
-                      if (!letter.AnimatorStore) {
-                        letter.AnimatorStore = createLetterSprings();
-                        letter.AnimatorStore.Scale.SetGoal(ScaleSpline.at(0), true);
-                        letter.AnimatorStore.YOffset.SetGoal(YOffsetSpline.at(0), true);
-                        letter.AnimatorStore.Glow.SetGoal(GlowSpline.at(0), true);
-                      }
-
-                      letter.AnimatorStore.Scale.SetGoal(ScaleSpline.at(0));
-                      letter.AnimatorStore.YOffset.SetGoal(YOffsetSpline.at(0));
-                      letter.AnimatorStore.Glow.SetGoal(GlowSpline.at(0));
-
-                      const currentScale = letter.AnimatorStore.Scale.Step(deltaTime);
-                      const currentYOffset = letter.AnimatorStore.YOffset.Step(deltaTime);
-                      const currentGlow = letter.AnimatorStore.Glow.Step(deltaTime);
-
-                      letter.HTMLElement.style.setProperty("--gradient-position", `-20%`);
-                      letter.HTMLElement.style.transform = `translateY(calc(var(--DefaultLyricsSize) * ${currentYOffset * 2}))`;
-                      letter.HTMLElement.style.scale = `${currentScale}`;
-                      letter.HTMLElement.style.setProperty("--text-shadow-blur-radius", `${4 + (8 * currentGlow)}px`);
-                      letter.HTMLElement.style.setProperty("--text-shadow-opacity", `${currentGlow * LetterGlowMultiplier_Opacity}%`);
-                    }
-                  }
-              } */
+        if (enteredNotSung) resetSyllableLineToNotSung(line.Syllables?.Lead);
       } else if (lineState === "Sung") {
         line.HTMLElement.classList.add("Sung");
         line.HTMLElement.classList.remove("Active", "NotSung");
