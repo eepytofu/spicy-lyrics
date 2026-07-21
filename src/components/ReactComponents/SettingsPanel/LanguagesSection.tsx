@@ -6,6 +6,7 @@ import {
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
   $japaneseReadingMode,
+  $joinMandarinWords,
   $koreanDisplayMode,
 } from "../../../utils/uiState.ts";
 import { matches, Row, Select, SectionTitle, SubsectionTitle, Toggle } from "./components.tsx";
@@ -20,6 +21,7 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
   const chineseForm = useStore($chineseCharacterForm);
   const chineseMode = useStore($chineseTranslitMode);
   const chineseTones = useStore($chineseTones);
+  const joinMandarinWords = useStore($joinMandarinWords);
   const japaneseMode = useStore($japaneseReadingMode);
   const koreanMode = useStore($koreanDisplayMode);
   const cyrillicMode = useStore($cyrillicRomanizationMode);
@@ -38,6 +40,11 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
       "Chinese Tones",
       "Show Pinyin tone marks or Jyutping tone numbers."
     ),
+    mandarinWords: matches(
+      query,
+      "Join Mandarin Words",
+      "Join Pinyin syllables inside detected Mandarin words without changing karaoke timing."
+    ),
     japanese: matches(query, "Japanese Reading", "Choose romaji, furigana, or both."),
     korean: matches(query, "Korean Reading", "Choose transliteration or pronunciation output."),
     cyrillic: matches(
@@ -52,7 +59,7 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
   return (
     <>
       <SectionTitle>{SECTION_NAME}</SectionTitle>
-      {(rows.chineseForm || rows.chineseMode || rows.chineseTones) && (
+      {(rows.chineseForm || rows.chineseMode || rows.chineseTones || rows.mandarinWords) && (
         <SubsectionTitle>Chinese</SubsectionTitle>
       )}
       {rows.chineseForm && (
@@ -81,6 +88,20 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
       {rows.chineseTones && (
         <Row label="Chinese Tones" description="Show Pinyin tone marks or Jyutping tone numbers.">
           <Toggle checked={chineseTones} onChange={(value) => $chineseTones.set(value)} />
+        </Row>
+      )}
+      {rows.mandarinWords && (
+        <Row
+          label="Join Mandarin Words"
+          description="Join Pinyin syllables inside detected Mandarin words without changing karaoke timing."
+          disabled={chineseMode !== "pinyin"}
+          disabledReason="Choose Mandarin Pinyin first."
+        >
+          <Toggle
+            checked={joinMandarinWords}
+            disabled={chineseMode !== "pinyin"}
+            onChange={(value) => $joinMandarinWords.set(value)}
+          />
         </Row>
       )}
 

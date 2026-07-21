@@ -64,7 +64,18 @@ function hasAuthoredWhitespaceBetween(sourceTexts: string[], left: number, right
   return false;
 }
 
-function withTimedBoundaries(units: string[], sourceTexts: string[]): string[] {
+type TimedGenericPlanOptions = {
+  mandarinWordLayout?: {
+    tokenCount: number;
+    continuationTokenIndices: ReadonlySet<number>;
+  };
+};
+
+function withTimedBoundaries(
+  units: string[],
+  sourceTexts: string[],
+  suppressSpaceBefore: ReadonlySet<number> = new Set(),
+): string[] {
   const output = [...units];
   let previousNonempty = -1;
   for (let index = 0; index < output.length; index += 1) {
@@ -74,17 +85,45 @@ function withTimedBoundaries(units: string[], sourceTexts: string[]): string[] {
       const currentPunctuation = PunctuationOnlyTest.test((sourceTexts[index] || "").trim());
       const previousPunctuation = PunctuationOnlyTest.test((sourceTexts[previousNonempty] || "").trim());
       const authoredWhitespace = hasAuthoredWhitespaceBetween(sourceTexts, previousNonempty, index);
-      if (authoredWhitespace || (!currentPunctuation && !previousPunctuation)) output[index] = ` ${unit}`;
+      const suppressInferredSpace = suppressSpaceBefore.has(index) && !authoredWhitespace;
+      if (authoredWhitespace || (!suppressInferredSpace && !currentPunctuation && !previousPunctuation)) {
+        output[index] = ` ${unit}`;
+      }
     }
     previousNonempty = index;
   }
   return output;
 }
 
-function alignChineseTimedUnits(chunks: string[], display: string, sourceTexts: string[]): string[] {
-  const tokens = contextualDisplayTokens(display, sourceTexts);
+function joinContextualTokens(
+  tokens: string[],
+  start: number,
+  count: number,
+  continuationTokenIndices: ReadonlySet<number>,
+): string {
+  let output = "";
+  for (let index = start; index < start + count; index += 1) {
+    if (index > start && !continuationTokenIndices.has(index)) output += " ";
+    output += tokens[index] || "";
+  }
+  return output;
+}
 
-  if (tokens.length === chunks.length) return withTimedBoundaries(tokens, sourceTexts);
+function alignChineseTimedUnits(
+  chunks: string[],
+  display: string,
+  sourceTexts: string[],
+  options: TimedGenericPlanOptions,
+): string[] {
+  const tokens = contextualDisplayTokens(display, sourceTexts);
+  const wordLayout = options.mandarinWordLayout;
+  const continuationTokenIndices = wordLayout?.tokenCount === tokens.length
+    ? wordLayout.continuationTokenIndices
+    : new Set<number>();
+
+  if (tokens.length === chunks.length) {
+    return withTimedBoundaries(tokens, sourceTexts, continuationTokenIndices);
+  }
 
   const chunkTokenCounts = chunks.map(
     (chunk) => chunk.trim().split(/\s+/u).filter(Boolean).length,
@@ -94,18 +133,25 @@ function alignChineseTimedUnits(chunks: string[], display: string, sourceTexts: 
     // A provider span can own several reading tokens, such as a Han character plus punctuation.
     // Reuse that token geometry while taking pronunciation from the contextual full-line pass.
     let cursor = 0;
-    const contextualChunks = chunkTokenCounts.map((count) => {
-      const chunk = tokens.slice(cursor, cursor + count).join(" ");
+    const suppressSpaceBeforeChunks = new Set<number>();
+    const contextualChunks = chunkTokenCounts.map((count, chunkIndex) => {
+      if (continuationTokenIndices.has(cursor)) suppressSpaceBeforeChunks.add(chunkIndex);
+      const chunk = joinContextualTokens(tokens, cursor, count, continuationTokenIndices);
       cursor += count;
       return chunk;
     });
-    return withTimedBoundaries(contextualChunks, sourceTexts);
+    return withTimedBoundaries(contextualChunks, sourceTexts, suppressSpaceBeforeChunks);
   }
 
   return align(chunks, display);
 }
 
-export function buildTimedGenericPlan(group: any, display: string, processor: string): RenderPlan | undefined {
+export function buildTimedGenericPlan(
+  group: any,
+  display: string,
+  processor: string,
+  options: TimedGenericPlanOptions = {},
+): RenderPlan | undefined {
   const syllables = group?.Syllables;
   if (!Array.isArray(syllables) || syllables.length === 0 || !display) return undefined;
   const parsed: ParsedLine = { id: `${processor}-${group.StartTime ?? 0}-${group.EndTime ?? 0}`,
@@ -116,7 +162,7 @@ export function buildTimedGenericPlan(group: any, display: string, processor: st
   const rawChunks = syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim());
   const sourceTexts = syllables.map((s: any) => s.Text || "");
   const chunks = processor === "Chinese"
-    ? alignChineseTimedUnits(rawChunks, display, sourceTexts)
+    ? alignChineseTimedUnits(rawChunks, display, sourceTexts, options)
     : align(rawChunks, display);
   const annotation: ReadingAnnotation = { processor, mode: "local", provenance: "local",
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,

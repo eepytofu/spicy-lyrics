@@ -83,6 +83,7 @@ export const $forceCompactMode = persistAtom<boolean>("forceCompactMode", false)
 export const $romanization = persistAtom<boolean>("romanization", false);
 export const $chineseTranslitMode = persistAtom<"pinyin" | "jyutping">("chineseTranslitMode", "pinyin");
 export const $chineseTones = persistAtom<boolean>("chineseTones", true);
+export const $joinMandarinWords = persistAtom<boolean>("joinMandarinWords", false);
 export const $chineseCharacterForm = persistAtom<ChineseCharacterForm>("chineseCharacterForm", "original");
 export const $japaneseReadingMode = persistAtom<"romaji" | "furigana" | "both">("japaneseReadingMode", "romaji");
 export type KoreanDisplayMode = "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";

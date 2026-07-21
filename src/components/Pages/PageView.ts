@@ -12,6 +12,7 @@ import {
   $forceDarkBackground,
   $isGlobalNav,
   $japaneseReadingMode,
+  $joinMandarinWords,
   $koreanDisplayMode,
   $showBuiltInTranslationButton,
   $showChineseTranslitButton,
@@ -1056,6 +1057,7 @@ bindCoalescedSourceSettingsRefresh(queueProcessingSettingsRefresh);
 $chineseCharacterForm.listen(queueProcessingSettingsRefresh);
 $chineseTranslitMode.listen(queueProcessingSettingsRefresh);
 $chineseTones.listen(queueProcessingSettingsRefresh);
+$joinMandarinWords.listen(queueProcessingSettingsRefresh);
 $koreanDisplayMode.listen(queueProcessingSettingsRefresh);
 $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);

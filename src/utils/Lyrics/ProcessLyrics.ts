@@ -6,7 +6,7 @@ import Logger from "../Logger.ts";
 import * as KuromojiAnalyzer from "./KuromojiAnalyzer.ts";
 import { convertChineseLyricsText, isChineseLyricsProvider } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
-import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, koreanDisplayMode } from "./lyrics.ts";
+import { chineseTones, chineseTranslitMode, cyrillicKeepSigns, cyrillicRomanizationMode, joinMandarinWords, koreanDisplayMode } from "./lyrics.ts";
 import {
   ChineseTextTest,
   JapaneseTextTest,
@@ -28,6 +28,8 @@ import {
 } from "./Fork/TextDetection.ts";
 import {
   romanizeCantonese,
+  buildMandarinWordLayout,
+  joinMandarinReadingWords,
   romanizeMandarin,
   romanizeCyrillic,
   romanizeKoreanForDisplay,
@@ -50,7 +52,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 38;
+export const LYRICS_PROCESSING_VERSION = 39;
 // v3: render plans carry typed timed-group metadata and exact furigana identities.
 export const READING_PLAN_SCHEMA_VERSION = 3;
 
@@ -401,7 +403,15 @@ const postProcessSyllableRomanization = async (
             syllable.RomajiSpaceBefore = true;
           }
         }
-        const plan = buildTimedGenericPlan(group, fullRomaji, isChineseLine ? "Chinese" : "Generic");
+        const mandarinWordLayout = cjkLineRoute === "Chinese" && chineseTranslitMode === "pinyin" && joinMandarinWords
+          ? buildMandarinWordLayout(effectiveLineText)
+          : undefined;
+        const plan = buildTimedGenericPlan(
+          group,
+          fullRomaji,
+          isChineseLine ? "Chinese" : "Generic",
+          { mandarinWordLayout },
+        );
         if (plan) {
           group.ReadingRenderPlan = plan;
           delete group.RomanizedText;
@@ -622,8 +632,12 @@ export const ProcessLyrics = async (
     );
     if (lyrics.Type !== "Syllable") {
       entries.forEach((entry, index) => {
-        const display = entry.target.RomanizedText || entry.target.TransliteratedText;
+        let display = entry.target.RomanizedText || entry.target.TransliteratedText;
         if (!display) return;
+        const cjkLineRoute = resolveCjkLineRoute(entry.lineText || entry.target.Text || "", docContext);
+        if (joinMandarinWords && chineseTranslitMode === "pinyin" && cjkLineRoute === "Chinese") {
+          display = joinMandarinReadingWords(entry.target.Text || "", display);
+        }
         entry.target.ReadingRenderPlan = buildLineFallbackPlan(entry.target.Text || "", display, `line-${index}`);
         delete entry.target.RomanizedText;
         delete entry.target.TransliteratedText;

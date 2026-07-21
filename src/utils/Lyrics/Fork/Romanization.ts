@@ -14,7 +14,8 @@ import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
 import { G2p } from "korean-pronunciation";
-import { pinyin } from "pinyin-pro";
+import CompletePinyinDict from "@pinyin-pro/data/complete";
+import { addDict, OutputFormat, pinyin, segment } from "pinyin-pro";
 import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
 import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
 
@@ -70,6 +71,12 @@ const JYUTPING_PHRASES: Record<string, string> = {
 
 const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.length - a.length);
 const LatinTextTest = /[A-Za-z]/;
+
+// The default pinyin-pro dictionary is intentionally compact and misses some
+// ordinary lexical readings (for example, 诗行 is shī háng). Register the full
+// dictionary once at module load so every Mandarin path uses the same phrase
+// context without maintaining a growing list of local one-off corrections.
+addDict(CompletePinyinDict, { name: "spicy-lyrics-complete", dict1: "replace" });
 
 // ─── Cantonese (Jyutping) ─────────────────────────────────────────────────────
 
@@ -141,6 +148,52 @@ export function romanizeMandarin(text: string, tones = true): string {
     nonZh: "consecutive",
   });
   return readings.join(" ").replace(/\s+/gu, " ").trim();
+}
+
+export type MandarinWordLayout = {
+  tokenCount: number;
+  continuationTokenIndices: ReadonlySet<number>;
+};
+
+/**
+ * Describe Pinyin token boundaries that fall inside one segmented Mandarin
+ * word. Whitespace is excluded from the token count because romanizeMandarin
+ * normalizes it into separators rather than display tokens.
+ */
+export function buildMandarinWordLayout(text: string): MandarinWordLayout {
+  const groups = segment(text, {
+    format: OutputFormat.ZhArray,
+    nonZh: "consecutive",
+    toneSandhi: false,
+  });
+  const continuationTokenIndices = new Set<number>();
+  let tokenCount = 0;
+
+  for (const group of groups) {
+    const isHanWord = group.length > 1 && group.every((part) => {
+      const characters = Array.from(part);
+      return characters.length === 1 && isChineseHanChar(characters[0]);
+    });
+
+    for (let index = 0; index < group.length; index += 1) {
+      if (!group[index].trim()) continue;
+      if (isHanWord && index > 0) continuationTokenIndices.add(tokenCount);
+      tokenCount += 1;
+    }
+  }
+
+  return { tokenCount, continuationTokenIndices };
+}
+
+export function joinMandarinReadingWords(text: string, reading: string): string {
+  const layout = buildMandarinWordLayout(text);
+  const tokens = reading.trim().split(/\s+/u).filter(Boolean);
+  if (tokens.length !== layout.tokenCount) return reading;
+
+  return tokens.map((token, index) => {
+    if (index === 0 || layout.continuationTokenIndices.has(index)) return token;
+    return ` ${token}`;
+  }).join("");
 }
 
 // ─── Cyrillic (BGN/PCGN) ──────────────────────────────────────────────────────

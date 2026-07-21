@@ -5,7 +5,7 @@ import {
   buildCjkReadingContextText,
   romanizeChineseDominantCjkText,
 } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
-import { romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
+import { buildMandarinWordLayout, romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
 
 test("Chinese timed readings remove provider boundaries before contextual Pinyin", () => {
   const source = Array.from("空杯如行舟浪荡醉梦里走");
@@ -34,6 +34,74 @@ test("Chinese timed readings remove provider boundaries before contextual Pinyin
   assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), [
     "kōng", " bēi", " rú", " xíng", " zhōu", " làng", " dàng", " zuì", " mèng", " lǐ", " zǒu",
   ]);
+});
+
+test("Mandarin complete dictionary keeps contextual polyphones on provider timing owners", () => {
+  const group = {
+    StartTime: 0,
+    EndTime: 2,
+    Syllables: [
+      { Text: "\u8bd7", StartTime: 0, EndTime: 1, RomanizedText: "sh\u012b" },
+      { Text: "\u884c", StartTime: 1, EndTime: 2, RomanizedText: "x\u00edng" },
+    ],
+  };
+
+  const plan = buildTimedGenericPlan(group, romanizeMandarin("\u8bd7\u884c"), "Chinese");
+  assert.ok(plan);
+  assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), ["sh\u012b", " h\u00e1ng"]);
+  assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.spanId), ["0", "1"]);
+});
+
+test("optional Mandarin word joining changes display boundaries but not timing owners", () => {
+  const group = {
+    StartTime: 0,
+    EndTime: 2,
+    Syllables: [
+      { Text: "诗", StartTime: 0, EndTime: 1, RomanizedText: "shī" },
+      { Text: "行", StartTime: 1, EndTime: 2, RomanizedText: "xíng" },
+    ],
+  };
+  const display = romanizeMandarin("诗行");
+  const plan = buildTimedGenericPlan(group, display, "Chinese", {
+    mandarinWordLayout: buildMandarinWordLayout("诗行"),
+  });
+
+  assert.ok(plan);
+  assert.equal(plan.joinedDisplayText, "shīháng");
+  assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), ["shī", "háng"]);
+  assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.spanId), ["0", "1"]);
+});
+
+test("Mandarin word joining preserves explicit provider whitespace", () => {
+  const group = {
+    StartTime: 0,
+    EndTime: 2,
+    Syllables: [
+      { Text: "诗 ", StartTime: 0, EndTime: 1, RomanizedText: "shī" },
+      { Text: "行", StartTime: 1, EndTime: 2, RomanizedText: "xíng" },
+    ],
+  };
+  const plan = buildTimedGenericPlan(group, romanizeMandarin("诗行"), "Chinese", {
+    mandarinWordLayout: buildMandarinWordLayout("诗行"),
+  });
+
+  assert.equal(plan?.joinedDisplayText, "shī háng");
+});
+
+test("Mandarin word joining handles several Han characters in one timing owner", () => {
+  const group = {
+    StartTime: 0,
+    EndTime: 2,
+    Syllables: [
+      { Text: "诗行", StartTime: 0, EndTime: 2, RomanizedText: "shī xíng" },
+    ],
+  };
+  const plan = buildTimedGenericPlan(group, romanizeMandarin("诗行"), "Chinese", {
+    mandarinWordLayout: buildMandarinWordLayout("诗行"),
+  });
+
+  assert.equal(plan?.joinedDisplayText, "shīháng");
+  assert.deepEqual(plan?.timedReadingUnits.map((unit) => unit.spanId), ["0"]);
 });
 
 test("Chinese context reconstruction preserves authored Latin word spaces", () => {

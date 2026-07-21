@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  buildMandarinWordLayout,
   buildKoreanLineTextFromSyllables,
+  joinMandarinReadingWords,
   romanizeMandarin,
   pronounceKoreanHangul,
   romanizeKorean,
@@ -116,9 +118,25 @@ test("Chinese tone toggle strips only Jyutping tone digits", async () => {
 
 test("Mandarin phrase readings keep lexical context without confusing bank usage", () => {
   assert.equal(romanizeMandarin("\u884c\u821f"), "x\u00edng zh\u014du");
+  assert.equal(romanizeMandarin("\u8bd7\u884c"), "sh\u012b h\u00e1ng");
   assert.equal(romanizeMandarin("\u884c\u6d41\u6c34"), "x\u00edng li\u00fa shu\u01d0");
   assert.equal(romanizeMandarin("\u884c\u4e91\u6d41\u6c34"), "x\u00edng y\u00fan li\u00fa shu\u01d0");
   assert.equal(romanizeMandarin("\u94f6\u884c\u6d41\u6c34"), "y\u00edn h\u00e1ng li\u00fa shu\u01d0");
+  assert.equal(romanizeMandarin("\u6b4c\u884c"), "g\u0113 x\u00edng");
+});
+
+test("Mandarin word segmentation exposes display-only continuation boundaries", () => {
+  assert.deepEqual([...buildMandarinWordLayout("诗行").continuationTokenIndices], [1]);
+  assert.deepEqual([...buildMandarinWordLayout("歌行").continuationTokenIndices], [1]);
+  assert.deepEqual([...buildMandarinWordLayout("中国科学院计算所").continuationTokenIndices], [1, 2, 3, 4, 6, 7]);
+  assert.deepEqual([...buildMandarinWordLayout("乐鸣东方").continuationTokenIndices], [3]);
+  assert.deepEqual([...buildMandarinWordLayout("喂 奶奶你好吗？").continuationTokenIndices], [2, 4]);
+});
+
+test("Mandarin word joining works for untimed readings without inventing source changes", () => {
+  assert.equal(joinMandarinReadingWords("诗行", romanizeMandarin("诗行")), "shīháng");
+  assert.equal(joinMandarinReadingWords("中国 人", romanizeMandarin("中国 人")), "zhōngguó rén");
+  assert.equal(joinMandarinReadingWords("D/N/A", "D/N/A"), "D/N/A");
 });
 
 test("Mandarin tone toggle preserves dictionary tones instead of applying sandhi", () => {

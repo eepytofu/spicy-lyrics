@@ -5,6 +5,7 @@ export type ProcessingContext = {
   translationTargetLang: string;
   chineseTranslitMode: "pinyin" | "jyutping";
   chineseTones: boolean;
+  joinMandarinWords: boolean;
   chineseCharacterForm: ChineseCharacterForm;
   koreanDisplayMode: "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";
   cyrillicRomanizationMode: "Russian" | "Ukrainian";
@@ -17,6 +18,7 @@ export function buildProcessingContextKey(context: ProcessingContext): string {
     translation: context.translationEnabled ? context.translationTargetLang || "" : false,
     chineseTranslitMode: context.chineseTranslitMode,
     chineseTones: context.chineseTones,
+    joinMandarinWords: context.joinMandarinWords,
     chineseCharacterForm: context.chineseCharacterForm,
     koreanDisplayMode: context.koreanDisplayMode,
     cyrillicRomanizationMode: context.cyrillicRomanizationMode,
