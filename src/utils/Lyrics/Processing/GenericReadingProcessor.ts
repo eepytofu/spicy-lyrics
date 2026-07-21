@@ -20,13 +20,71 @@ function align(chunks: string[], display: string): string[] {
   return out;
 }
 
-function alignChineseTimedUnits(chunks: string[], display: string): string[] {
-  const tokens = display.trim().split(/\s+/u).filter(Boolean);
-  const withTimedBoundaries = (units: string[]) => units.map(
-    (unit, index) => index === 0 || !unit ? unit : ` ${unit}`,
-  );
+const PunctuationOnlyTest = /^[\p{Punctuation}\p{Symbol}]+$/u;
+const CjkTextTest = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
-  if (tokens.length === chunks.length) return withTimedBoundaries(tokens);
+function contextualDisplayTokens(display: string, sourceTexts: string[]): string[] {
+  const punctuationSpans: Array<{ start: number; end: number }> = [];
+  let searchFrom = 0;
+
+  for (const sourceText of sourceTexts) {
+    const literal = sourceText.trim();
+    if (!literal) continue;
+    const start = display.indexOf(literal, searchFrom);
+    if (start < 0) continue;
+    if (PunctuationOnlyTest.test(literal)) {
+      punctuationSpans.push({ start, end: start + literal.length });
+    } else if (CjkTextTest.test(literal)) {
+      // Contextual readings replace CJK source text, so only passthrough text
+      // can safely advance the literal search cursor.
+      continue;
+    }
+    searchFrom = start + literal.length;
+  }
+
+  const tokens: string[] = [];
+  const pushWords = (text: string): void => {
+    tokens.push(...text.trim().split(/\s+/u).filter(Boolean));
+  };
+  let cursor = 0;
+  for (const span of punctuationSpans) {
+    pushWords(display.slice(cursor, span.start));
+    tokens.push(display.slice(span.start, span.end));
+    cursor = span.end;
+  }
+  pushWords(display.slice(cursor));
+  return tokens;
+}
+
+function hasAuthoredWhitespaceBetween(sourceTexts: string[], left: number, right: number): boolean {
+  if (/\s$/u.test(sourceTexts[left] || "") || /^\s/u.test(sourceTexts[right] || "")) return true;
+  for (let index = left + 1; index < right; index += 1) {
+    if (/\s/u.test(sourceTexts[index] || "")) return true;
+  }
+  return false;
+}
+
+function withTimedBoundaries(units: string[], sourceTexts: string[]): string[] {
+  const output = [...units];
+  let previousNonempty = -1;
+  for (let index = 0; index < output.length; index += 1) {
+    const unit = output[index];
+    if (!unit) continue;
+    if (previousNonempty >= 0) {
+      const currentPunctuation = PunctuationOnlyTest.test((sourceTexts[index] || "").trim());
+      const previousPunctuation = PunctuationOnlyTest.test((sourceTexts[previousNonempty] || "").trim());
+      const authoredWhitespace = hasAuthoredWhitespaceBetween(sourceTexts, previousNonempty, index);
+      if (authoredWhitespace || (!currentPunctuation && !previousPunctuation)) output[index] = ` ${unit}`;
+    }
+    previousNonempty = index;
+  }
+  return output;
+}
+
+function alignChineseTimedUnits(chunks: string[], display: string, sourceTexts: string[]): string[] {
+  const tokens = contextualDisplayTokens(display, sourceTexts);
+
+  if (tokens.length === chunks.length) return withTimedBoundaries(tokens, sourceTexts);
 
   const chunkTokenCounts = chunks.map(
     (chunk) => chunk.trim().split(/\s+/u).filter(Boolean).length,
@@ -41,7 +99,7 @@ function alignChineseTimedUnits(chunks: string[], display: string): string[] {
       cursor += count;
       return chunk;
     });
-    return withTimedBoundaries(contextualChunks);
+    return withTimedBoundaries(contextualChunks, sourceTexts);
   }
 
   return align(chunks, display);
@@ -56,8 +114,9 @@ export function buildTimedGenericPlan(group: any, display: string, processor: st
       startMs: Number(s.StartTime || 0), endMs: Number(s.EndTime || 0), providerPartOfWord: s.IsPartOfWord === true })) };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
   const rawChunks = syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim());
+  const sourceTexts = syllables.map((s: any) => s.Text || "");
   const chunks = processor === "Chinese"
-    ? alignChineseTimedUnits(rawChunks, display)
+    ? alignChineseTimedUnits(rawChunks, display, sourceTexts)
     : align(rawChunks, display);
   const annotation: ReadingAnnotation = { processor, mode: "local", provenance: "local",
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,

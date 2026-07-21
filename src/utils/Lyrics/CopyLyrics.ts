@@ -15,16 +15,24 @@ type CopyLine = {
 const cleanText = (value: unknown): string =>
   typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 
+const cleanSyllableText = (value: unknown): string =>
+  typeof value === "string" ? value.replace(/\s+/g, " ") : "";
+
 const joinSyllables = (syllables: any[] | undefined): string => {
   if (!Array.isArray(syllables)) return "";
   let out = "";
   let previousWasWordEnd = false;
 
   for (const syllable of syllables) {
-    const text = cleanText(syllable?.Text);
+    const text = cleanSyllableText(syllable?.Text);
     if (!text) continue;
 
-    if ((previousWasWordEnd || syllable?.RomajiSpaceBefore) && out && !out.endsWith(" ")) {
+    if (
+      (previousWasWordEnd || syllable?.RomajiSpaceBefore) &&
+      out &&
+      !/\s$/u.test(out) &&
+      !/^\s/u.test(text)
+    ) {
       out += " ";
     }
 
@@ -32,7 +40,7 @@ const joinSyllables = (syllables: any[] | undefined): string => {
     previousWasWordEnd = syllable?.IsPartOfWord === false;
   }
 
-  return out.trim();
+  return out.replace(/\s+/g, " ").trim();
 };
 
 const formatTime = (seconds: unknown): string => {

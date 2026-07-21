@@ -16,7 +16,7 @@ function timedWord(
   const value = transform(text);
   const startMs = Number(match[1]);
   const durationMs = Number(match[2]);
-  if (!value || !Number.isFinite(startMs) || !Number.isFinite(durationMs) || durationMs <= 0) return undefined;
+  if (!value || !Number.isFinite(startMs) || !Number.isFinite(durationMs) || durationMs < 0) return undefined;
   return {
     text: value,
     startMs: Math.max(0, startOffsetMs + startMs),

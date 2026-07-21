@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildTimedGenericPlan } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
-import { buildCjkReadingContextText } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
+import {
+  buildCjkReadingContextText,
+  romanizeChineseDominantCjkText,
+} from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
 import { romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
 
 test("Chinese timed readings remove provider boundaries before contextual Pinyin", () => {
@@ -74,4 +77,60 @@ test("TIAN TIAN keeps contextual pinyin spacing across unequal AMLL timing units
   assert.equal(plan.timedReadingUnits[3].text, " men");
   assert.equal(plan.timedReadingUnits.slice(1).every((unit) => /^\s/u.test(unit.text)), true);
   assert.equal(plan.timedReadingUnits.at(-1)?.text, " b\u0101 ?");
+});
+
+test("quoted QQ timing keeps contextual neutral-tone Pinyin and readable spacing", async () => {
+  const syllables = [
+    { Text: "“", RomanizedText: "“", StartTime: 0, EndTime: 0, IsPartOfWord: true },
+    { Text: "喂", RomanizedText: "wèi", StartTime: 0, EndTime: 1, IsPartOfWord: false },
+    { Text: " ", RomanizedText: "", StartTime: 1, EndTime: 1, IsPartOfWord: true },
+    { Text: "奶", RomanizedText: "nǎi", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+    { Text: "奶", RomanizedText: "nǎi", StartTime: 2, EndTime: 3, IsPartOfWord: true },
+    { Text: "你", RomanizedText: "nǐ", StartTime: 3, EndTime: 4, IsPartOfWord: true },
+    { Text: "好", RomanizedText: "hǎo", StartTime: 4, EndTime: 5, IsPartOfWord: true },
+    { Text: "吗", RomanizedText: "ma", StartTime: 5, EndTime: 6, IsPartOfWord: true },
+    { Text: "?”", RomanizedText: "?”", StartTime: 6, EndTime: 6, IsPartOfWord: true },
+  ];
+  const contextText = buildCjkReadingContextText(syllables);
+  const contextual = await romanizeChineseDominantCjkText(contextText, {
+    romanizeHan: (text) => romanizeMandarin(text),
+    romanizeKana: (text) => text,
+  });
+  const plan = buildTimedGenericPlan({ StartTime: 0, EndTime: 6, Syllables: syllables }, contextual, "Chinese");
+
+  assert.equal(contextText, "“喂 奶奶你好吗?”");
+  assert.equal(contextual, "“wèi nǎi nai nǐ hǎo ma ?”");
+  assert.ok(plan);
+  assert.equal(plan.joinedDisplayText, "“wèi nǎi nai nǐ hǎo ma?”");
+  assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), [
+    "“", "wèi", "", " nǎi", " nai", " nǐ", " hǎo", " ma", "?”",
+  ]);
+});
+
+test("Chinese timed alignment preserves authored slash spacing", () => {
+  const attached = buildTimedGenericPlan({
+    StartTime: 0,
+    EndTime: 5,
+    Syllables: Array.from("D/N/A").map((Text, index) => ({
+      Text,
+      RomanizedText: Text,
+      StartTime: index,
+      EndTime: index + 1,
+      IsPartOfWord: true,
+    })),
+  }, "D/N/A", "Chinese");
+  const spaced = buildTimedGenericPlan({
+    StartTime: 0,
+    EndTime: 5,
+    Syllables: ["A", " ", "/", " ", "B"].map((Text, index) => ({
+      Text,
+      RomanizedText: Text,
+      StartTime: index,
+      EndTime: index + 1,
+      IsPartOfWord: true,
+    })),
+  }, "A / B", "Chinese");
+
+  assert.equal(attached?.joinedDisplayText, "D/N/A");
+  assert.equal(spaced?.joinedDisplayText, "A / B");
 });

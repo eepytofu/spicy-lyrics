@@ -31,16 +31,29 @@ function endMs(word: TimedWord, next?: TimedWord): number {
   return next && next.startMs > word.startMs ? Math.min(raw, next.startMs) : raw;
 }
 
-function isPartOfWord(text: string, nextText: string | undefined): boolean {
-  if (!nextText) return false;
-  if (/\s$/.test(text) || /^\s/.test(nextText)) return false;
-  if (/^[’'\-.,!?;:%)\]}，。！？；：、]/u.test(nextText)) return true;
-  return !/[\p{Script=Latin}\p{Number}]$/u.test(text) || !/^[\p{Script=Latin}\p{Number}]/u.test(nextText);
+function hasAuthoredBoundaryAfter(words: TimedWord[], index: number): boolean {
+  const text = words[index]?.text ?? "";
+  if (!text.trim()) return false;
+  if (/\s$/u.test(text)) return true;
+
+  // Some providers put a boundary at the start of the next fragment or in a
+  // standalone timed whitespace fragment. Attribute that one boundary to the
+  // preceding visible syllable so Spicy Lyrics can render and wrap it.
+  for (let nextIndex = index + 1; nextIndex < words.length; nextIndex += 1) {
+    const nextText = words[nextIndex]?.text ?? "";
+    if (!nextText) continue;
+    if (/^\s/u.test(nextText)) return true;
+    if (nextText.trim()) return false;
+  }
+  return false;
 }
 
 export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): NativeLyrics | undefined {
   const usableLines = lines.flatMap((line) => {
-    const words = line.words.filter((word) => word.text && word.durationMs > 0).sort((a, b) => a.startMs - b.startMs);
+    // QRC, KRC, and YRC already encode their authored text as ordered
+    // fragments. Keep that order and every nonempty zero-duration fragment;
+    // ESLyric and Lyricify also concatenate these fragments literally.
+    const words = line.words.filter((word) => word.text && word.durationMs >= 0);
     if (!words.length) return [];
     if (isProviderPlaceholder(words.map((word) => word.text).join(""), provider)) return [];
     return [{ ...line, words }];
@@ -52,8 +65,13 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
     const Syllables = words.map((word, index) => ({
       Text: word.text,
       StartTime: word.startMs / 1000,
-      EndTime: Math.max(word.startMs + 1, endMs(word, words[index + 1])) / 1000,
-      IsPartOfWord: isPartOfWord(word.text, words[index + 1]?.text),
+      EndTime: endMs(word, words[index + 1]) / 1000,
+      // QRC/KRC/YRC already carry their boundaries as literal whitespace.
+      // Spicy renders each syllable as an inline block, where edge whitespace
+      // is not a reliable visible gap, so translate only that authored signal
+      // into its native trailing-boundary flag. Never infer from alphabet or
+      // punctuation shape.
+      IsPartOfWord: !hasAuthoredBoundaryAfter(words, index),
     }));
     const Lead: Record<string, unknown> = {
       StartTime: Syllables[0].StartTime,

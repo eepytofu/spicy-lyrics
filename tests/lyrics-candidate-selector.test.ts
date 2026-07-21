@@ -84,6 +84,31 @@ test("smart mode allows a healthy line candidate to beat malformed word timing",
   assert.equal(result.candidate?.provider, "apple");
 });
 
+test("smart mode accepts instantaneous textual tokens as valid word timing", () => {
+  const baseline = wordLyrics(correctRows);
+  const withInstantPunctuation = structuredClone(baseline);
+  const firstLine = withInstantPunctuation.Content[0].Lead.Syllables;
+  const boundary = firstLine[0].EndTime;
+  firstLine.splice(1, 0, {
+    Text: "/",
+    StartTime: boundary,
+    EndTime: boundary,
+    IsPartOfWord: true,
+  });
+
+  const baselineResult = selectLyricsCandidate([
+    candidate("baseline", 0, baseline, 1),
+  ], 240_000, "smart");
+  const punctuationResult = selectLyricsCandidate([
+    candidate("punctuation", 0, withInstantPunctuation, 1),
+  ], 240_000, "smart");
+
+  assert.equal(
+    punctuationResult.diagnostics.candidates[0].structuralTimingScore,
+    baselineResult.diagnostics.candidates[0].structuralTimingScore,
+  );
+});
+
 
 test("smart mode uses word timing as a bonus when candidates are otherwise equal", () => {
   const result = selectLyricsCandidate([

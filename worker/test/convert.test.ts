@@ -13,6 +13,102 @@ describe("native word-sync conversion", () => {
     expect(toSyllableLyrics(lines, "qq")?.Type).toBe("Syllable");
   });
 
+  it("preserves zero-duration text and literal token concatenation across structured formats", () => {
+    const fixtures = [
+      parseQrc("[1000,1000]D(1000,300)/(1300,0)N(1300,300)/(1600,0)A(1600,400)"),
+      parseKrc("[1000,1000]<0,300,0>D<300,0,0>/<300,300,0>N<600,0,0>/<600,400,0>A"),
+      parseYrc("[1000,1000](1000,300,0)D(1300,0,0)/(1300,300,0)N(1600,0,0)/(1600,400,0)A"),
+    ];
+
+    for (const lines of fixtures) {
+      expect(lines[0].words.map((word) => word.text).join("")).toBe("D/N/A");
+      expect(lines[0].words.filter((word) => word.text === "/").map((word) => word.durationMs)).toEqual([0, 0]);
+
+      const lyrics = toSyllableLyrics(lines, "qq") as any;
+      const syllables = lyrics.Content[0].Lead.Syllables;
+      expect(syllables.map((word: any) => word.Text).join("")).toBe("D/N/A");
+      expect(syllables.every((word: any) => word.IsPartOfWord === true)).toBe(true);
+      expect(syllables.filter((word: any) => word.Text === "/").every(
+        (word: any) => word.StartTime === word.EndTime,
+      )).toBe(true);
+    }
+  });
+
+  it("maps provider-authored whitespace across formats and scripts without character inference", () => {
+    const fixtures = [
+      parseQrc("[1000,1000]I (1000,250)used(1250,250)你 (1500,250)好(1750,250)私 (2000,250)の(2250,250)"),
+      parseKrc("[1000,1500]<0,250,0>I <250,250,0>used<500,250,0>你 <750,250,0>好<1000,250,0>私 <1250,250,0>の"),
+      parseYrc("[1000,1500](1000,250,0)I (1250,250,0)used(1500,250,0)你 (1750,250,0)好(2000,250,0)私 (2250,250,0)の"),
+    ];
+
+    for (const lines of fixtures) {
+      const syllables = (toSyllableLyrics(lines, "qq") as any).Content[0].Lead.Syllables;
+      expect(syllables.map((word: any) => word.Text).join(""))
+        .toBe("I used你 好私 の");
+      expect(syllables.map((word: any) => word.IsPartOfWord))
+        .toEqual([false, true, false, true, false, true]);
+    }
+  });
+
+  it("keeps zero-duration punctuation attached while honoring its authored following space", () => {
+    const lines = parseYrc(
+      "[1000,1000](1000,300,0)Lately(1300,0,0), (1300,300,0)I've(1600,400,0) arrived",
+    );
+    const syllables = (toSyllableLyrics(lines, "netease") as any).Content[0].Lead.Syllables;
+
+    expect(syllables.map((word: any) => word.Text).join(""))
+      .toBe("Lately, I've arrived");
+    expect(syllables.map((word: any) => word.IsPartOfWord))
+      .toEqual([true, false, false, true]);
+    expect(syllables[1]).toMatchObject({ Text: ", ", StartTime: 1.3, EndTime: 1.3 });
+  });
+
+  it("keeps TIAN TIAN English boundaries exactly where QRC authored spaces", () => {
+    const lines = parseQrc(
+      "[1000,3000]I (1000,300)used (1300,400)to (1700,300)think (2000,400)it's (2400,300)not (2700,300)worth (3000,500)it(3500,500)",
+    );
+    const syllables = (toSyllableLyrics(lines, "qq") as any).Content[0].Lead.Syllables;
+
+    expect(syllables.map((word: any) => word.Text).join("")).toBe("I used to think it's not worth it");
+    expect(syllables.map((word: any) => word.IsPartOfWord)).toEqual([
+      false, false, false, false, false, false, false, true,
+    ]);
+  });
+
+  it("represents a standalone timed space as one boundary on the preceding visible fragment", () => {
+    const lines = parseQrc("[1000,1000]A(1000,300) (1300,0)B(1300,700)");
+    const syllables = (toSyllableLyrics(lines, "qq") as any).Content[0].Lead.Syllables;
+
+    expect(syllables.map((word: any) => word.Text)).toEqual(["A", " ", "B"]);
+    expect(syllables.map((word: any) => word.IsPartOfWord)).toEqual([false, true, true]);
+  });
+
+  it("preserves source fragment order even when provider timings overlap", () => {
+    const lyrics = toSyllableLyrics([{
+      startMs: 1000,
+      durationMs: 1000,
+      words: [
+        { text: "A", startMs: 1200, durationMs: 300 },
+        { text: "/", startMs: 1100, durationMs: 0 },
+        { text: "B", startMs: 1500, durationMs: 500 },
+      ],
+    }], "qq") as any;
+
+    expect(lyrics.Content[0].Lead.Syllables.map((word: any) => word.Text).join(""))
+      .toBe("A/B");
+  });
+
+  it("keeps any nonempty instantaneous fragment, not only slash punctuation", () => {
+    const lines = parseQrc("[1000,1000]A(1000,300)()(1300,0)- (1300,0)B(1300,700)");
+
+    expect(lines[0].words.map((word) => [word.text, word.durationMs])).toEqual([
+      ["A", 300],
+      ["()", 0],
+      ["- ", 0],
+      ["B", 700],
+    ]);
+  });
+
   it("preserves parenthetical and XML-sensitive text inside QRC words", () => {
     const wrapped = '<QrcInfos><LyricInfo LyricContent="[1000,1000](whisper &amp; echo) &lt;hi&gt;(1000,1000)" /></QrcInfos>';
     const lines = parseQrc(qrcContent(wrapped) ?? "");

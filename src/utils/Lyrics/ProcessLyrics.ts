@@ -14,6 +14,7 @@ import {
   CyrillicTextTest,
   GreekTextTest,
   cleanInvisibles,
+  cleanInvisiblesPreserveEdges,
 } from "./Fork/index.ts";
 import {
   romanizationBranchFromLanguage,
@@ -49,7 +50,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 36;
+export const LYRICS_PROCESSING_VERSION = 38;
 // v3: render plans carry typed timed-group metadata and exact furigana identities.
 export const READING_PLAN_SCHEMA_VERSION = 3;
 
@@ -129,6 +130,29 @@ const normalizeLyricsText = (target: any): string => {
   return target.Text;
 };
 
+const normalizeSyllableText = (target: any): string => {
+  if (typeof target?.Text !== "string") return "";
+  target.Text = cleanInvisiblesPreserveEdges(target.Text.normalize("NFKC"));
+  return target.Text;
+};
+
+const normalizedSyllableLine = (syllables: any[]): string => {
+  let text = "";
+  for (let index = 0; index < syllables.length; index += 1) {
+    const normalized = normalizeSyllableText(syllables[index]);
+    if (
+      index > 0 &&
+      !/\s$/u.test(text) &&
+      !/^\s/u.test(normalized) &&
+      !syllables[index]?.IsPartOfWord
+    ) {
+      text += " ";
+    }
+    text += normalized;
+  }
+  return text;
+};
+
 const gatherText = (
   lyrics: any
 ): { francText: string; scriptText: string; entries: RomanizeEntry[] } => {
@@ -156,13 +180,12 @@ const gatherText = (
 
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
-        let text = normalizeLyricsText(syllables[0]);
-        const lineEntries: RomanizeEntry[] = [{ target: syllables[0], line: vocalGroup, lineText: "" }];
-        for (let index = 1; index < syllables.length; index += 1) {
-          const syllable = syllables[index];
-          text += `${syllable.IsPartOfWord ? "" : " "}${normalizeLyricsText(syllable)}`;
-          lineEntries.push({ target: syllable, line: vocalGroup, lineText: "" });
-        }
+        const text = normalizedSyllableLine(syllables);
+        const lineEntries: RomanizeEntry[] = syllables.map((syllable: any) => ({
+          target: syllable,
+          line: vocalGroup,
+          lineText: "",
+        }));
         for (const entry of lineEntries) entry.lineText = text;
         entries.push(...lineEntries);
         textLines.push(text);
@@ -170,13 +193,12 @@ const gatherText = (
 
       if (vocalGroup.Background !== undefined) {
         for (const bg of vocalGroup.Background) {
-          const bgEntries: RomanizeEntry[] = [];
-          const bgText: string[] = [];
-          for (const syllable of bg.Syllables) {
-            bgText.push(normalizeLyricsText(syllable));
-            bgEntries.push({ target: syllable, line: vocalGroup, lineText: "" });
-          }
-          const lineText = bgText.join(" ");
+          const lineText = normalizedSyllableLine(bg.Syllables);
+          const bgEntries: RomanizeEntry[] = bg.Syllables.map((syllable: any) => ({
+            target: syllable,
+            line: vocalGroup,
+            lineText: "",
+          }));
           for (const entry of bgEntries) entry.lineText = lineText;
           entries.push(...bgEntries);
           bgTextLines.push(lineText);
@@ -410,7 +432,12 @@ const romanizeEntry = async (
 ): Promise<boolean> => {
   const { target, line } = entry;
 
-  if (target.Text) target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
+  if (target.Text) {
+    const normalized = target.Text.normalize("NFKC");
+    target.Text = annotateJapanese
+      ? cleanInvisibles(normalized)
+      : cleanInvisiblesPreserveEdges(normalized);
+  }
   const cjkLineRoute = resolveCjkLineRoute(entry.lineText || target.Text || "", docContext);
   const targetDocContext = cjkLineRoute === "Japanese"
     ? { ...docContext, cjkDominantBranch: "Japanese" as const }

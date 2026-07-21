@@ -164,7 +164,7 @@ function structuralTimingScore(candidate: LyricsCandidate, durationMs: number): 
         words += 1;
         const start = finite(word?.StartTime);
         const end = finite(word?.EndTime);
-        if (start === undefined || end === undefined || end <= start || start + 0.05 < previousWordStart || end > duration + 15) invalidWords += 1;
+        if (start === undefined || end === undefined || end < start || start + 0.05 < previousWordStart || end > duration + 15) invalidWords += 1;
         if (start !== undefined) previousWordStart = Math.max(previousWordStart, start);
       }
     }

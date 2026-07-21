@@ -9,6 +9,8 @@ export interface MergeableEntry {
   consumed: boolean;
   surface?: string;
   readingKana?: string;
+  start?: number;
+  end?: number;
 }
 
 const SMALL_TSU_ROMAJI = /(?:xtsu|ltsu|tsu)$/i;
@@ -177,6 +179,16 @@ export function computeNoSpaceBefore(
 
     // Punctuation — no space before
     if (/^[。、？！…・「」『』（）().?!,\s]+$/.test(currSf)) {
+      noSpaceBefore[i] = true;
+    }
+
+    // Preserve authored slash adjacency instead of treating every slash as a
+    // word separator. Entry offsets retain the source distinction between
+    // `D/N/A`, `A/ B`, and `A / B` after tokenization.
+    const adjacentInSource = entries[pi].end !== undefined && entries[i].start !== undefined
+      && entries[pi].end === entries[i].start;
+    const slashToken = /^[/／]+$/u;
+    if (adjacentInSource && (slashToken.test(currSf) || slashToken.test(prevSf))) {
       noSpaceBefore[i] = true;
     }
   }
