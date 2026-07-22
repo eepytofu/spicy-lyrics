@@ -191,6 +191,58 @@ test("romaji-only mode marks the explicit reading span", () => {
   assert.equal(romanized.children[0].classList.values.has("reading-origin-provider-explicit"), true);
 });
 
+test("whitespace-only romaji projection differences retain explicit reading spans", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  appendLineExtras(
+    line as unknown as HTMLElement,
+    {
+      Text: "古(いにしえ)の智(ち)唯一つの住処",
+      ReadingRenderPlan: { ...plan, joinedDisplayText: "inishie no chi tada hitotsu no sumika" },
+      JapaneseReading: {
+        sourceText: "古(いにしえ)の智(ち)唯一つの住処",
+        displayText: "古の智唯一つの住処",
+        romaji: "inishie no chi tada hitotsu no sumika",
+        romajiSegments: [
+          { text: "inishie", provenance: "providerExplicit" },
+          { text: "  no" },
+          { text: " chi", provenance: "providerExplicit" },
+          { text: " tada hitotsu no sumika " },
+        ],
+        furigana: [],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+  const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
+  assert.equal(romanized.children.length, 4);
+  assert.equal(romanized.children[0].classList.values.has("reading-origin-provider-explicit"), true);
+  assert.equal(romanized.children[2].classList.values.has("reading-origin-provider-explicit"), true);
+});
+
+test("semantic romaji projection differences still fall back to plain text", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  appendLineExtras(
+    line as unknown as HTMLElement,
+    {
+      Text: "天(そら)",
+      ReadingRenderPlan: { ...plan, joinedDisplayText: "sora" },
+      JapaneseReading: {
+        sourceText: "天(そら)",
+        displayText: "天",
+        romaji: "sora",
+        romajiSegments: [{ text: "ama", provenance: "providerExplicit" }],
+        furigana: [],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+  const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
+  assert.equal(romanized.children.length, 0);
+  assert.equal(romanized.textContent, "sora");
+});
+
 test("an explicit Chinese reading route overrides an embedded kana island", () => {
   assert.equal(isJapaneseEntry({
     Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",

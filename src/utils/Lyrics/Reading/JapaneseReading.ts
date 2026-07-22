@@ -532,11 +532,24 @@ function buildRomajiProjectionFromContext(context: JapaneseTokenContext): {
       ...(entry.readingProvenance ? { provenance: entry.readingProvenance } : {}),
     });
   }
-  const raw = segments.map((segment) => segment.text).join("");
-  const leading = raw.length - raw.trimStart().length;
-  if (leading > 0 && segments[0]) segments[0] = { ...segments[0], text: segments[0].text.slice(leading) };
-  const romaji = segments.map((segment) => segment.text).join("").replace(/\s{2,}/g, " ").trimEnd();
-  return { romaji: romaji || undefined, segments };
+  const normalizedSegments: JapaneseRomajiSegment[] = [];
+  for (const segment of segments) {
+    let text = segment.text.replace(/\s+/gu, " ");
+    if (normalizedSegments.length === 0) text = text.trimStart();
+    else if (normalizedSegments.at(-1)?.text.endsWith(" ")) text = text.trimStart();
+    if (text) normalizedSegments.push({ ...segment, text });
+  }
+  while (normalizedSegments.length > 0) {
+    const last = normalizedSegments.at(-1)!;
+    const text = last.text.trimEnd();
+    if (text) {
+      normalizedSegments[normalizedSegments.length - 1] = { ...last, text };
+      break;
+    }
+    normalizedSegments.pop();
+  }
+  const romaji = normalizedSegments.map((segment) => segment.text).join("");
+  return { romaji: romaji || undefined, segments: normalizedSegments };
 }
 
 function buildRomajiFromContext(context: JapaneseTokenContext): string | undefined {

@@ -193,7 +193,8 @@ export function getRomanizedText(entry: JapaneseReadable | undefined): string | 
 
 function appendRomanizedSegments(element: HTMLElement, reading: JapaneseReading | undefined, fallback: string): void {
   const segments = reading?.romajiSegments;
-  if (!segments?.length || segments.map((segment) => segment.text).join("") !== fallback) {
+  const normalizeWhitespace = (value: string): string => value.replace(/\s+/gu, " ").trim();
+  if (!segments?.length || normalizeWhitespace(segments.map((segment) => segment.text).join("")) !== normalizeWhitespace(fallback)) {
     element.textContent = fallback;
     return;
   }
