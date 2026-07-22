@@ -6,7 +6,7 @@ export type TextRange = {
 export type ParagraphProvenance = "provider" | "lineBoundary" | "unavailable";
 export type BoundaryKind = "explicitWhitespace" | "paragraph" | "script" | "inferred";
 export type ReadingUnitKind = "transformed" | "passthrough" | "punctuation";
-export type ReadingProvenance = "provider" | "local" | "remoteFallback";
+export type ReadingProvenance = "provider" | "providerExplicit" | "local" | "remoteFallback";
 
 export type SourceSpan = {
   readonly id: string;
@@ -63,6 +63,7 @@ export type ReadingUnit = {
   readonly kind: ReadingUnitKind;
   readonly logicalGroupId: string;
   readonly timingRefs: readonly string[];
+  readonly provenance?: ReadingProvenance;
 };
 
 export type PlanFuriganaSegment =
@@ -75,6 +76,7 @@ export type PlanFuriganaSegment =
       readonly start: number;
       readonly end: number;
       readonly reading: string;
+      readonly provenance?: ReadingProvenance;
     };
 
 export type ReadingAnnotation = {
@@ -90,6 +92,7 @@ export type TimedReadingUnit = {
   readonly canonicalRange: TextRange;
   readonly text: string;
   readonly logicalGroupId: string;
+  readonly provenance?: ReadingProvenance;
 };
 
 export type RenderPlan = {

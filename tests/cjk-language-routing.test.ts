@@ -87,6 +87,17 @@ test("Chinese-dominant documents still route grammatical Japanese lines to furig
   );
 });
 
+test("a parenthetical kana island does not pull a Chinese line into Japanese reading processing", () => {
+  const context = {
+    presentScripts: ["Japanese", "Chinese"] as const,
+    primaryLanguage: "cmn",
+    iso2Language: "zh",
+    cjkDominantBranch: "Chinese" as const,
+  };
+
+  assert.equal(resolveCjkLineRoute("如果天(そら)", context), "MixedChinese");
+});
+
 test("Chinese-dominant routing invokes only the processor for each contiguous run", async () => {
   const input = "\u5982\u679c \u6211 \u4e0b\u624b \u592a\u91cd \u3059\u307f\u307e\u305b\u3093";
   assert.deepEqual(partitionCjkReadingRuns(input), [

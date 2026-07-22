@@ -23,6 +23,10 @@ export function renderExperimentalReadingPlan(
     const child = document.createElement("span");
     child.className = "romanized-syllable reading-plan-timed-unit";
     child.dataset.spanId = unit.spanId;
+    if (unit.provenance === "providerExplicit") {
+      child.classList.add("reading-origin-provider-explicit");
+      child.dataset.readingOrigin = "provider-explicit";
+    }
     child.textContent = unit.text.trimStart();
     group!.appendChild(child);
     bindTimedTarget(unit.spanId, child);

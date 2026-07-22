@@ -1,4 +1,4 @@
-import type { PlanFuriganaSegment, RenderPlan } from "../Model.ts";
+import type { PlanFuriganaSegment, ReadingProvenance, RenderPlan } from "../Model.ts";
 import { furiganaSegmentKey } from "./FuriganaIdentity.ts";
 
 /** Timed unit IDs are provider owner IDs, never array positions. */
@@ -11,6 +11,7 @@ export type TimedFuriganaGroup = {
   segmentKey: string;
   reading: string;
   spanIds: readonly string[];
+  provenance?: ReadingProvenance;
   /**
    * Code points from the group's first character to the middle of the
    * annotated range. Lyric CJK glyphs are full-width, so a renderer can
@@ -54,6 +55,7 @@ export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFurigana
       segmentKey: furiganaSegmentKey(start, end, segment.reading),
       reading: segment.reading,
       spanIds: intersecting.map((unit) => unit.spanId),
+      ...(segment.provenance ? { provenance: segment.provenance } : {}),
       rubyCenterCh: start - intersecting[0].canonicalRange.startCp + (end - start) / 2,
     };
     groups.push(group);

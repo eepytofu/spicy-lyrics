@@ -33,7 +33,7 @@ export async function annotateJapaneseLine(
   options: JapaneseAnalysisOptions = {},
   prepared?: PreparedJapaneseLineAnalysis
 ): Promise<ReadingAnnotation | undefined> {
-  const analysis = prepared?.reading.sourceText === canonical.text
+  const analysis = (prepared?.reading.displayText || prepared?.reading.sourceText) === canonical.text
     ? prepared
     : await prepareJapaneseLineAnalysis(canonical.text, fullRomaji, romajiPromise, options);
   const reading = analysis?.reading;
@@ -70,6 +70,9 @@ export async function annotateJapaneseLine(
       kind: /[぀-ヿ一-鿿]/u.test(source) ? "transformed" : "passthrough",
       logicalGroupId: `jp-${group}`,
       timingRefs: [mapping.spanId],
+      ...(temp[index].JapaneseReading?.romajiSegments?.some((segment) => segment.provenance === "providerExplicit")
+        ? { provenance: "providerExplicit" as const }
+        : {}),
     };
   });
   return {
@@ -83,7 +86,7 @@ export async function annotateJapaneseLine(
         endCp: utf16IndexToCodePointOffset(canonical.text, segment.end),
       },
       reading: segment.reading,
-      provenance: "local",
+      provenance: segment.provenance || "local",
     })),
   };
 }

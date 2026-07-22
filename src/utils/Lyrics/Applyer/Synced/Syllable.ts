@@ -187,6 +187,10 @@ const createTimedFuriganaGroup = (
   anchor.style.setProperty("--tfg-center-ch", String(group.rubyCenterCh));
   const reading = document.createElement("span");
   reading.classList.add("furigana-reading", "timed-furigana-reading");
+  if (group.provenance === "providerExplicit") {
+    reading.classList.add("reading-origin-provider-explicit");
+    reading.dataset.readingOrigin = "provider-explicit";
+  }
   reading.textContent = group.reading;
   anchor.appendChild(reading);
   return { root, anchor };

@@ -147,6 +147,50 @@ test("adjacent ruby clusters are packed while isolated ruby can overhang", () =>
   assert.equal(isolated.children.some((cluster) => cluster.classList.values.has("furigana-cluster-packed")), false);
 });
 
+test("explicit readings tint only derived furigana while displaying the immutable source as ruby", () => {
+  $japaneseReadingMode.set("furigana");
+  const line = new FakeElement();
+  renderBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    {
+      Text: "天(そら)",
+      JapaneseReading: {
+        sourceText: "天(そら)",
+        displayText: "天",
+        romaji: "sora",
+        furigana: [{ start: 0, end: 1, reading: "そら", provenance: "providerExplicit" }],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+  const cluster = line.children[0];
+  const reading = cluster.children.find((child) => child.textContent === "そら")!;
+  const base = cluster.children.find((child) => child.textContent === "天")!;
+  assert.equal(reading.classList.values.has("reading-origin-provider-explicit"), true);
+  assert.equal(base.classList.values.has("reading-origin-provider-explicit"), false);
+});
+
+test("romaji-only mode marks the explicit reading span", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  appendLineExtras(
+    line as unknown as HTMLElement,
+    {
+      Text: "天(そら)",
+      JapaneseReading: {
+        sourceText: "天(そら)",
+        displayText: "天",
+        romaji: "sora",
+        romajiSegments: [{ text: "sora", provenance: "providerExplicit" }],
+        furigana: [{ start: 0, end: 1, reading: "そら", provenance: "providerExplicit" }],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+  const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
+  assert.equal(romanized.children[0].classList.values.has("reading-origin-provider-explicit"), true);
+});
+
 test("an explicit Chinese reading route overrides an embedded kana island", () => {
   assert.equal(isJapaneseEntry({
     Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",

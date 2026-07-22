@@ -52,9 +52,9 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 39;
-// v3: render plans carry typed timed-group metadata and exact furigana identities.
-export const READING_PLAN_SCHEMA_VERSION = 3;
+export const LYRICS_PROCESSING_VERSION = 40;
+// v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
+export const READING_PLAN_SCHEMA_VERSION = 4;
 
 // Constants
 const RomajiPromise: Promise<void> | undefined =
@@ -373,7 +373,12 @@ const postProcessSyllableRomanization = async (
             delete syllable.TransliteratedText;
             delete syllable.RomajiSpaceBefore;
           }
-          group.JapaneseReading = { sourceText: effectiveLineText, romaji: packageResult.romaji, furigana: packageResult.furigana };
+          group.JapaneseReading = {
+            sourceText: effectiveLineText,
+            ...(packageResult.displayText !== effectiveLineText ? { displayText: packageResult.displayText } : {}),
+            romaji: packageResult.romaji,
+            furigana: packageResult.furigana,
+          };
           group.ReadingRenderPlan = packageResult.plan;
           delete group.RomanizedText;
           delete group.TransliteratedText;

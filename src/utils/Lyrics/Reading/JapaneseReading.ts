@@ -15,8 +15,13 @@ import {
 } from "../Fork/JukujikunMerge.ts";
 import { cleanInvisibles } from "../Fork/TextDetection.ts";
 import { normalizeChineseProviderJapaneseText } from "../ChineseCharacterConversion.ts";
-import type { RenderPlan } from "../Processing/Model.ts";
+import type { ReadingProvenance, RenderPlan } from "../Processing/Model.ts";
 import { utf16FuriganaSegmentKey } from "../Processing/Japanese/FuriganaIdentity.ts";
+import {
+  projectProviderAuthoredJapaneseReadings,
+  type ProviderAuthoredReadingHint,
+  type ProviderAuthoredReadingProjection,
+} from "../Processing/Japanese/ProviderAuthoredReading.ts";
 
 export type FuriganaSegment = {
   start: number;
@@ -24,11 +29,21 @@ export type FuriganaSegment = {
   reading: string;
   /** Stable full-line code-point range and reading identity. */
   lineSegmentKey?: string;
+  provenance?: ReadingProvenance;
+};
+
+export type JapaneseRomajiSegment = {
+  text: string;
+  provenance?: ReadingProvenance;
 };
 
 export type JapaneseReading = {
+  /** Immutable provider text retained for copy and interop. */
   sourceText: string;
+  /** Display-only text after a safe authored reading such as 天(そら) becomes ruby. */
+  displayText?: string;
   romaji?: string;
+  romajiSegments?: JapaneseRomajiSegment[];
   furigana: FuriganaSegment[];
 };
 
@@ -46,6 +61,7 @@ export type JapaneseReadable = {
 
 export type JapaneseAnalysisOptions = {
   normalizeChineseProviderKanji?: boolean;
+  authoredReadingProjection?: ProviderAuthoredReadingProjection;
 };
 
 export type ProcessedTextEntry = JapaneseReadable & {
@@ -114,12 +130,14 @@ type JapaneseTokenEntry = MergeableEntry & {
   surface: string;
   readingKana: string;
   furigana?: TokenFuriganaReading;
+  readingProvenance?: ReadingProvenance;
 };
 
 type JapaneseTokenContext = {
   tokens: any[];
   entries: JapaneseTokenEntry[];
   noSpaceBefore: boolean[];
+  explicitReadings: FuriganaSegment[];
 };
 
 /**
@@ -380,10 +398,52 @@ function applyProviderFuriganaOverrides(sourceText: string, entries: JapaneseTok
   }
 }
 
+function applyExplicitReadingOverrides(
+  lineText: string,
+  entries: JapaneseTokenEntry[],
+  hints: readonly ProviderAuthoredReadingHint[],
+): FuriganaSegment[] {
+  const explicitReadings: FuriganaSegment[] = hints.map((hint) => ({
+    start: hint.displayRange.start,
+    end: hint.displayRange.end,
+    reading: kataToHira(hint.reading),
+    provenance: "providerExplicit",
+  }));
+  const KanaOnly = /^[ぁ-んァ-ンー]*$/u;
+
+  for (const hint of hints) {
+    const intersecting = entries
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => !entry.consumed && rangesOverlap(
+        entry.start,
+        entry.end,
+        hint.displayRange.start,
+        hint.displayRange.end,
+      ));
+    if (intersecting.length === 0) continue;
+
+    const first = intersecting[0];
+    const last = intersecting[intersecting.length - 1];
+    const prefix = lineText.slice(first.entry.start, hint.displayRange.start);
+    const suffix = lineText.slice(hint.displayRange.end, last.entry.end);
+    if (!KanaOnly.test(prefix) || !KanaOnly.test(suffix)) continue;
+
+    first.entry.surface = lineText.slice(first.entry.start, last.entry.end);
+    first.entry.end = last.entry.end;
+    first.entry.readingKana = kataToHira(`${prefix}${hint.reading}${suffix}`);
+    first.entry.readingProvenance = "providerExplicit";
+    for (const item of intersecting.slice(1)) item.entry.consumed = true;
+
+  }
+
+  return explicitReadings;
+}
+
 async function buildJapaneseTokenContext(
   lineText: string,
   _fullSpacedRomaji?: string,
-  options: JapaneseAnalysisOptions = {}
+  options: JapaneseAnalysisOptions = {},
+  explicitHints: readonly ProviderAuthoredReadingHint[] = [],
 ): Promise<JapaneseTokenContext> {
   const analysisText = options.normalizeChineseProviderKanji
     ? normalizeChineseProviderJapaneseText(lineText)
@@ -415,6 +475,11 @@ async function buildJapaneseTokenContext(
   }
 
   applyContextualReadingOverrides(entries, tokens);
+  const explicitReadings = applyExplicitReadingOverrides(lineText, entries, explicitHints);
+  for (let index = 0; index < entries.length; index += 1) {
+    if (entries[index].consumed) continue;
+    entries[index].romaji = entryRomaji(entries[index], tokens[index], (kana) => KUtil.kanaToRomaji(kana));
+  }
   applyPhoneticMerges(entries, tokens);
 
   for (let i = 0; i < entries.length; i += 1) {
@@ -429,6 +494,7 @@ async function buildJapaneseTokenContext(
     tokens,
     entries,
     noSpaceBefore: computeNoSpaceBefore(entries, tokens),
+    explicitReadings,
   };
 }
 
@@ -452,16 +518,29 @@ export async function romanizeJapaneseFromFurigana(
   return buildRomajiFromContext(context);
 }
 
-function buildRomajiFromContext(context: JapaneseTokenContext): string | undefined {
-  const parts: string[] = [];
+function buildRomajiProjectionFromContext(context: JapaneseTokenContext): {
+  romaji?: string;
+  segments: JapaneseRomajiSegment[];
+} {
+  const segments: JapaneseRomajiSegment[] = [];
   for (let i = 0; i < context.entries.length; i += 1) {
     const entry = context.entries[i];
     if (entry.consumed || !entry.romaji) continue;
-    if (parts.length > 0 && !context.noSpaceBefore[i]) parts.push(" ");
-    parts.push(entry.romaji);
+    const prefix = segments.length > 0 && !context.noSpaceBefore[i] ? " " : "";
+    segments.push({
+      text: `${prefix}${entry.romaji}`,
+      ...(entry.readingProvenance ? { provenance: entry.readingProvenance } : {}),
+    });
   }
-  const romaji = parts.join("").replace(/\s{2,}/g, " ").trim();
-  return romaji || undefined;
+  const raw = segments.map((segment) => segment.text).join("");
+  const leading = raw.length - raw.trimStart().length;
+  if (leading > 0 && segments[0]) segments[0] = { ...segments[0], text: segments[0].text.slice(leading) };
+  const romaji = segments.map((segment) => segment.text).join("").replace(/\s{2,}/g, " ").trimEnd();
+  return { romaji: romaji || undefined, segments };
+}
+
+function buildRomajiFromContext(context: JapaneseTokenContext): string | undefined {
+  return buildRomajiProjectionFromContext(context).romaji;
 }
 
 function buildFuriganaFromContext(lineText: string, context: JapaneseTokenContext): FuriganaSegment[] {
@@ -483,7 +562,11 @@ function buildFuriganaFromContext(lineText: string, context: JapaneseTokenContex
     }
   }
 
-  return segments.sort((a, b) => a.start - b.start || a.end - b.end);
+  const local = segments.filter((segment) => !context.explicitReadings.some((explicit) =>
+    rangesOverlap(segment.start, segment.end, explicit.start, explicit.end)
+  ));
+  return [...local, ...context.explicitReadings]
+    .sort((a, b) => a.start - b.start || a.end - b.end);
 }
 
 export async function prepareJapaneseLineAnalysis(
@@ -494,15 +577,22 @@ export async function prepareJapaneseLineAnalysis(
 ): Promise<PreparedJapaneseLineAnalysis | undefined> {
   const sourceText = (text || "").normalize("NFKC");
   if (!JapaneseSourceTextTest.test(sourceText)) return undefined;
+  const projection = options.authoredReadingProjection?.sourceText === sourceText
+    ? options.authoredReadingProjection
+    : projectProviderAuthoredJapaneseReadings(sourceText);
+  const displayText = projection.displayText;
 
   await romajiPromise;
-  const context = await buildJapaneseTokenContext(sourceText, fullSpacedRomaji, options);
-  const romaji = buildRomajiFromContext(context) || fullSpacedRomaji;
-  const furigana = KanjiTextTest.test(sourceText) ? buildFuriganaFromContext(sourceText, context) : [];
+  const context = await buildJapaneseTokenContext(displayText, fullSpacedRomaji, options, projection.hints);
+  const romajiProjection = buildRomajiProjectionFromContext(context);
+  const romaji = romajiProjection.romaji || fullSpacedRomaji;
+  const furigana = KanjiTextTest.test(displayText) ? buildFuriganaFromContext(displayText, context) : [];
 
   const reading: JapaneseReading = {
     sourceText,
+    ...(displayText !== sourceText ? { displayText } : {}),
     romaji,
+    ...(romajiProjection.segments.length > 0 ? { romajiSegments: romajiProjection.segments } : {}),
     furigana,
   };
   return {
@@ -564,7 +654,10 @@ export async function applyJapaneseReadingToSyllables(
   prepared?: PreparedJapaneseLineAnalysis
 ): Promise<JapaneseReading | undefined> {
   const normalizedLineText = (lineText || "").normalize("NFKC");
-  const analysis = prepared?.reading.sourceText === normalizedLineText
+  const expectedDisplayText = options.authoredReadingProjection?.sourceText === normalizedLineText
+    ? options.authoredReadingProjection.displayText
+    : projectProviderAuthoredJapaneseReadings(normalizedLineText).displayText;
+  const analysis = (prepared?.reading.displayText || prepared?.reading.sourceText) === expectedDisplayText
     ? prepared
     : await prepareJapaneseLineAnalysis(normalizedLineText, fullSpacedRomaji, romajiPromise, options);
   if (!analysis) {
@@ -588,11 +681,12 @@ function applyJapaneseReadingContextToSyllables(
   syllables: JapaneseReadable[],
   spans?: JapaneseTimedTextSpan[]
 ): void {
+  const analysisText = reading.displayText || reading.sourceText;
   let syllPos = 0;
   let prevLastIdx = -1;
   const effectiveSpans = spans && spans.length > 0 ? spans : syllables.map((syllable, index) => {
     const text = normalizeJapaneseTimedText(syllable.Text || "").trim();
-    while (syllPos < reading.sourceText.length && /\s/.test(reading.sourceText[syllPos])) syllPos += 1;
+    while (syllPos < analysisText.length && /\s/.test(analysisText[syllPos])) syllPos += 1;
     const start = syllPos;
     const end = start + text.length;
     syllPos = end;
@@ -631,13 +725,23 @@ function applyJapaneseReadingContextToSyllables(
       }
     }
 
-    const hasSourceSpaceBefore = syllStart > 0 && /\s/.test(reading.sourceText[syllStart - 1] || "");
+    const hasSourceSpaceBefore = syllStart > 0 && /\s/.test(analysisText[syllStart - 1] || "");
     if (si > 0 && firstIdx !== -1 && (hasSourceSpaceBefore || (firstIdx !== prevLastIdx && !context.noSpaceBefore[firstIdx]))) {
       syllable.RomajiSpaceBefore = true;
     }
     if (lastIdx !== -1) prevLastIdx = lastIdx;
 
     const syllableRomaji = romajiParts.length > 0 ? romajiParts.join("") : undefined;
+    const syllableRomajiSegments: JapaneseRomajiSegment[] = [];
+    for (let ei = firstIdx; ei >= 0 && ei <= lastIdx; ei += 1) {
+      const entry = context.entries[ei];
+      if (!entry || entry.consumed || !assignedEntryIndexes.has(ei) || !entry.romaji) continue;
+      const prefix = syllableRomajiSegments.length > 0 && !context.noSpaceBefore[ei] ? " " : "";
+      syllableRomajiSegments.push({
+        text: `${prefix}${entry.romaji}`,
+        ...(entry.readingProvenance ? { provenance: entry.readingProvenance } : {}),
+      });
+    }
     if (syllableRomaji) {
       syllable.RomanizedText = syllableRomaji;
       syllable.TransliteratedText = syllableRomaji;
@@ -647,7 +751,7 @@ function applyJapaneseReadingContextToSyllables(
       .map((segment) => ({
         segment,
         lineSegmentKey: utf16FuriganaSegmentKey(
-          reading.sourceText,
+          analysisText,
           segment.start,
           segment.end,
           segment.reading,
@@ -668,12 +772,15 @@ function applyJapaneseReadingContextToSyllables(
         ),
         reading: segment.reading,
         lineSegmentKey,
+        ...(segment.provenance ? { provenance: segment.provenance } : {}),
       }));
 
     if (localFurigana.length > 0 || syllableRomaji) {
       syllable.JapaneseReading = {
         sourceText: text,
+        ...(span?.normalizedText !== text ? { displayText: span?.normalizedText || "" } : {}),
         romaji: syllableRomaji,
+        ...(syllableRomajiSegments.length > 0 ? { romajiSegments: syllableRomajiSegments } : {}),
         furigana: localFurigana,
       };
     }

@@ -8,6 +8,10 @@ import {
   type JapaneseTimedTextSpan,
 } from "../../Reading/JapaneseReading.ts";
 import { DefaultCanonicalLineBuilder } from "../Canonical.ts";
+import {
+  projectProviderAuthoredJapaneseReadings,
+  projectProviderSourceOffset,
+} from "./ProviderAuthoredReading.ts";
 import { annotateJapaneseLine } from "./JapaneseAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "../RenderPlan.ts";
 import type { ParsedLine, RenderPlan } from "../Model.ts";
@@ -19,15 +23,27 @@ export async function processJapanesePackageLine(
   times: Array<{ StartTime?: number; EndTime?: number }>,
   romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {}
-): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[] }> {
-  const analysis = await prepareJapaneseLineAnalysis(displayText, undefined, romajiPromise, options);
+): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[]; displayText: string }> {
+  const projection = projectProviderAuthoredJapaneseReadings(displayText, spans);
+  const projectedSpans = spans.map((span) => {
+    const start = projectProviderSourceOffset(projection, span.start);
+    const end = projectProviderSourceOffset(projection, span.end);
+    return {
+      ...span,
+      normalizedText: projection.displayText.slice(start, end),
+      start,
+      end,
+    };
+  });
+  const analysisOptions = { ...options, authoredReadingProjection: projection };
+  const analysis = await prepareJapaneseLineAnalysis(displayText, undefined, romajiPromise, analysisOptions);
   const reading = await applyJapaneseReadingToSyllables(
     displayText,
     undefined,
     syllables,
     romajiPromise,
-    spans,
-    options,
+    projectedSpans,
+    analysisOptions,
     analysis,
   );
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
@@ -35,11 +51,11 @@ export async function processJapanesePackageLine(
 
   const parsed: ParsedLine = {
     id: `japanese-fallback-${times[0]?.StartTime || 0}`,
-    displayText,
+    displayText: projection.displayText,
     paragraphProvenance: "unavailable",
-    spans: spans.map((span) => ({
+    spans: projectedSpans.map((span) => ({
       id: String(span.index),
-      rawText: span.rawText,
+      rawText: span.normalizedText,
       cleanText: span.normalizedText,
       startMs: Number(times[span.index]?.StartTime || 0),
       endMs: Number(times[span.index]?.EndTime || 0),
@@ -47,12 +63,12 @@ export async function processJapanesePackageLine(
     })),
   };
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
-  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, options, analysis);
+  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, analysisOptions, analysis);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
   if (!validation.valid) throw new Error(validation.errors.join("; "));
-  return { plan, romaji, furigana: reading?.furigana || [] };
+  return { plan, romaji, furigana: reading?.furigana || [], displayText: projection.displayText };
 }
 
 export async function processJapanesePackageTextTarget(

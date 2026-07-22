@@ -18,6 +18,7 @@ export class DefaultRenderPlanBuilder implements RenderPlanBuilder {
         canonicalRange: unit.canonicalRange,
         text: unit.text,
         logicalGroupId: unit.logicalGroupId,
+        ...(unit.provenance ? { provenance: unit.provenance } : {}),
       }))
     );
     const furigana = annotations.flatMap((annotation) => annotation.furigana ?? []);
