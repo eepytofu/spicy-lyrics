@@ -8,7 +8,7 @@ AMLL responses stay as TTML. The other providers return native Spicy Lyrics JSON
 
 You need:
 
-- Node.js `^20.19.0 || >=22.12.0`.
+- Node.js 20.19+ or 22.12+.
 - A Cloudflare account with Workers enabled.
 - Wrangler access to that account.
 

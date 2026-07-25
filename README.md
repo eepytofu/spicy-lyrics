@@ -38,7 +38,7 @@ UI:
 
 ## Install from source
 
-There are no packaged releases, so install it from source. You need [Spicetify](https://spicetify.app/) and Node.js `^20.19.0 || >=22.12.0`.
+There are no packaged releases, so install it from source. You need [Spicetify](https://spicetify.app/) and Node.js 20.19+ or 22.12+.
 
 ```powershell
 git clone https://github.com/eepytofu/spicy-lyrics.git
