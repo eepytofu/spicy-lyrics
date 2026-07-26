@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   buildJapaneseLineTextMap,
   okuriganaAnchoredKanjiRunReading,
+  resolveJapaneseTokenKanaReading,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 import {
   furiganaSegmentKey,
@@ -21,6 +22,16 @@ test("okurigana anchoring keeps maximal kanji reading prefix", () => {
   assert.equal(okuriganaAnchoredKanjiRunReading("だいきらい", 0, "い"), "だいきら");
   assert.equal(okuriganaAnchoredKanjiRunReading("えがく", 0, "く"), "えが");
   assert.equal(okuriganaAnchoredKanjiRunReading("ながい", 0, "い"), "なが");
+});
+
+test("unknown Katakana tokens fall back to their written kana", () => {
+  assert.equal(resolveJapaneseTokenKanaReading("タマモクロス", ""), "たまもくろす");
+  assert.equal(
+    resolveJapaneseTokenKanaReading("ウインタードリームトロフィー", "*"),
+    "ういんたあどりいむとろふぃい",
+  );
+  assert.equal(resolveJapaneseTokenKanaReading("大歓声", ""), "");
+  assert.equal(resolveJapaneseTokenKanaReading(")", ""), "");
 });
 
 test("Japanese line text map keeps Japanese TTML fragments compact", () => {

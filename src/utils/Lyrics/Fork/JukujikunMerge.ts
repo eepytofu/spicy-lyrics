@@ -14,12 +14,17 @@ export interface MergeableEntry {
 }
 
 const SMALL_TSU_ROMAJI = /(?:xtsu|ltsu|tsu)$/i;
+const PROLONGED_SOUND_MARK = /^ー+$/u;
 const PLURAL_PRONOUN_BEFORE_KATA = /^(?:あなた|貴方|君|きみ|皆|みんな|僕|ぼく|私|わたし|我々)$/;
+const LeadingClosingPunctuation = /^(?:\p{Pe}|\p{Pf}|[。、？！…・.?!,\s])+/u;
+const TrailingOpeningPunctuation = /(?:\p{Ps}|\p{Pi})+$/u;
+const ClosingBeforeOpeningPunctuation =
+  /((?:\p{Pe}|\p{Pf}|[。、？！…・.?!,]))(?=(?:\p{Ps}|\p{Pi}))/gu;
 
 const doubledSokuon = (romaji: string): string => {
   if (!romaji) return romaji;
   const lower = romaji.toLowerCase();
-  if (/^[aeioun]/.test(lower)) return romaji;
+  if (!/^[a-z]/.test(lower) || /^[aeioun]/.test(lower)) return romaji;
   return `${romaji[0]}${romaji}`;
 };
 
@@ -105,6 +110,10 @@ export function applyPhoneticMerges(
   entries: MergeableEntry[],
   tokens: any[]
 ): void {
+  for (const entry of entries) {
+    entry.romaji = entry.romaji.replace(ClosingBeforeOpeningPunctuation, "$1 ");
+  }
+
   for (let i = 1; i < tokens.length; i++) {
     if (entries[i].consumed) continue;
 
@@ -114,6 +123,11 @@ export function applyPhoneticMerges(
 
     const prevSf = tokens[pi].surface_form || "";
     const prevPron = tokens[pi].pronunciation || tokens[pi].reading || "";
+    const currSf = tokens[i].surface_form || "";
+    if (PROLONGED_SOUND_MARK.test(currSf)) {
+      const vowel = entries[pi].romaji.match(/[aeiou]$/i)?.[0];
+      if (vowel) entries[i].romaji = vowel.repeat(Array.from(currSf).length);
+    }
     if (!(prevPron.endsWith("ッ") || prevPron.endsWith("っ") || prevSf.endsWith("っ") || prevSf.endsWith("ッ"))) {
       continue;
     }
@@ -144,9 +158,12 @@ export function computeNoSpaceBefore(
     const currSf = tokens[i].surface_form;
     const currPron = tokens[i].pronunciation || tokens[i].reading || "";
 
-    // っ/ッ at end of previous token → merge
+    // っ/ッ split onto either side of a token boundary still belongs to the
+    // same romanized word.
     if (prevPron.endsWith("ッ") || prevPron.endsWith("っ") ||
-        prevSf.endsWith("っ") || prevSf.endsWith("ッ")) {
+        prevSf.endsWith("っ") || prevSf.endsWith("ッ") ||
+        currPron.startsWith("ッ") || currPron.startsWith("っ") ||
+        currSf.startsWith("っ") || currSf.startsWith("ッ")) {
       noSpaceBefore[i] = true;
     }
 
@@ -166,6 +183,11 @@ export function computeNoSpaceBefore(
       }
     }
 
+    // A separately tokenized chōonpu still extends the preceding mora.
+    if (PROLONGED_SOUND_MARK.test(currSf)) {
+      noSpaceBefore[i] = true;
+    }
+
     const prevPos1 = tokens[pi].pos || tokens[pi].part_of_speech || "";
     const prevPos2 = tokens[pi].pos_detail_1 || "";
     const currPos1 = tokens[i].pos || tokens[i].part_of_speech || "";
@@ -177,8 +199,13 @@ export function computeNoSpaceBefore(
       if (currPos1 === "助動詞" && !/^(?:でしょ|です|だろ)/.test(currSf)) noSpaceBefore[i] = true;
     }
 
-    // Punctuation — no space before
-    if (/^[。、？！…・「」『』（）().?!,\s]+$/.test(currSf)) {
+    // Closing punctuation stays attached to the preceding text. Opening
+    // punctuation starts a new Latin-typography group, while the first token
+    // inside it stays attached to the opening mark.
+    if (LeadingClosingPunctuation.test(currSf)) {
+      noSpaceBefore[i] = true;
+    }
+    if (TrailingOpeningPunctuation.test(prevSf)) {
       noSpaceBefore[i] = true;
     }
 

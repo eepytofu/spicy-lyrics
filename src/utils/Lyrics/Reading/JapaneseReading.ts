@@ -108,6 +108,7 @@ export const KanjiTextTest = /[一-鿿々]/;
 const KanjiLikeCharTest = /[一-鿿々]/;
 const KanjiLikeSequenceTest = /^[一-鿿々]+$/;
 const KanaCharTest = /[ぁ-んァ-ンー]/;
+const KanaOnlySequenceTest = /^[ぁ-んァ-ンー]+$/u;
 const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
 const HIRAGANA_VOWEL: Record<string, string> = {
@@ -221,8 +222,11 @@ function kataToHira(text: string): string {
   );
 }
 
-function contextualKanaReading(surface: string, reading: string): string {
-  return kataToHira(reading || "");
+export function resolveJapaneseTokenKanaReading(surface: string, reading: string): string {
+  const candidate = reading && reading !== "*"
+    ? reading
+    : KanaOnlySequenceTest.test(surface) ? surface : "";
+  return kataToHira(candidate);
 }
 
 export function okuriganaAnchoredKanjiRunReading(kana: string, kanaCursor: number, trailingOkurigana: string): string {
@@ -241,7 +245,7 @@ export function okuriganaAnchoredKanjiRunReading(kana: string, kanaCursor: numbe
 }
 
 function kanaReadingSegments(surface: string, reading: string): TokenFuriganaReading[] {
-  const kana = contextualKanaReading(surface, reading);
+  const kana = resolveJapaneseTokenKanaReading(surface, reading);
   if (!kana || kana === "*") return [];
 
   const normalizedSurface = kataToHira(surface);
@@ -321,7 +325,7 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
 }
 
 function kanaReadingForToken(surface: string, reading: string): TokenFuriganaReading | undefined {
-  let kana = contextualKanaReading(surface, reading);
+  let kana = resolveJapaneseTokenKanaReading(surface, reading);
   if (!kana || kana === "*") return undefined;
 
   let normalizedSurface = kataToHira(surface);
@@ -459,7 +463,7 @@ async function buildJapaneseTokenContext(
     const hasJapaneseScript = JapaneseSourceTextTest.test(surface);
     const foundAt = surface ? analysisText.indexOf(surface, charPos) : -1;
     const start = foundAt >= 0 ? foundAt : charPos;
-    const readingKana = hasJapaneseScript ? contextualKanaReading(surface, reading) : "";
+    const readingKana = hasJapaneseScript ? resolveJapaneseTokenKanaReading(surface, reading) : "";
     const entry: JapaneseTokenEntry = {
       start,
       end: start + surface.length,
