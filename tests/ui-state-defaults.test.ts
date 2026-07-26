@@ -26,6 +26,7 @@ const {
   $translationEnabled,
   $npvLyricsExpanded,
   $npvLyricsOpen,
+  $prefetchNextLyrics,
 } = await import("../src/utils/uiState.ts");
 
 test("Chinese tones default on while built-in translation stays off", () => {
@@ -36,6 +37,7 @@ test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($showBuiltInTranslationButton.get(), true);
   assert.equal($npvLyricsOpen.get(), true);
   assert.equal($npvLyricsExpanded.get(), false);
+  assert.equal($prefetchNextLyrics.get(), false);
 });
 
 test("built-in translation button visibility and tone preference persist independently", () => {
