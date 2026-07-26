@@ -52,6 +52,21 @@ test("rejects ordinary parentheticals and annotations that own a whole timed spa
   assert.equal(rejected.hints.length, 0);
 });
 
+test("rejects line-final kana chants after kanji", () => {
+  for (const source of [
+    "色とりどりの勝負服(はっはっ)",
+    "期待のスタンドは大歓声(あーどしたー)",
+    "勝負服(はっはっ)!",
+  ]) {
+    const projection = projectProviderAuthoredJapaneseReadings(source);
+    assert.equal(projection.displayText, source);
+    assert.equal(projection.hints.length, 0);
+  }
+
+  const inline = projectProviderAuthoredJapaneseReadings("今宵も天(そら)を見る");
+  assert.deepEqual(inline.hints.map((hint) => hint.reading), ["そら"]);
+});
+
 test("projects provider timing offsets around hidden annotation syntax", () => {
   const projection = projectProviderAuthoredJapaneseReadings("今宵も天(そら)は明るく");
   assert.equal(projectProviderSourceOffset(projection, 4), 4);

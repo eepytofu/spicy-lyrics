@@ -20,6 +20,7 @@ export type ProviderTextSpan = {
 };
 
 const ParentheticalReading = /([\p{Script=Han}々〆ヵヶ]{1,12})\(([\p{Script=Hiragana}\p{Script=Katakana}ー]{1,24})\)/gu;
+const TrailingDecorationOnly = /^[\s\p{P}\p{S}]*$/u;
 
 function annotationFitsVisibleSpan(
   source: string,
@@ -55,6 +56,9 @@ export function projectProviderAuthoredJapaneseReadings(
     const sourceStart = match.index;
     const annotationStart = sourceStart + surface.length;
     const sourceEnd = sourceStart + match[0].length;
+    // Parenthetical kana at the end of a lyric line is commonly a backing
+    // chant or spoken response, not a reading for the preceding kanji.
+    if (TrailingDecorationOnly.test(sourceText.slice(sourceEnd))) continue;
     if (!annotationFitsVisibleSpan(sourceText, annotationStart, sourceEnd, spans)) continue;
 
     displayText += sourceText.slice(sourceCursor, annotationStart);
