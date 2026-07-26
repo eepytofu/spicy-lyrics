@@ -16,6 +16,32 @@ import { annotateJapaneseLine } from "./JapaneseAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder, validateRenderPlan } from "../RenderPlan.ts";
 import type { ParsedLine, RenderPlan } from "../Model.ts";
 
+export function buildJapanesePackageParsedLine(
+  finalDisplayText: string,
+  displaySpans: JapaneseTimedTextSpan[],
+  times: Array<{ StartTime?: number; EndTime?: number }>,
+): ParsedLine {
+  return {
+    id: `japanese-fallback-${times[0]?.StartTime || 0}`,
+    displayText: finalDisplayText,
+    paragraphProvenance: "unavailable",
+    spans: displaySpans.map((span, index) => ({
+      id: String(span.index),
+      rawText: span.normalizedText,
+      cleanText: span.normalizedText,
+      startMs: Number(times[span.index]?.StartTime || 0),
+      endMs: Number(times[span.index]?.EndTime || 0),
+      // The structured providers encode word boundaries as literal whitespace
+      // between timed spans. The canonical builder cannot see that whitespace
+      // after each span has been sliced, so retain the authored gap as the
+      // native trailing-boundary flag instead of inferring from character type.
+      providerPartOfWord: !/\s/u.test(
+        finalDisplayText.slice(span.end, displaySpans[index + 1]?.start ?? finalDisplayText.length),
+      ),
+    })),
+  };
+}
+
 export async function processJapanesePackageLine(
   displayText: string,
   syllables: JapaneseReadable[],
@@ -54,19 +80,7 @@ export async function processJapanesePackageLine(
     normalizedText: finalDisplayText.slice(span.start, span.end),
   }));
 
-  const parsed: ParsedLine = {
-    id: `japanese-fallback-${times[0]?.StartTime || 0}`,
-    displayText: finalDisplayText,
-    paragraphProvenance: "unavailable",
-    spans: displaySpans.map((span) => ({
-      id: String(span.index),
-      rawText: span.normalizedText,
-      cleanText: span.normalizedText,
-      startMs: Number(times[span.index]?.StartTime || 0),
-      endMs: Number(times[span.index]?.EndTime || 0),
-      providerPartOfWord: true,
-    })),
-  };
+  const parsed = buildJapanesePackageParsedLine(finalDisplayText, displaySpans, times);
   const canonical = new DefaultCanonicalLineBuilder().build(parsed);
   const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, analysisOptions, analysis);
   if (!annotation) throw new Error("Japanese fallback annotation failed");

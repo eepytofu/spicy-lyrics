@@ -8,6 +8,10 @@ class FakeClassList {
     names.forEach((name) => this.values.add(name));
   }
 
+  contains(name: string): boolean {
+    return this.values.has(name);
+  }
+
   toggle(name: string, force?: boolean): void {
     if (force === false) this.values.delete(name);
     else this.values.add(name);
@@ -58,6 +62,7 @@ const {
   appendLineExtras,
   appendSyllableRomanizedBelow,
   isJapaneseEntry,
+  packAdjacentFuriganaClusters,
   renderBaseTextWithReadings,
 } = await import(
   "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
@@ -166,6 +171,28 @@ test("adjacent ruby clusters are packed while isolated ruby can overhang", () =>
     { start: 2, end: 3, reading: "ほし" },
   ]);
   assert.equal(isolated.children.some((cluster) => cluster.classList.values.has("furigana-cluster-packed")), false);
+});
+
+test("adjacent rubies split across provider timing spans are packed together", () => {
+  const left = new FakeElement();
+  const right = new FakeElement();
+  const separated = new FakeElement();
+  appendFuriganaText(left as unknown as HTMLElement, "涙", [{ start: 0, end: 1, reading: "なみだ" }]);
+  appendFuriganaText(right as unknown as HTMLElement, "流", [{ start: 0, end: 1, reading: "なが" }]);
+  appendFuriganaText(separated as unknown as HTMLElement, "声", [{ start: 0, end: 1, reading: "こえ" }]);
+
+  const spacer = new FakeElement();
+  appendFuriganaText(spacer as unknown as HTMLElement, "を", []);
+  packAdjacentFuriganaClusters([
+    left.children[0],
+    right.children[0],
+    spacer.children[0],
+    separated.children[0],
+  ] as unknown as HTMLElement[]);
+
+  assert.equal(left.children[0].classList.values.has("furigana-cluster-packed"), true);
+  assert.equal(right.children[0].classList.values.has("furigana-cluster-packed"), true);
+  assert.equal(separated.children[0].classList.values.has("furigana-cluster-packed"), false);
 });
 
 test("plain Japanese tails expose wrap points beside ruby clusters", () => {

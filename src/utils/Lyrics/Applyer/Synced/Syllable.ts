@@ -34,6 +34,7 @@ import { ApplyProviderCredits } from "../Credits/ApplyProviderCredits.ts";
 import {
   appendSyllableRomanizedBelow,
   isJapaneseEntry,
+  packAdjacentFuriganaClusters,
   renderBaseTextWithReadings,
   shouldRenderFurigana,
 } from "../ReadingRenderer.ts";
@@ -528,6 +529,7 @@ export function ApplySyllableLyrics(
         currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
       }
     });
+    packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".furigana-cluster"));
 
     const leadRomanizedText = line.Lead.RomanizedText || line.Lead.TransliteratedText;
     const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
@@ -626,6 +628,7 @@ export function ApplySyllableLyrics(
             currentBGWordGroup = appendGroupedWord(lineE, word, bw, bA[bI - 1], currentBGWordGroup);
           }
         });
+        packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".furigana-cluster"));
 
         const bgRomanizedText = bg.RomanizedText || bg.TransliteratedText;
         const allEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];

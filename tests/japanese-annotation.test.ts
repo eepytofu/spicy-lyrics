@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { annotateJapaneseLine } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
+import { buildJapanesePackageParsedLine } from "../src/utils/Lyrics/Processing/Japanese/JapanesePackageProcessor.ts";
 import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import {
   applyJapaneseReadingToSyllables,
@@ -21,6 +22,32 @@ test("Japanese annotation keeps split spans as unique timing owners", async () =
   assert.equal(plan.timedReadingUnits.length, 5);
   assert.equal(new Set(plan.timedReadingUnits.map((unit) => unit.spanId)).size, 5);
   assert.equal(plan.joinedDisplayText.length > 0, true);
+});
+
+test("structured-provider Japanese lines keep authored English spaces without duplicating timed words", async () => {
+  const syllables = [
+    { Text: "ぶ", IsPartOfWord: true },
+    { Text: "ち", IsPartOfWord: true },
+    { Text: "壊", IsPartOfWord: true },
+    { Text: "し", IsPartOfWord: true },
+    { Text: "て", IsPartOfWord: true },
+    { Text: "shout ", IsPartOfWord: false },
+    { Text: "it ", IsPartOfWord: false },
+    { Text: "out ", IsPartOfWord: false },
+    { Text: "loud", IsPartOfWord: true },
+  ];
+  const map = buildJapaneseLineTextMap(syllables);
+  assert.equal(map.lineText, "ぶち壊して shout it out loud");
+
+  const parsed = buildJapanesePackageParsedLine(
+    map.lineText,
+    map.spans,
+    syllables.map((_, index) => ({ StartTime: index * 100, EndTime: (index + 1) * 100 })),
+  );
+  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+
+  assert.equal(canonical.text, "ぶち壊して shout it out loud");
+  assert.equal(new Set(canonical.spanMappings.map((unit) => unit.spanId)).size, syllables.length);
 });
 
 test("Japanese furigana ranges are exported as code-point coordinates", async () => {

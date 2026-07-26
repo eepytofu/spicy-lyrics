@@ -169,6 +169,41 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
   appendPlainText(parent, text.slice(cursor));
 }
 
+const hasElementClass = (element: Element, className: string): boolean =>
+  element.classList.contains(className) || String(element.className).split(/\s+/u).includes(className);
+
+const directClusterChild = (cluster: HTMLElement, className: string): HTMLElement | undefined =>
+  Array.from(cluster.children).find((child) => hasElementClass(child, className)) as HTMLElement | undefined;
+
+/**
+ * A timed provider can split adjacent kanji into separate DOM words even when
+ * each word owns a local ruby. Pack those neighboring ruby clusters exactly
+ * like adjacent segments rendered inside one word so their overhangs cannot
+ * collide. Any visible plain source text, including authored whitespace,
+ * resets adjacency.
+ */
+export function packAdjacentFuriganaClusters(clusters: Iterable<HTMLElement>): void {
+  let previousRuby: HTMLElement | null = null;
+
+  for (const cluster of clusters) {
+    const base = directClusterChild(cluster, "furigana-base");
+    const reading = directClusterChild(cluster, "furigana-reading");
+    const hasRuby = !!reading &&
+      !hasElementClass(reading, "furigana-placeholder") &&
+      !!reading.textContent;
+
+    if (hasRuby) {
+      if (previousRuby) {
+        previousRuby.classList.add("furigana-cluster-packed");
+        cluster.classList.add("furigana-cluster-packed");
+      }
+      previousRuby = cluster;
+    } else if (base?.textContent) {
+      previousRuby = null;
+    }
+  }
+}
+
 export function renderBaseTextWithReadings(
   element: HTMLElement,
   entry: JapaneseReadable,
