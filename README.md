@@ -28,7 +28,7 @@ Readings:
 - Optional word-based Pinyin spacing, which keeps syllables together when they form one detected Mandarin word
 - Better handling for lyrics that mix Chinese and Japanese: readings are chosen per line instead of treating the whole song as one language, and mixed lines can use both Pinyin and Japanese readings
 - Japanese character repair for lyrics from Chinese services, so forms such as `梦见ては` display as `夢見ては`
-- Explicit Japanese readings from the lyric source, such as `天(そら)` (shown in a different color as furigana, romaji, or both)
+- Japanese lyrics can include reading hints such as `天(そら)`. The parenthetical `そら` is hidden from the main line, then used locally as furigana and as the basis for romaji. Source-provided readings use a different color from inferred ones.
 
 UI:
 
