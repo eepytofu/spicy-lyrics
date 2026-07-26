@@ -218,6 +218,18 @@ export function computeNoSpaceBefore(
     if (adjacentInSource && (slashToken.test(currSf) || slashToken.test(prevSf))) {
       noSpaceBefore[i] = true;
     }
+
+    // Preserve an authored no-space boundary when Japanese text is attached
+    // directly to a Latin/number label (for example 暁Records). Ordinary
+    // Japanese token boundaries still use grammatical romaji spacing.
+    const JapaneseText = /[぀-ヿ一-鿿々]/u;
+    const LatinOrNumberText = /[\p{Script=Latin}\p{N}]/u;
+    if (adjacentInSource && (
+      (JapaneseText.test(prevSf) && LatinOrNumberText.test(currSf)) ||
+      (LatinOrNumberText.test(prevSf) && JapaneseText.test(currSf))
+    )) {
+      noSpaceBefore[i] = true;
+    }
   }
   return noSpaceBefore;
 }

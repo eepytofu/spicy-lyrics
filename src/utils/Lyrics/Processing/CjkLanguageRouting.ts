@@ -1,3 +1,5 @@
+import { needsSyllableSpaceBefore } from "./SyllableBoundaries.ts";
+
 export type CjkReadingRunKind = "Han" | "Kana" | "Other";
 
 export type CjkReadingRun = {
@@ -25,7 +27,7 @@ export function buildCjkReadingContextText(syllables: TimedReadingTextUnit[]): s
     if (index === 0) return text;
 
     const previousText = syllables[index - 1]?.Text || "";
-    const preserveAuthoredWordSpace = syllable.IsPartOfWord !== true &&
+    const preserveAuthoredWordSpace = needsSyllableSpaceBefore(syllables, index) &&
       (LatinCharTest.test(previousText) || LatinCharTest.test(text));
     return `${lineText}${preserveAuthoredWordSpace ? " " : ""}${text}`;
   }, "");

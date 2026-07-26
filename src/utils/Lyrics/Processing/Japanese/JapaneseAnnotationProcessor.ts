@@ -8,8 +8,12 @@ import {
 import { codePointOffsetToUtf16Index, codePointSlice, utf16IndexToCodePointOffset } from "../CodePoint.ts";
 import type { CanonicalLine, ReadingAnnotation, ReadingUnit } from "../Model.ts";
 
-function alignUnitTexts(texts: string[], display: string): string[] {
-  const out = [...texts];
+export function alignJapaneseReadingUnitTexts(texts: string[], display: string): string[] {
+  // A tokenizer can assign several tokens, including a literal whitespace
+  // token, to one provider timing span. Normalize only that projection noise
+  // before matching it back to the already-normalized full reading. The gaps
+  // copied from `display` below remain the authoritative separators.
+  const out = texts.map((text) => text.replace(/\s+/gu, " ").trim());
   let cursor = 0;
   for (let index = 0; index < out.length; index += 1) {
     const text = out[index];
@@ -57,7 +61,7 @@ export async function annotateJapaneseLine(
     options,
     analysis,
   );
-  const aligned = alignUnitTexts(temp.map((entry) => entry.RomanizedText || entry.TransliteratedText ||
+  const aligned = alignJapaneseReadingUnitTexts(temp.map((entry) => entry.RomanizedText || entry.TransliteratedText ||
     (/\p{Script=Latin}/u.test(entry.Text || "") ? entry.Text || "" : "")), reading.romaji);
   if (!aligned.some(Boolean) && aligned.length > 0) aligned[0] = reading.romaji;
   let group = 0;

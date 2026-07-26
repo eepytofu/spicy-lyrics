@@ -106,10 +106,10 @@ test("Mandarin word joining handles several Han characters in one timing owner",
 
 test("Chinese context reconstruction preserves authored Latin word spaces", () => {
   assert.equal(buildCjkReadingContextText([
-    { Text: "一起", IsPartOfWord: true },
+    { Text: "一起", IsPartOfWord: false },
     { Text: "sing", IsPartOfWord: false },
     { Text: "along", IsPartOfWord: false },
-    { Text: "吧", IsPartOfWord: false },
+    { Text: "吧", IsPartOfWord: true },
   ]), "一起 sing along 吧");
 });
 

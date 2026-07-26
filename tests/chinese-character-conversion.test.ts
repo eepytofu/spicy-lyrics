@@ -58,7 +58,7 @@ test("limits Japanese kanji repair to built-in Chinese lyric providers", () => {
 
 test("converts a complete timed line so phrases can cross timing units", () => {
   const units = [
-    { Text: "\u5934", StartTime: 1, EndTime: 2 },
+    { Text: "\u5934", StartTime: 1, EndTime: 2, IsPartOfWord: true },
     { Text: "\u53d1", StartTime: 2, EndTime: 3, IsPartOfWord: true },
   ];
   assert.deepEqual(convertChineseTimedTextUnits(units, "traditional"), ["\u982d", "\u9aee"]);
@@ -76,7 +76,7 @@ test("converts primary lyrics without touching translations or timing", () => {
       EndTime: 3,
       TranslatedText: "translation",
       Syllables: [
-        { Text: "\u5934", StartTime: 1, EndTime: 2 },
+        { Text: "\u5934", StartTime: 1, EndTime: 2, IsPartOfWord: true },
         { Text: "\u53d1", StartTime: 2, EndTime: 3, IsPartOfWord: true },
       ],
     } }],

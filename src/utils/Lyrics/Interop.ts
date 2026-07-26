@@ -1,3 +1,5 @@
+import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
+
 export const SPICY_LYRICS_INTEROP_VERSION = 1;
 
 export type SpicyLyricsInteropWord = {
@@ -59,7 +61,7 @@ function joinSyllableText(syllables: any[]): string {
   return syllables.reduce((result, syllable, index) => {
     const text = String(syllable?.Text ?? "");
     if (index === 0) return text;
-    return `${result}${syllable?.IsPartOfWord ? "" : " "}${text}`;
+    return `${result}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
   }, "").replace(/\s+/g, " ").trim();
 }
 
@@ -84,7 +86,7 @@ function syllableReading(group: any, syllables: any[]): string | undefined {
   return chunks.reduce((result, chunk, index) => {
     if (!chunk) return result;
     if (!result) return chunk;
-    return `${result}${syllables[index]?.IsPartOfWord ? "" : " "}${chunk}`;
+    return `${result}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${chunk}`;
   }, "").replace(/\s+/g, " ").trim() || undefined;
 }
 

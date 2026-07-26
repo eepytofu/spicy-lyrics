@@ -22,6 +22,7 @@ import {
   type ProviderAuthoredReadingHint,
   type ProviderAuthoredReadingProjection,
 } from "../Processing/Japanese/ProviderAuthoredReading.ts";
+import { needsSyllableSpaceBefore } from "../Processing/SyllableBoundaries.ts";
 
 export type FuriganaSegment = {
   start: number;
@@ -87,6 +88,8 @@ export type TimedSyllableGroup = JapaneseReadable & {
   EndTime: number;
   Syllables: TimedSyllableEntry[];
   TranslatedText?: string;
+  IsProviderInfo?: boolean;
+  IsMetadata?: boolean;
 };
 
 export type JapaneseTimedTextSpan = {
@@ -182,7 +185,7 @@ export function buildJapaneseLineTextMap(syllables: JapaneseReadable[]): Japanes
     const nextNeedsLatinSpace =
       !leading &&
       lineText &&
-      (syllables[index] as any)?.IsPartOfWord !== true &&
+      needsSyllableSpaceBefore(syllables, index) &&
       (LatinWordTextTest.test(previousRaw) || LatinWordTextTest.test(normalizedText));
     if (nextNeedsLatinSpace) lineText = appendLineSpaceIfNeeded(lineText);
 

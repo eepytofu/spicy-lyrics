@@ -169,6 +169,18 @@
   transform-origin: right center;
 }
 
+/* Provider intro rows are static source metadata, not timed vocal syllables.
+   Per-syllable emphasis scaling leaves visible seams inside attached text such
+   as `暁Records` and `(akatsuki`; keep their source spacing geometrically exact. */
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line.provider-metadata-line
+  :is(.word, .letter, .letterGroup) {
+  scale: 1 !important;
+  transform: none !important;
+}
+
 #SpicyLyricsPage.SpicyRenderer
   .LyricsContainer
   .LyricsContent
@@ -346,6 +358,42 @@
   --text-shadow-opacity: 0% !important;
   transform: translateY(0) !important;
   scale: 1 !important; */
+}
+
+/* Provider info is literal text, not a sung syllable stream. Timed credit rows
+   highlight as one line, then return to the resting state; synthetic metadata
+   uses a sentinel window and therefore remains resting. */
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line.provider-info-line.Sung {
+  opacity: var(--Vocal-NotSung-opacity);
+  --gradient-position: -20% !important;
+}
+
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line.provider-info-line.Sung
+  :is(.word, .letter, .letterGroup) {
+  --gradient-position: -20% !important;
+}
+
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line.provider-info-line.Active {
+  opacity: 1;
+}
+
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line.provider-info-line.Active
+  :is(.word, .letter, .letterGroup) {
+  --gradient-position: 100% !important;
+  scale: 1 !important;
+  transform: translateY(0) !important;
 }
 
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.FeelSung .word,

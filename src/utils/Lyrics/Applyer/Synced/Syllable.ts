@@ -41,6 +41,12 @@ import {
 import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
 import {
+  isProviderInfoLine,
+  providerMetadataSeekTimeMs,
+  useReadingsForProviderLine,
+} from "../../Processing/ProviderMetadata.ts";
+import { needsSyllableSpaceBefore } from "../../Processing/SyllableBoundaries.ts";
+import {
   timedFuriganaGroups,
   timedGroupContinuesAt,
   timedLogicalGroupIds,
@@ -74,9 +80,17 @@ const joinSyllableDisplayText = (syllables: SyllableData[]): string => {
   return syllables.reduce((acc, syl, index) => {
     const text = syl.Text || "";
     if (index === 0) return text;
-    return `${acc}${syl.IsPartOfWord ? "" : " "}${text}`;
+    return `${acc}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
   }, "").trim();
 };
+
+const METADATA_TIME = -0.001;
+
+export const syllableAnimationWindow = (
+  group: Pick<TimedSyllableGroup, "StartTime" | "EndTime" | "IsMetadata">
+): { startTime: number; endTime: number } => group.IsMetadata
+  ? { startTime: METADATA_TIME, endTime: METADATA_TIME }
+  : { startTime: group.StartTime, endTime: group.EndTime };
 
 const applyWordPositionClasses = (
   element: HTMLElement,
@@ -423,12 +437,23 @@ export function ApplySyllableLyrics(
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
+    const lineWindow = syllableAnimationWindow(line.Lead);
+    const isProviderInfo = isProviderInfoLine(line.Lead);
+    if (isProviderInfo) lineElem.classList.add("provider-info-line");
+    if (line.Lead.IsMetadata) lineElem.classList.add("provider-metadata-line");
     const leadSourceText = line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
     lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
     lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
+    const metadataSeekTime = providerMetadataSeekTimeMs(line.Lead);
+    if (metadataSeekTime !== undefined) {
+      lineElem.dataset.spicyLyricsSeekTime = String(metadataSeekTime);
+    }
     applyHanLanguageTag(lineElem, joinSyllableDisplayText(line.Lead.Syllables), data, $fixHanGlyphVariants.get());
     const lineRenderOptions = {
-      useRomanized: UseRomanized,
+      // Metadata is already classified by the structured-source adapter.
+      // Keep it literal even during the raw-first processing frame so
+      // provider readings cannot flash before background cleanup finishes.
+      useRomanized: useReadingsForProviderLine(line.Lead, UseRomanized),
       romanizationPending,
       translationPending,
       showProviderTranslations: ShowProviderTranslations,
@@ -436,26 +461,28 @@ export function ApplySyllableLyrics(
       oppositeAligned: line.OppositeAligned,
     };
 
-    const nextLineStartTime = arr[index + 1]?.Lead.StartTime ?? 0;
+    const nextLineStartTime = arr[index + 1]
+      ? syllableAnimationWindow(arr[index + 1].Lead).startTime
+      : 0;
 
     const lineEndTimeAndNextLineStartTimeDistance =
-      nextLineStartTime !== 0 ? nextLineStartTime - line.Lead.EndTime : 0;
+      nextLineStartTime !== 0 ? nextLineStartTime - lineWindow.endTime : 0;
 
     const lineEndTime =
       $minimalLyricsMode.get()
         ? nextLineStartTime === 0
-          ? line.Lead.EndTime
+          ? lineWindow.endTime
           : lineEndTimeAndNextLineStartTimeDistance < getLyricsBetweenShow() &&
-              nextLineStartTime > line.Lead.EndTime
+              nextLineStartTime > lineWindow.endTime
             ? nextLineStartTime
-            : line.Lead.EndTime
-        : line.Lead.EndTime;
+            : lineWindow.endTime
+        : lineWindow.endTime;
 
     LyricsObject.Types.Syllable.Lines.push({
       HTMLElement: lineElem,
-      StartTime: ConvertTime(line.Lead.StartTime),
+      StartTime: ConvertTime(lineWindow.startTime),
       EndTime: ConvertTime(lineEndTime),
-      TotalTime: ConvertTime(lineEndTime) - ConvertTime(line.Lead.StartTime),
+      TotalTime: ConvertTime(lineEndTime) - ConvertTime(lineWindow.startTime),
     });
 
     SetWordArrayInCurentLine();
@@ -478,7 +505,29 @@ export function ApplySyllableLyrics(
     const leadTexts = line.Lead.Syllables.map((s) => s.Text || "");
     const leadTimedFuriganaState = createTimedFuriganaRenderState();
 
-    line.Lead.Syllables.forEach((lead, iL, aL) => {
+    if (isProviderInfo && line.Lead.Syllables.length > 0) {
+      // Provider-info timing fragments are transport detail, not karaoke
+      // units. Keep a single literal run, but retain real line timing unless
+      // the adapter identified stretched synthetic metadata timing.
+      // One exact text run preserves the provider's punctuation shaping and
+      // avoids visual seams around attached mixed-script text.
+      const metadataLead: SyllableData = {
+        ...line.Lead.Syllables[0],
+        Text: leadSourceText,
+        StartTime: lineWindow.startTime,
+        EndTime: lineWindow.endTime,
+        IsPartOfWord: false,
+      };
+      const metadataSyllables = [metadataLead];
+      const word = createSyllableWord(
+        metadataLead,
+        0,
+        metadataSyllables,
+        leadRenderOptions,
+        false
+      );
+      lineElem.appendChild(word);
+    } else line.Lead.Syllables.forEach((lead, iL, aL) => {
       if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
         lineElem.classList.add("rtl");
       }
@@ -646,18 +695,21 @@ export function ApplySyllableLyrics(
         );
       });
     }
-    if (arr[index + 1] && arr[index + 1].Lead.StartTime - line.Lead.EndTime >= getLyricsBetweenShow()) {
+    const interludeStartTime = line.Lead.IsMetadata
+      ? Math.max(lineWindow.endTime, nextLineStartTime - getLyricsBetweenShow())
+      : lineWindow.endTime;
+    if (arr[index + 1] && nextLineStartTime - interludeStartTime >= getLyricsBetweenShow()) {
       const musicalLine = document.createElement("div");
       musicalLine.classList.add("line");
       musicalLine.classList.add("musical-line");
 
       LyricsObject.Types.Syllable.Lines.push({
         HTMLElement: musicalLine,
-        StartTime: ConvertTime(line.Lead.EndTime),
+        StartTime: ConvertTime(interludeStartTime),
         EndTime: ConvertTime(arr[index + 1].Lead.StartTime),
         TotalTime:
-          ConvertTime(arr[index + 1].Lead.StartTime) -
-          ConvertTime(line.Lead.EndTime),
+          ConvertTime(nextLineStartTime) -
+          ConvertTime(interludeStartTime),
         DotLine: true,
       });
 
@@ -674,8 +726,8 @@ export function ApplySyllableLyrics(
       const musicalDots2 = document.createElement("span");
       const musicalDots3 = document.createElement("span");
 
-      const gapStartTime = ConvertTime(line.Lead.EndTime);
-      const totalTime = ConvertTime(arr[index + 1].Lead.StartTime) - gapStartTime;
+      const gapStartTime = ConvertTime(interludeStartTime);
+      const totalTime = ConvertTime(nextLineStartTime) - gapStartTime;
       const baseDotTime = totalTime / 3;
       const dotPadding = getInterludeTimePadding() / 3;
       const dot1EndTime = Math.max(gapStartTime, gapStartTime + baseDotTime + dotPadding);

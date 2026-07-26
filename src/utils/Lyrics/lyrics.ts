@@ -267,7 +267,12 @@ function LinesEvListener(e: MouseEvent) {
   ].find((entry) => entry.HTMLElement === clickedLine);
   if (!line) return;
 
-  const startTime = line.Syllables?.Lead?.[0]?.StartTime ?? line.StartTime;
+  const metadataSeekTime = Number(clickedLine.dataset.spicyLyricsSeekTime);
+  const startTime =
+    clickedLine.dataset.spicyLyricsSeekTime !== undefined &&
+      Number.isFinite(metadataSeekTime)
+      ? metadataSeekTime
+      : line.Syllables?.Lead?.[0]?.StartTime ?? line.StartTime;
   SpotifyPlayer.Seek(startTime);
   Global.Event.evoke("song:seek", startTime);
 }

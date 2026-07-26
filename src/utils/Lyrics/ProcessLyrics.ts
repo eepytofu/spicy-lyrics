@@ -43,6 +43,8 @@ import { DefaultRenderPlanBuilder, validateRenderPlan } from "./Processing/Rende
 import { processJapanesePackageLine, processJapanesePackageTextTarget } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildLineFallbackPlan, buildTimedGenericPlan } from "./Processing/GenericReadingProcessor.ts";
 import { buildCjkReadingContextText, romanizeChineseDominantCjkText } from "./Processing/CjkLanguageRouting.ts";
+import { clearProviderMetadataReadings } from "./Processing/ProviderMetadata.ts";
+import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
 import {
   preserveProviderReading,
   restoreProviderReading,
@@ -52,7 +54,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 44;
+export const LYRICS_PROCESSING_VERSION = 48;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 
@@ -146,7 +148,7 @@ const normalizedSyllableLine = (syllables: any[]): string => {
       index > 0 &&
       !/\s$/u.test(text) &&
       !/^\s/u.test(normalized) &&
-      !syllables[index]?.IsPartOfWord
+      needsSyllableSpaceBefore(syllables, index)
     ) {
       text += " ";
     }
@@ -181,7 +183,7 @@ const gatherText = (
       if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
 
       const syllables = vocalGroup.Lead.Syllables;
-      if (syllables.length > 0) {
+      if (syllables.length > 0 && !vocalGroup.Lead.IsMetadata) {
         const text = normalizedSyllableLine(syllables);
         const lineEntries: RomanizeEntry[] = syllables.map((syllable: any) => ({
           target: syllable,
@@ -276,10 +278,11 @@ const joinSyllables = (syllables: any[], compact = false): string => {
     const text = syl.Text || "";
     if (index === 0) return text;
 
-    if (!compact) return `${acc}${syl.IsPartOfWord ? "" : " "}${text}`;
+    if (!compact) return `${acc}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
 
     const prevText = syllables[index - 1]?.Text || "";
-    const shouldPreserveWordSpace = !syl.IsPartOfWord && (LatinWordTextTest.test(prevText) || LatinWordTextTest.test(text));
+    const shouldPreserveWordSpace = needsSyllableSpaceBefore(syllables, index)
+      && (LatinWordTextTest.test(prevText) || LatinWordTextTest.test(text));
     return `${acc}${shouldPreserveWordSpace ? " " : ""}${text}`;
   }, "");
 };
@@ -310,6 +313,7 @@ const postProcessSyllableRomanization = async (
     const processGroup = async (group: any) => {
       const syllables = group?.Syllables;
       if (!Array.isArray(syllables) || syllables.length === 0) return;
+      if (clearProviderMetadataReadings(group)) return;
       preserveProviderReading(group);
       for (const syllable of syllables) preserveProviderReading(syllable);
 

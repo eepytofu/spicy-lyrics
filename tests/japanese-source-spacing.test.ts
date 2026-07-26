@@ -52,6 +52,18 @@ test("Japanese local romaji uses Latin spacing around parentheticals", () => {
   assert.equal(rendered, "na (sore ike!)");
 });
 
+test("Japanese local romaji preserves attached mixed-script labels and parenthetical spaces", () => {
+  const surfaces = ["暁", "Records", "(", "akatsuki", "records", ")"];
+  const noSpaceBefore = spacingFor("暁Records (akatsuki records)", surfaces);
+  assert.deepEqual(noSpaceBefore, [false, true, false, true, false, true]);
+
+  const romaji = ["akatsuki", "Records", "(", "akatsuki", "records", ")"];
+  const rendered = romaji.map((text, index) =>
+    `${index > 0 && !noSpaceBefore[index] ? " " : ""}${text}`
+  ).join("");
+  assert.equal(rendered, "akatsukiRecords (akatsuki records)");
+});
+
 test("Japanese local romaji joins a separately tokenized long-vowel mark", () => {
   const entries: MergeableEntry[] = [
     { surface: "それ", romaji: "sore", consumed: false },

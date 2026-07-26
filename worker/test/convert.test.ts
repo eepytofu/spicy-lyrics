@@ -50,6 +50,90 @@ describe("native word-sync conversion", () => {
     }
   });
 
+  it("marks structured title and credit lines as provider info without changing text", () => {
+    const fixtures = [
+      parseQrc(
+        "[0,2000]Title - Artist(0,2000)\n[2000,1000]词(2000,300)：(2300,200)Stack(2500,500)\n[3000,1000]曲(3000,300)：(3300,200)ZUN(3500,500)\n[4000,1000]first lyric(4000,1000)",
+      ),
+      parseKrc(
+        "[0,2000]<0,2000,0>Title - Artist\n[2000,1000]<0,300,0>词<300,200,0>：<500,500,0>Stack\n[3000,1000]<0,300,0>曲<300,200,0>：<500,500,0>ZUN\n[4000,1000]<0,1000,0>first lyric",
+      ),
+      parseYrc(
+        "[0,2000](0,2000,0)Title - Artist\n[2000,1000](2000,300,0)词(2300,200,0)：(2500,500,0)Stack\n[3000,1000](3000,300,0)曲(3300,200,0)：(3500,500,0)ZUN\n[4000,1000](4000,1000,0)first lyric",
+      ),
+    ];
+
+    for (const lines of fixtures) {
+      const lyrics = toSyllableLyrics(lines, "qq") as any;
+      expect(lyrics.Content.map((line: any) => line.Lead.IsProviderInfo === true))
+        .toEqual([true, true, true, false]);
+      expect(lyrics.Content.map((line: any) => line.Lead.IsMetadata === true))
+        .toEqual([true, false, false, false]);
+      expect(lyrics.Content.map((line: any) =>
+        line.Lead.Syllables.map((word: any) => word.Text).join("")))
+        .toEqual(["Title - Artist", "词：Stack", "曲：ZUN", "first lyric"]);
+      expect(lyrics.Content.slice(0, 3).map((line: any) => [
+        line.Lead.StartTime,
+        line.Lead.EndTime,
+      ])).toEqual([[0, 2], [2, 3], [3, 4]]);
+    }
+  });
+
+  it("maps the captured QQ title spaces to Spicy's trailing-boundary contract", () => {
+    const lyrics = toSyllableLyrics(parseQrc(
+      "[0,26309]Shout (0,2391)It (2392,2391)Out (4784,2391)Loud!!! - (7175,2391)暁(9567,9567)Records ((19134,2391)akatsuki (21526,2391)records)(23918,2391)\n"
+      + "[26310,7174]词(26310,2391)：(28701,2391)Stack(31093,2391)\n"
+      + "[33485,11964]曲(33485,7175)：(40660,2391)ZUN(43052,2397)\n"
+      + "[45450,1949]声(45450,513)も(45963,185)上(46148,137)げ(46285,143)ら(46428,143)れ(46571,185)ず(46756,159)に(46915,484)",
+    ), "qq") as any;
+    const title = lyrics.Content[0].Lead;
+
+    expect(title.IsProviderInfo).toBe(true);
+    expect(title.IsMetadata).toBe(true);
+    expect(lyrics.Content.slice(1, 3).map((line: any) => [
+      line.Lead.IsProviderInfo,
+      line.Lead.IsMetadata,
+    ])).toEqual([[true, true], [true, true]]);
+    expect(title.Syllables.map((word: any) => word.Text).join(""))
+      .toBe("Shout It Out Loud!!! - 暁Records (akatsuki records)");
+    expect(title.Syllables.map((word: any) => word.IsPartOfWord))
+      .toEqual([false, false, false, false, true, true, false, true]);
+  });
+
+  it("keeps normally timed QQ production credits active and speaker cues vocal", () => {
+    const lyrics = toSyllableLyrics(parseQrc(
+      "[885,3648]晚(885,288)夜(1173,170)微(1343,230)雨(1573,224)问(1797,224)海(2021,248)棠(2269,136) - (2405,136)镜(2541,248)予(2789,280)歌(3069,216)\n"
+      + "[4533,744]词(4533,256)：(4789,0)唐(4789,248)酱(5037,240)\n"
+      + "[6909,1064]编(6909,216)曲(7125,217)：(7342,0)Mzf(7342,208)小(7550,216)慕(7766,207)\n"
+      + "[10661,1024]二(10661,200)胡(10861,208)：(11069,0)辰(11069,200)小(11269,192)弦(11461,224)\n"
+      + "[11685,665]混(11685,501)音(12186,32)：(12218,0)圣(12218,33)雨(12251,32)轻(12283,35)纱(12318,32)\n"
+      + "[36385,2567]喧(36385,225)笑(36610,1447)：(38056,1)\n"
+      + "[38952,2000]那(38952,500)年(39452,500)风(39952,500)吹(40452,500)",
+    ), "qq") as any;
+
+    expect(lyrics.Content.slice(0, 5).map((line: any) => [
+      line.Lead.IsProviderInfo === true,
+      line.Lead.IsMetadata === true,
+    ])).toEqual([
+      [true, false],
+      [true, false],
+      [true, false],
+      [true, false],
+      [true, false],
+    ]);
+    expect(lyrics.Content[5].Lead.IsProviderInfo).toBeUndefined();
+    expect(lyrics.Content[5].Lead.IsMetadata).toBeUndefined();
+    expect(lyrics.Content[6].Lead.IsProviderInfo).toBeUndefined();
+  });
+
+  it("does not demote ordinary lyrics when no compact intro-credit block exists", () => {
+    const lyrics = toSyllableLyrics(parseQrc(
+      "[0,1000]first lyric(0,1000)\n[1000,1000]second lyric(1000,1000)",
+    ), "qq") as any;
+
+    expect(lyrics.Content.every((line: any) => line.Lead.IsMetadata === undefined)).toBe(true);
+  });
+
   it("keeps zero-duration punctuation attached while honoring its authored following space", () => {
     const lines = parseYrc(
       "[1000,1000](1000,300,0)Lately(1300,0,0), (1300,300,0)I've(1600,400,0) arrived",

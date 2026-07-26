@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
-import { annotateJapaneseLine } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
+import {
+  alignJapaneseReadingUnitTexts,
+  annotateJapaneseLine,
+} from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
 import { buildJapanesePackageParsedLine } from "../src/utils/Lyrics/Processing/Japanese/JapanesePackageProcessor.ts";
 import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import {
@@ -30,7 +33,7 @@ test("structured-provider Japanese lines keep authored English spaces without du
     { Text: "ち", IsPartOfWord: true },
     { Text: "壊", IsPartOfWord: true },
     { Text: "し", IsPartOfWord: true },
-    { Text: "て", IsPartOfWord: true },
+    { Text: "て", IsPartOfWord: false },
     { Text: "shout ", IsPartOfWord: false },
     { Text: "it ", IsPartOfWord: false },
     { Text: "out ", IsPartOfWord: false },
@@ -48,6 +51,41 @@ test("structured-provider Japanese lines keep authored English spaces without du
 
   assert.equal(canonical.text, "ぶち壊して shout it out loud");
   assert.equal(new Set(canonical.spanMappings.map((unit) => unit.spanId)).size, syllables.length);
+});
+
+test("Japanese timed-unit alignment keeps spaces in mixed title and credit lines", () => {
+  for (const fixture of [
+    {
+      units: ["Shout", "It", "Out", "Loud!!! -", "akatsuki", "Records   (", "akatsuki", "records)"],
+      display: "Shout It Out Loud!!! - akatsukiRecords (akatsuki records)",
+    },
+    {
+      units: ["shoujouseze", "", "", "", "-", "akatsuki", "Records   (", "akatsuki", "records)"],
+      display: "shoujouseze - akatsukiRecords (akatsuki records)",
+    },
+  ]) {
+    const aligned = alignJapaneseReadingUnitTexts(fixture.units, fixture.display);
+    assert.equal(aligned.join(""), fixture.display);
+  }
+});
+
+test("Japanese mixed title analysis follows authored cross-script and parenthetical boundaries", async () => {
+  const syllables = [
+    { Text: "Shout ", IsPartOfWord: false },
+    { Text: "It ", IsPartOfWord: false },
+    { Text: "Out ", IsPartOfWord: false },
+    { Text: "Loud!!! - ", IsPartOfWord: false },
+    { Text: "暁", IsPartOfWord: true },
+    { Text: "Records (", IsPartOfWord: true },
+    { Text: "akatsuki ", IsPartOfWord: false },
+    { Text: "records)", IsPartOfWord: true },
+  ];
+  const map = buildJapaneseLineTextMap(syllables);
+  assert.equal(map.lineText, "Shout It Out Loud!!! - 暁Records (akatsuki records)");
+
+  const expected = "Shout It Out Loud!!! - akatsukiRecords (akatsuki records)";
+  const reading = (await prepareJapaneseLineAnalysis(map.lineText, expected))?.reading;
+  assert.equal(reading?.romaji, expected);
 });
 
 test("Japanese furigana ranges are exported as code-point coordinates", async () => {

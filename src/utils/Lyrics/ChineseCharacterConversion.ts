@@ -3,6 +3,7 @@ import JapaneseShinjitaiCharacters from "opencc-js/dict/JPShinjitaiCharactersRev
 import SimplifiedToTraditionalCharacters from "opencc-js/dict/STCharacters";
 import * as CnToTraditionalPreset from "opencc-js/preset/cn2t";
 import * as TraditionalToCnPreset from "opencc-js/preset/t2cn";
+import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
 
 export type ChineseCharacterForm = "original" | "simplified" | "traditional";
 export type DetectedChineseCharacterForm = Exclude<ChineseCharacterForm, "original"> | "ambiguous";
@@ -150,7 +151,7 @@ export function convertChineseTimedTextUnits(units: TimedTextUnit[], form: Chine
   let source = "";
   let offset = 0;
   const ranges = units.map((unit, index) => {
-    const prefix = index > 0 && unit.IsPartOfWord !== true ? " " : "";
+    const prefix = needsSyllableSpaceBefore(units, index) ? " " : "";
     source += prefix;
     offset += codePoints(prefix).length;
     const start = offset;
@@ -178,7 +179,7 @@ export function convertChineseLyricsText(
     const units = group?.Syllables;
     if (!Array.isArray(units) || units.length === 0) return;
     const lineText = units.reduce((text: string, unit: TimedTextUnit, index: number) =>
-      `${text}${index > 0 && unit.IsPartOfWord !== true ? " " : ""}${unit.Text || ""}`, "");
+      `${text}${needsSyllableSpaceBefore(units, index) ? " " : ""}${unit.Text || ""}`, "");
     if (!shouldConvert(lineText)) return;
     const converted = convertChineseTimedTextUnits(units, form);
     units.forEach((unit: TimedTextUnit, index: number) => { unit.Text = converted[index]; });

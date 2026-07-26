@@ -156,12 +156,13 @@ test("Chinese-provider repair renders projected kanji without mutating source te
   assert.equal(line.textContent, "夢見ては");
 });
 
-test("adjacent ruby clusters are packed while isolated ruby can overhang", () => {
+test("only directly adjacent ruby clusters reserve reading width", () => {
   const adjacent = new FakeElement();
   appendFuriganaText(adjacent as unknown as HTMLElement, "極星", [
     { start: 0, end: 1, reading: "きょく" },
     { start: 1, end: 2, reading: "ぼし" },
   ]);
+  packAdjacentFuriganaClusters(adjacent.children as unknown as HTMLElement[]);
   assert.equal(adjacent.children.length, 2);
   assert.equal(adjacent.children.every((cluster) => cluster.classList.values.has("furigana-cluster-packed")), true);
 
@@ -170,10 +171,18 @@ test("adjacent ruby clusters are packed while isolated ruby can overhang", () =>
     { start: 0, end: 1, reading: "きょく" },
     { start: 2, end: 3, reading: "ほし" },
   ]);
-  assert.equal(isolated.children.some((cluster) => cluster.classList.values.has("furigana-cluster-packed")), false);
+  packAdjacentFuriganaClusters(isolated.children as unknown as HTMLElement[]);
+  const rubyClusters = isolated.children.filter((cluster) =>
+    !cluster.className.includes("furigana-plain-cluster")
+  );
+  const plainClusters = isolated.children.filter((cluster) =>
+    cluster.className.includes("furigana-plain-cluster")
+  );
+  assert.equal(rubyClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
+  assert.equal(plainClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
 });
 
-test("adjacent rubies split across provider timing spans are packed together", () => {
+test("timed provider spans reserve every real ruby without widening plain spacers", () => {
   const left = new FakeElement();
   const right = new FakeElement();
   const separated = new FakeElement();
@@ -193,6 +202,40 @@ test("adjacent rubies split across provider timing spans are packed together", (
   assert.equal(left.children[0].classList.values.has("furigana-cluster-packed"), true);
   assert.equal(right.children[0].classList.values.has("furigana-cluster-packed"), true);
   assert.equal(separated.children[0].classList.values.has("furigana-cluster-packed"), false);
+  assert.equal(spacer.children[0].classList.values.has("furigana-cluster-packed"), false);
+});
+
+test("isolated inochi overhangs while adjacent tamashii and ooi stay packed", () => {
+  const inochi = new FakeElement();
+  const mo = new FakeElement();
+  appendFuriganaText(inochi as unknown as HTMLElement, "命", [
+    { start: 0, end: 1, reading: "いのち" },
+  ]);
+  appendFuriganaText(mo as unknown as HTMLElement, "も", []);
+  packAdjacentFuriganaClusters([
+    inochi.children[0],
+    mo.children[0],
+  ] as unknown as HTMLElement[]);
+  assert.equal(inochi.children[0].classList.values.has("furigana-cluster-packed"), false);
+
+  const tamashii = new FakeElement();
+  const authoredSpace = new FakeElement();
+  const ooi = new FakeElement();
+  appendFuriganaText(tamashii as unknown as HTMLElement, "魂", [
+    { start: 0, end: 1, reading: "たましい" },
+  ]);
+  appendFuriganaText(authoredSpace as unknown as HTMLElement, " ", []);
+  appendFuriganaText(ooi as unknown as HTMLElement, "大", [
+    { start: 0, end: 1, reading: "おお" },
+  ]);
+  packAdjacentFuriganaClusters([
+    tamashii.children[0],
+    authoredSpace.children[0],
+    ooi.children[0],
+  ] as unknown as HTMLElement[]);
+  assert.equal(tamashii.children[0].classList.values.has("furigana-cluster-packed"), true);
+  assert.equal(authoredSpace.children[0].classList.values.has("furigana-cluster-packed"), false);
+  assert.equal(ooi.children[0].classList.values.has("furigana-cluster-packed"), true);
 });
 
 test("plain Japanese tails expose wrap points beside ruby clusters", () => {

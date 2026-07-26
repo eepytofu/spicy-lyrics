@@ -102,7 +102,7 @@ test("interop preserves Chinese word grouping and full-line contextual pinyin", 
         EndTime: 2,
         RomanizedText: "yīn yuè",
         Syllables: [
-          { Text: "音", StartTime: 0, EndTime: 1, IsPartOfWord: false },
+          { Text: "音", StartTime: 0, EndTime: 1, IsPartOfWord: true },
           { Text: "乐", StartTime: 1, EndTime: 2, IsPartOfWord: true },
         ],
       },

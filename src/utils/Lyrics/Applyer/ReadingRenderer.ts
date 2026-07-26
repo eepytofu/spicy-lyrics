@@ -16,6 +16,7 @@ import {
 } from "../Reading/JapaneseReading.ts";
 import type { RenderPlan } from "../Processing/Model.ts";
 import { renderExperimentalReadingPlan } from "./ExperimentalReadingPlanRenderer.ts";
+import { needsSyllableSpaceBefore } from "../Processing/SyllableBoundaries.ts";
 
 export type ReadingRenderOptions = {
   useRomanized: boolean;
@@ -128,8 +129,6 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     .sort((a, b) => a.start - b.start || a.end - b.end);
 
   let cursor = 0;
-  let lastRubyCluster: HTMLElement | null = null;
-  let lastRubyEnd = -1;
   for (const segment of segments) {
     if (segment.start < cursor) continue;
     appendPlainText(parent, text.slice(cursor, segment.start));
@@ -139,15 +138,6 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     if (segment.provenance === "providerExplicit") {
       cluster.classList.add("reading-origin-provider-explicit");
       cluster.dataset.readingOrigin = "provider-explicit";
-    }
-
-    // Ruby may overhang plain neighbors, but never another ruby's base:
-    // directly adjacent readings (きょく|ぼし over 極|星) would collide.
-    // Packed clusters widen to their reading and space the base characters
-    // apart instead, the way print typesetting resolves it.
-    if (segment.start === lastRubyEnd && lastRubyCluster) {
-      lastRubyCluster.classList.add("furigana-cluster-packed");
-      cluster.classList.add("furigana-cluster-packed");
     }
 
     const reading = document.createElement("span");
@@ -161,8 +151,6 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
 
     cluster.append(reading, base);
     parent.appendChild(cluster);
-    lastRubyCluster = cluster;
-    lastRubyEnd = segment.end;
     cursor = segment.end;
   }
 
@@ -179,8 +167,9 @@ const directClusterChild = (cluster: HTMLElement, className: string): HTMLElemen
  * A timed provider can split adjacent kanji into separate DOM words even when
  * each word owns a local ruby. Pack those neighboring ruby clusters exactly
  * like adjacent segments rendered inside one word so their overhangs cannot
- * collide. Any visible plain source text, including authored whitespace,
- * resets adjacency.
+ * collide. Authored whitespace remains a source boundary but does not provide
+ * enough visual width for long readings, so only visible non-whitespace text
+ * resets ruby adjacency.
  */
 export function packAdjacentFuriganaClusters(clusters: Iterable<HTMLElement>): void {
   let previousRuby: HTMLElement | null = null;
@@ -198,7 +187,7 @@ export function packAdjacentFuriganaClusters(clusters: Iterable<HTMLElement>): v
         cluster.classList.add("furigana-cluster-packed");
       }
       previousRuby = cluster;
-    } else if (base?.textContent) {
+    } else if (base?.textContent?.trim()) {
       previousRuby = null;
     }
   }
@@ -383,7 +372,7 @@ export function appendSyllableRomanizedBelow(
             romajiSpan.classList.add("reading-origin-provider-explicit");
             romajiSpan.dataset.readingOrigin = "provider-explicit";
           }
-          if (syl.RomajiSpaceBefore || (!syl.IsPartOfWord && index > 0)) {
+          if (syl.RomajiSpaceBefore || needsSyllableSpaceBefore(syllables, index)) {
             romajiSpan.style.marginLeft = "0.25em";
           }
           romanizedDiv.appendChild(romajiSpan);
