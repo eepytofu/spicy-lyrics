@@ -36,6 +36,14 @@ UI:
 - Custom fonts from your system
 - Japanese and Chinese versions of the same Han character can look wrong when the wrong regional font is used. This fork picks a matching Japanese, Simplified Chinese, or Traditional Chinese fallback for each lyric line. Read more: [Han unification](https://heistak.github.io/your-code-displays-japanese-wrong/).
 
+To use a custom stack, enable **Use System Font** and enter installed fonts in **Font Family Stack**, from first choice to fallback:
+
+```text
+"Inter", "Noto Sans JP", "Noto Sans SC", "Noto Sans TC", sans-serif
+```
+
+Replace `Inter` with your preferred installed font. **Fix Han Glyph Variants** keeps that first font, then puts the installed Noto JP/SC/TC fallbacks in the right order for each lyric line.
+
 ## Install from source
 
 There are no packaged releases, so install it from source. You need [Spicetify](https://spicetify.app/) and Node.js 20.19+ or 22.12+.
