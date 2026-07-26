@@ -21,6 +21,7 @@ test("lyrics controls default to Bottom without replacing a saved choice", async
 
   const freshStores = await import("../src/utils/stores.ts?fresh-settings");
   assert.equal(freshStores.$viewControlsPosition.get(), "Bottom");
+  assert.equal(freshStores.$staticBackgroundBlur.get(), 0);
 
   settingsBlob = JSON.stringify({ viewControlsPosition: "Top" });
   const existingStores = await import("../src/utils/stores.ts?existing-settings");

@@ -5,13 +5,14 @@ import {
   $popupLyricsAllowed,
   $showNpvDynamicBg,
   $skipSpicyFont,
+  $staticBackgroundBlur,
   $staticBackgroundMode,
   $systemFontStack,
   $timelineOutsideMediaContent,
   $viewControlsPosition,
 } from "../../../utils/stores.ts";
 import { $flatViewControls, $forceDarkBackground, $isGlobalNav } from "../../../utils/uiState.ts";
-import { matches, Row, Select, SectionTitle, SubsectionTitle, Toggle } from "./components.tsx";
+import { matches, Row, Select, SectionTitle, Slider, SubsectionTitle, Toggle } from "./components.tsx";
 
 const SECTION_NAME = "Appearance & Layout";
 interface Props {
@@ -21,6 +22,7 @@ interface Props {
 
 export default function AppearanceLayoutSection({ query, sectionFilter }: Props) {
   const staticBackground = useStore($staticBackgroundMode);
+  const staticBackgroundBlur = useStore($staticBackgroundBlur);
   const dynamicNpv = useStore($showNpvDynamicBg);
   const forceDark = useStore($forceDarkBackground);
   const systemFont = useStore($skipSpicyFont);
@@ -36,6 +38,10 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
 
   const background = {
     static: matches(query, "Static Background", "Pin the background to an image or color."),
+    blur:
+      staticBackground !== "off" &&
+      staticBackground !== "color" &&
+      matches(query, "Background Blur", "Soften the static background image."),
     npv: matches(
       query,
       "Now Playing Dynamic Background",
@@ -96,6 +102,19 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
             options={["off", "auto", "artistHeader", "coverArt", "color"]}
             labels={["Off", "Auto", "Artist Header", "Cover Art", "Color"]}
             onChange={(value) => $staticBackgroundMode.set(value)}
+          />
+        </Row>
+      )}
+      {background.blur && (
+        <Row label="Background Blur" description="Soften the static background image." stacked>
+          <Slider
+            value={staticBackgroundBlur}
+            min={0}
+            max={67}
+            step={1}
+            defaultValue={0}
+            unit="px"
+            onChange={(value) => $staticBackgroundBlur.set(value)}
           />
         </Row>
       )}

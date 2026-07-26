@@ -84,6 +84,7 @@ function persistAtom<T>(key: string, defaultValue: T) {
 
 // Setting atoms (persisted)
 export const $staticBackgroundMode = persistAtom<string>("staticBackgroundMode", "off");
+export const $staticBackgroundBlur = persistAtom<number>("staticBackgroundBlur", 0);
 export const $simpleLyricsMode = persistAtom<boolean>("simpleLyricsMode", false);
 export const $simpleLyricsModeRenderingType = persistAtom<string>(
   "simpleLyricsModeRenderingType",

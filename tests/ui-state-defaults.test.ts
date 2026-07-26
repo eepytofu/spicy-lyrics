@@ -24,6 +24,8 @@ const {
   $joinMandarinWords,
   $showBuiltInTranslationButton,
   $translationEnabled,
+  $npvLyricsExpanded,
+  $npvLyricsOpen,
 } = await import("../src/utils/uiState.ts");
 
 test("Chinese tones default on while built-in translation stays off", () => {
@@ -32,6 +34,8 @@ test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($joinMandarinWords.get(), false);
   assert.equal($translationEnabled.get(), false);
   assert.equal($showBuiltInTranslationButton.get(), true);
+  assert.equal($npvLyricsOpen.get(), true);
+  assert.equal($npvLyricsExpanded.get(), false);
 });
 
 test("built-in translation button visibility and tone preference persist independently", () => {

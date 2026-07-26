@@ -2,28 +2,39 @@
 import Session from "../Global/Session.ts";
 import PageView from "../Pages/PageView.ts";
 import Fullscreen from "./Fullscreen.ts";
-import { isSpicySidebarMode, CloseSidebarLyrics } from "./SidebarLyrics.ts"
+import { DeRenderNPVCard, NPVCardOwnsPage, RequestNPVCardEvaluate } from "./NPVLyrics.ts";
 
 export let IsPIP = false;
 export let _IsPIP_after = false;
+export let IsPIPOpening = false;
 
 let currentPipWindow = null;
 let pipPageHideHandler: ((event: Event) => void) | null = null;
 
 export const OpenPopupLyrics = async () => {
+  IsPIPOpening = true;
+  try {
+    await OpenPopupLyricsFlow();
+  } finally {
+    IsPIPOpening = false;
+    RequestNPVCardEvaluate();
+  }
+};
+
+const OpenPopupLyricsFlow = async () => {
+  if (NPVCardOwnsPage()) await DeRenderNPVCard();
+
   if (PageView.IsOpened && !IsPIP) {
     if (Fullscreen.IsOpen) {
       // If in any fullscreen mode, close it first
       await Fullscreen.Close();
       Session.GoBack();
-    } else if (isSpicySidebarMode) {
-      await CloseSidebarLyrics();
     } else {
       await PageView.Destroy();
       Session.GoBack();
     }
 
-    OpenPopupLyrics();
+    await OpenPopupLyricsFlow();
     return;
   }
 

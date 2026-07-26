@@ -1,4 +1,4 @@
-import { $staticBackgroundMode } from "../../utils/stores.ts";
+import { $staticBackgroundBlur, $staticBackgroundMode } from "../../utils/stores.ts";
 import BlobURLMaker from "../../utils/BlobURLMaker.ts";
 import { $forceDarkBackground } from "../../utils/uiState.ts";
 import Global from "../Global/Global.ts";
@@ -215,6 +215,7 @@ async function loadKawarpSource(kawarp: Kawarp, source: KawarpSource): Promise<v
 export default async function ApplyDynamicBackground(element: HTMLElement, tag?: string, opts: ApplyDynamicBackgroundOpts = {}) {
   if (!element) return;
   syncForceDarkBackgroundClass();
+  if (element.closest("#SpicyLyricsPage.CardMode")) return;
   dynamicBgLogger.debug("Applying dynamic background", { tag });
   const preCurrentImgCover = SpotifyPlayer.GetCover("large") ?? "";
   // Local-file art is served via the `spotify:local:` scheme and isn't on scdn,
@@ -556,6 +557,19 @@ $forceDarkBackground.listen(() => {
     void kawarpInstance.setOptions(getKawarpOptions());
   });
   reapplyPageBackground();
+});
+
+const applyStaticBackgroundBlur = (blur: number) => {
+  const value = `${blur}px`;
+  document.documentElement.style.setProperty("--StaticBackgroundBlur", value);
+  PageContainer?.style.setProperty("--StaticBackgroundBlur", value);
+};
+
+applyStaticBackgroundBlur($staticBackgroundBlur.get());
+$staticBackgroundBlur.listen(applyStaticBackgroundBlur);
+
+Global.Event.listen("page:open", () => {
+  applyStaticBackgroundBlur($staticBackgroundBlur.get());
 });
 
 Global.Event.listen("playback:progress", async (e) => {
