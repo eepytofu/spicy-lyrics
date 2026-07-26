@@ -48,12 +48,17 @@ export async function processJapanesePackageLine(
   );
   const romaji = reading?.romaji || syllables.map((entry) => entry.RomanizedText || entry.TransliteratedText || "").join(" ").trim();
   if (!romaji) throw new Error("Japanese fallback processor produced no reading");
+  const finalDisplayText = reading?.displayText || projection.displayText;
+  const displaySpans = projectedSpans.map((span) => ({
+    ...span,
+    normalizedText: finalDisplayText.slice(span.start, span.end),
+  }));
 
   const parsed: ParsedLine = {
     id: `japanese-fallback-${times[0]?.StartTime || 0}`,
-    displayText: projection.displayText,
+    displayText: finalDisplayText,
     paragraphProvenance: "unavailable",
-    spans: projectedSpans.map((span) => ({
+    spans: displaySpans.map((span) => ({
       id: String(span.index),
       rawText: span.normalizedText,
       cleanText: span.normalizedText,
@@ -68,7 +73,7 @@ export async function processJapanesePackageLine(
   const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
   if (!validation.valid) throw new Error(validation.errors.join("; "));
-  return { plan, romaji, furigana: reading?.furigana || [], displayText: projection.displayText };
+  return { plan, romaji, furigana: reading?.furigana || [], displayText: finalDisplayText };
 }
 
 export async function processJapanesePackageTextTarget(

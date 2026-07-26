@@ -27,6 +27,7 @@ Readings:
 - Switch Chinese lyrics between Simplified and Traditional
 - Optional joined-word Pinyin (joins syllables inside detected Mandarin words)
 - Better handling for lyrics that mix Chinese and Japanese: readings are chosen per line instead of treating the whole song as one language, and mixed lines can use both Pinyin and Japanese readings
+- Japanese character repair for lyrics from Chinese services, so forms such as `梦见ては` display as `夢見ては` without changing the lyric timing
 - Explicit Japanese readings from the lyric source, such as `天(そら)` (shown in a different color as furigana, romaji, or both)
 
 UI:

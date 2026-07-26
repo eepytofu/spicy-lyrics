@@ -30,6 +30,21 @@ test("normalizes Chinese-provider variants to Japanese forms for analysis", () =
     normalizeChineseProviderJapaneseText("\u8fc2\u308a\u3086\u304f\u65f6\u4ee3\u306e\u65e0\u5e38\u3092\u53f9\u304f"),
     "\u8fc2\u308a\u3086\u304f\u6642\u4ee3\u306e\u7121\u5e38\u3092\u5606\u304f"
   );
+  assert.equal(
+    normalizeChineseProviderJapaneseText("梦见ては 覚めて见る"),
+    "夢見ては 覚めて見る"
+  );
+});
+
+test("keeps ambiguous Japanese lexical forms in safe source contexts", () => {
+  assert.equal(
+    normalizeChineseProviderJapaneseText("叶う 叶える 叶わない 叶った 叶っぱ"),
+    "叶う 叶える 叶わない 叶った 葉っぱ"
+  );
+  assert.equal(
+    normalizeChineseProviderJapaneseText("后妃 皇后 太后 后宫"),
+    "后妃 皇后 太后 後宮"
+  );
 });
 
 test("limits Japanese kanji repair to built-in Chinese lyric providers", () => {

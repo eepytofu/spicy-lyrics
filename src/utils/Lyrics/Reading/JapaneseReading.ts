@@ -593,7 +593,9 @@ export async function prepareJapaneseLineAnalysis(
   const projection = options.authoredReadingProjection?.sourceText === sourceText
     ? options.authoredReadingProjection
     : projectProviderAuthoredJapaneseReadings(sourceText);
-  const displayText = projection.displayText;
+  const displayText = options.normalizeChineseProviderKanji
+    ? normalizeChineseProviderJapaneseText(projection.displayText)
+    : projection.displayText;
 
   await romajiPromise;
   const context = await buildJapaneseTokenContext(displayText, fullSpacedRomaji, options, projection.hints);
@@ -667,9 +669,12 @@ export async function applyJapaneseReadingToSyllables(
   prepared?: PreparedJapaneseLineAnalysis
 ): Promise<JapaneseReading | undefined> {
   const normalizedLineText = (lineText || "").normalize("NFKC");
-  const expectedDisplayText = options.authoredReadingProjection?.sourceText === normalizedLineText
+  const authoredDisplayText = options.authoredReadingProjection?.sourceText === normalizedLineText
     ? options.authoredReadingProjection.displayText
     : projectProviderAuthoredJapaneseReadings(normalizedLineText).displayText;
+  const expectedDisplayText = options.normalizeChineseProviderKanji
+    ? normalizeChineseProviderJapaneseText(authoredDisplayText)
+    : authoredDisplayText;
   const analysis = (prepared?.reading.displayText || prepared?.reading.sourceText) === expectedDisplayText
     ? prepared
     : await prepareJapaneseLineAnalysis(normalizedLineText, fullSpacedRomaji, romajiPromise, options);
@@ -788,10 +793,13 @@ function applyJapaneseReadingContextToSyllables(
         ...(segment.provenance ? { provenance: segment.provenance } : {}),
       }));
 
-    if (localFurigana.length > 0 || syllableRomaji) {
+    const syllableDisplayText = span
+      ? analysisText.slice(span.start, span.end)
+      : text;
+    if (localFurigana.length > 0 || syllableRomaji || syllableDisplayText !== text) {
       syllable.JapaneseReading = {
         sourceText: text,
-        ...(span?.normalizedText !== text ? { displayText: span?.normalizedText || "" } : {}),
+        ...(syllableDisplayText !== text ? { displayText: syllableDisplayText } : {}),
         romaji: syllableRomaji,
         ...(syllableRomajiSegments.length > 0 ? { romajiSegments: syllableRomajiSegments } : {}),
         furigana: localFurigana,

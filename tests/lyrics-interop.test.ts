@@ -56,6 +56,40 @@ test("interop reads Japanese group readings without requiring syllable Romanized
   assert.deepEqual(snapshot?.lines[0]?.words?.map((word) => word.text), ["君", "は"]);
 });
 
+test("interop keeps Chinese-provider Japanese source text after display repair", () => {
+  const snapshot = buildLyricsInteropSnapshot({
+    Type: "Syllable",
+    uri: "spotify:track:chinese-provider-japanese",
+    id: "chinese-provider-japanese",
+    Language: "jpn",
+    LanguageISO2: "ja",
+    Content: [{
+      Type: "Vocal",
+      Lead: {
+        StartTime: 0,
+        EndTime: 4,
+        JapaneseReading: {
+          sourceText: "梦见ては",
+          displayText: "夢見ては",
+          romaji: "yumemite wa",
+          furigana: [],
+        },
+        ReadingRenderPlan: { joinedDisplayText: "yumemite wa" },
+        Syllables: [
+          { Text: "梦", StartTime: 0, EndTime: 1, IsPartOfWord: false },
+          { Text: "见", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+          { Text: "て", StartTime: 2, EndTime: 3, IsPartOfWord: true },
+          { Text: "は", StartTime: 3, EndTime: 4, IsPartOfWord: true },
+        ],
+      },
+    }],
+  });
+
+  assert.equal(snapshot?.lines[0]?.originalText, "梦见ては");
+  assert.deepEqual(snapshot?.lines[0]?.words?.map((word) => word.text), ["梦", "见", "て", "は"]);
+  assert.equal(snapshot?.lines[0]?.readingText, "yumemite wa");
+});
+
 test("interop preserves Chinese word grouping and full-line contextual pinyin", () => {
   const snapshot = buildLyricsInteropSnapshot({
     Type: "Syllable",

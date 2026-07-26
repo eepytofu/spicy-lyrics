@@ -3,7 +3,11 @@ import { test } from "node:test";
 import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { annotateJapaneseLine } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
 import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
-import { prepareJapaneseLineAnalysis } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
+import {
+  applyJapaneseReadingToSyllables,
+  buildJapaneseLineTextMap,
+  prepareJapaneseLineAnalysis,
+} from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 import { timedFuriganaGroups } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
 
 test("Japanese annotation keeps split spans as unique timing owners", async () => {
@@ -43,6 +47,45 @@ test("provider-authored reading keeps source evidence and emits explicit furigan
   assert.equal(reading!.furigana.some((segment) =>
     segment.reading === "そら" && segment.provenance === "providerExplicit"
   ), true);
+});
+
+test("Chinese-provider Japanese repair is display-only and keeps source evidence", async () => {
+  const reading = (await prepareJapaneseLineAnalysis(
+    "梦见ては 覚めて见る",
+    undefined,
+    undefined,
+    { normalizeChineseProviderKanji: true },
+  ))?.reading;
+  assert.ok(reading);
+  assert.equal(reading!.sourceText, "梦见ては 覚めて见る");
+  assert.equal(reading!.displayText, "夢見ては 覚めて見る");
+});
+
+test("Chinese-provider Japanese repair reaches every timed display span", async () => {
+  const syllables = ["梦", "见", "て", "は"].map((Text) => ({ Text }));
+  const map = buildJapaneseLineTextMap(syllables);
+  const options = { normalizeChineseProviderKanji: true };
+  const prepared = await prepareJapaneseLineAnalysis(
+    map.lineText,
+    undefined,
+    undefined,
+    options,
+  );
+  await applyJapaneseReadingToSyllables(
+    map.lineText,
+    undefined,
+    syllables,
+    undefined,
+    map.spans,
+    options,
+    prepared,
+  );
+
+  assert.deepEqual(
+    syllables.map((syllable) => syllable.JapaneseReading?.displayText || syllable.Text),
+    ["夢", "見", "て", "は"],
+  );
+  assert.deepEqual(syllables.map((syllable) => syllable.Text), ["梦", "见", "て", "は"]);
 });
 
 test("compound explicit provenance crosses timed syllables and reaches romaji owners", () => {

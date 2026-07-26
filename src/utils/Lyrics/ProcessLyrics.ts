@@ -52,7 +52,7 @@ import type { ParsedLine } from "./Processing/Model.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-export const LYRICS_PROCESSING_VERSION = 40;
+export const LYRICS_PROCESSING_VERSION = 41;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 

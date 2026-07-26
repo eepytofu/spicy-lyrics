@@ -130,6 +130,27 @@ test("timed-group suppression removes only the selected line segment", () => {
   assert.equal(renderedReadings.length, 1);
 });
 
+test("Chinese-provider repair renders projected kanji without mutating source text", () => {
+  $japaneseReadingMode.set("furigana");
+  const line = new FakeElement();
+  const entry = {
+    Text: "梦见ては",
+    JapaneseReading: {
+      sourceText: "梦见ては",
+      displayText: "夢見ては",
+      furigana: [],
+    },
+  };
+  renderBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    entry,
+    { useRomanized: false, isJapaneseLyrics: true },
+  );
+  assert.equal(entry.Text, "梦见ては");
+  assert.equal(entry.JapaneseReading.sourceText, "梦见ては");
+  assert.equal(line.textContent, "夢見ては");
+});
+
 test("adjacent ruby clusters are packed while isolated ruby can overhang", () => {
   const adjacent = new FakeElement();
   appendFuriganaText(adjacent as unknown as HTMLElement, "極星", [

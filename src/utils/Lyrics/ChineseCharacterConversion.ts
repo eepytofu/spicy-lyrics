@@ -15,6 +15,36 @@ let toJapanese: ((text: string) => string) | undefined;
 
 const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease", "soda"]);
 
+function replaceCharacterAt(text: string, index: number, replacement: string): string {
+  return `${text.slice(0, index)}${replacement}${text.slice(index + 1)}`;
+}
+
+function restoreJapaneseLexicalForms(source: string, normalized: string): string {
+  let result = normalized;
+  const restoreMatches = (
+    pattern: RegExp,
+    sourceCharacterOffset: number,
+    replacement: string,
+  ) => {
+    for (const match of source.matchAll(pattern)) {
+      if (match.index === undefined) continue;
+      result = replaceCharacterAt(result, match.index + sourceCharacterOffset, replacement);
+    }
+  };
+
+  // Chinese character conversion cannot distinguish 後 (after/behind) from
+  // 后 (empress). Restore only source contexts whose Japanese spelling is
+  // unambiguous; 後宮 deliberately remains 後宮.
+  restoreMatches(/后妃/gu, 0, "后");
+  restoreMatches(/(?:皇|太)后/gu, 1, "后");
+
+  // 葉 and 叶 collapse to 叶 in Simplified Chinese. These inflections belong
+  // to 叶う/叶える, while ordinary 葉 words such as 葉っぱ stay untouched.
+  restoreMatches(/叶(?=[わいうえお])/gu, 0, "叶");
+  restoreMatches(/叶っ(?=[たて])/gu, 0, "叶");
+  return result;
+}
+
 function codePoints(value: string): string[] {
   return Array.from(value);
 }
@@ -42,9 +72,9 @@ export function isChineseLyricsProvider(lyrics: { fetchProvider?: unknown; sourc
 }
 
 /**
- * Repair Chinese-provider character conversion for Japanese token analysis.
- * The displayed lyric remains unchanged, and unequal-length conversions are
- * rejected so UTF-16 furigana and timing ranges continue to align.
+ * Repair Chinese-provider character conversion for Japanese analysis and its
+ * display-only projection. Unequal-length conversions are rejected so UTF-16
+ * furigana and timing ranges continue to align with immutable provider text.
  */
 export function normalizeChineseProviderJapaneseText(text: string): string {
   if (!text) return text;
@@ -53,7 +83,8 @@ export function normalizeChineseProviderJapaneseText(text: string): string {
     [JapaneseShinjitaiCharacters]
   );
   const normalized = toJapanese(text);
-  return normalized.length === text.length ? normalized : text;
+  if (normalized.length !== text.length) return text;
+  return restoreJapaneseLexicalForms(text, normalized);
 }
 
 export function detectChineseCharacterForm(text: string): DetectedChineseCharacterForm {
