@@ -42,8 +42,8 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
     ),
     mandarinWords: matches(
       query,
-      "Join Mandarin Words",
-      "Join Pinyin syllables inside detected Mandarin words without changing karaoke timing."
+      "Group Pinyin by Word",
+      "Keep Pinyin syllables together when they belong to the same detected Mandarin word."
     ),
     japanese: matches(query, "Japanese Reading", "Choose romaji, furigana, or both."),
     korean: matches(query, "Korean Reading", "Choose transliteration or pronunciation output."),
@@ -92,8 +92,8 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
       )}
       {rows.mandarinWords && (
         <Row
-          label="Join Mandarin Words"
-          description="Join Pinyin syllables inside detected Mandarin words without changing karaoke timing."
+          label="Group Pinyin by Word"
+          description="Keep Pinyin syllables together when they belong to the same detected Mandarin word."
           disabled={chineseMode !== "pinyin"}
           disabledReason="Choose Mandarin Pinyin first."
         >
