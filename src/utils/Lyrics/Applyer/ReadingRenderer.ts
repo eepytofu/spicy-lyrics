@@ -36,6 +36,38 @@ type SyllableLike = JapaneseReadable & {
 };
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+const plainTextSegmenter = typeof Intl.Segmenter === "function"
+  ? new Intl.Segmenter("ja", { granularity: "word" })
+  : undefined;
+const OpeningPunctuation = /^[([{（［｛「『【〈《〔]+$/u;
+const ClosingPunctuation = /^[)\]}）］｝」』】〉》〕、。！？!?…,:;]+$/u;
+
+function plainTextWrapChunks(text: string): string[] {
+  const segmented = plainTextSegmenter
+    ? Array.from(plainTextSegmenter.segment(text), ({ segment }) => segment)
+    : Array.from(text);
+  const chunks: string[] = [];
+  let opening = "";
+
+  for (const segment of segmented) {
+    if (OpeningPunctuation.test(segment)) {
+      opening += segment;
+      continue;
+    }
+    if (ClosingPunctuation.test(segment) && chunks.length > 0 && opening === "") {
+      chunks[chunks.length - 1] += segment;
+      continue;
+    }
+    chunks.push(`${opening}${segment}`);
+    opening = "";
+  }
+
+  if (opening) {
+    if (chunks.length > 0) chunks[chunks.length - 1] += opening;
+    else chunks.push(opening);
+  }
+  return chunks;
+}
 
 export function getJapaneseReading(entry: JapaneseReadable | undefined): JapaneseReading | undefined {
   return entry?.JapaneseReading;
@@ -65,19 +97,21 @@ export function shouldRenderRomanization(entry: JapaneseReadable | undefined, op
 function appendPlainText(parent: HTMLElement, text: string): void {
   if (!text) return;
 
-  const cluster = document.createElement("span");
-  cluster.className = "furigana-cluster furigana-plain-cluster";
+  for (const chunk of plainTextWrapChunks(text)) {
+    const cluster = document.createElement("span");
+    cluster.className = "furigana-cluster furigana-plain-cluster";
 
-  const reading = document.createElement("span");
-  reading.className = "furigana-reading furigana-placeholder";
-  reading.textContent = "\u00a0";
+    const reading = document.createElement("span");
+    reading.className = "furigana-reading furigana-placeholder";
+    reading.textContent = "\u00a0";
 
-  const base = document.createElement("span");
-  base.className = "furigana-base";
-  base.textContent = text;
+    const base = document.createElement("span");
+    base.className = "furigana-base";
+    base.textContent = chunk;
 
-  cluster.append(reading, base);
-  parent.appendChild(cluster);
+    cluster.append(reading, base);
+    parent.appendChild(cluster);
+  }
 }
 
 export function appendFuriganaText(parent: HTMLElement, text: string, rawSegments: FuriganaSegment[]): void {

@@ -168,6 +168,31 @@ test("adjacent ruby clusters are packed while isolated ruby can overhang", () =>
   assert.equal(isolated.children.some((cluster) => cluster.classList.values.has("furigana-cluster-packed")), false);
 });
 
+test("plain Japanese tails expose wrap points beside ruby clusters", () => {
+  for (const fixture of [
+    { text: "今日はダービーめでたいな(それいけーっ!)", rubyEnd: 2, reading: "きょう" },
+    { text: "本命穴ウマかきわけて(ふーわっ ふーわっ)", rubyEnd: 3, reading: "ほんめいあな" },
+  ]) {
+    const line = new FakeElement();
+    appendFuriganaText(line as unknown as HTMLElement, fixture.text, [
+      { start: 0, end: fixture.rubyEnd, reading: fixture.reading },
+    ]);
+
+    const renderedBase = line.children
+      .map((cluster) => cluster.children.find((child) => child.className === "furigana-base")?.textContent || "")
+      .join("");
+    const plainBase = line.children
+      .filter((cluster) => cluster.className.includes("furigana-plain-cluster"))
+      .map((cluster) => cluster.children.find((child) => child.className === "furigana-base")?.textContent || "");
+
+    assert.equal(renderedBase, fixture.text);
+    assert.equal(plainBase.join(""), fixture.text.slice(fixture.rubyEnd));
+    assert.ok(plainBase.length > 1);
+    assert.equal(plainBase.includes("("), false);
+    assert.equal(plainBase.includes(")"), false);
+  }
+});
+
 test("explicit readings tint only derived furigana while displaying the immutable source as ruby", () => {
   $japaneseReadingMode.set("furigana");
   const line = new FakeElement();
