@@ -1,6 +1,24 @@
-// deno-lint-ignore-file no-explicit-any
 import { RetrievePackage } from "../ImportPackage.ts";
 import { createRetryableLazyInitializer } from "./Analyzer/LazyInitializer.ts";
+
+export type KuromojiToken = {
+  surface_form?: string;
+  reading?: string;
+  pronunciation?: string;
+  pos?: string;
+  pos_detail_1?: string;
+  basic_form?: string;
+  conjugated_type?: string;
+  conjugated_form?: string;
+  word_id?: number;
+  word_type?: string;
+  word_position?: number;
+  verbose?: {
+    word_id?: number;
+    word_type?: string;
+    word_position?: number;
+  };
+};
 
 let Analyzer: any;
 const lazyInitialization = createRetryableLazyInitializer(async () => {
@@ -26,13 +44,13 @@ const lazyInitialization = createRetryableLazyInitializer(async () => {
 
 export const init = (): Promise<void> => lazyInitialization.ensure();
 
-export const parse = async (text = ""): Promise<any> => {
+export const parse = async (text = ""): Promise<KuromojiToken[]> => {
   if (text.trim() === "") return [];
   if (Analyzer === undefined) {
     if (typeof window === "undefined") return [];
     await init();
   }
-  const result = Analyzer.tokenize(text) as any[];
+  const result = Analyzer.tokenize(text) as KuromojiToken[];
   for (const token of result) {
     token.verbose = {
       word_id: token.word_id,

@@ -4,18 +4,15 @@
  * Shared compound kanji reading lookup and phonetic merge rules.
  */
 
-export interface MergeableEntry {
-  romaji: string;
-  consumed: boolean;
-  surface?: string;
-  readingKana?: string;
-  start?: number;
-  end?: number;
-}
+import type {
+  JapaneseAnalyzerReadingState,
+  JapaneseAnalyzerToken,
+} from "../Processing/Japanese/JapaneseAnalyzer.ts";
+
+export interface MergeableEntry extends JapaneseAnalyzerReadingState {}
 
 const SMALL_TSU_ROMAJI = /(?:xtsu|ltsu|tsu)$/i;
 const PROLONGED_SOUND_MARK = /^ー+$/u;
-const PLURAL_PRONOUN_BEFORE_KATA = /^(?:あなた|貴方|君|きみ|皆|みんな|僕|ぼく|私|わたし|我々)$/;
 const LeadingClosingPunctuation = /^(?:\p{Pe}|\p{Pf}|[。、？！…・.?!,\s])+/u;
 const TrailingOpeningPunctuation = /(?:\p{Ps}|\p{Pi})+$/u;
 const ClosingBeforeOpeningPunctuation =
@@ -28,87 +25,9 @@ const doubledSokuon = (romaji: string): string => {
   return `${romaji[0]}${romaji}`;
 };
 
-function previousActive(entries: MergeableEntry[], index: number): number {
-  for (let i = index; i >= 0; i -= 1) {
-    if (!entries[i].consumed) return i;
-  }
-  return -1;
-}
-
-function setReading(entry: MergeableEntry, romaji: string, readingKana: string): void {
-  entry.romaji = romaji;
-  entry.readingKana = readingKana;
-}
-
-const pos1 = (token: any): string => token?.pos || token?.part_of_speech || token?.pos_detail_1 || "";
-
-/**
- * Apply phonetic mutations that need neighboring tokens.
- * Example: いたっ + て => ita + tte, not itatsu te.
- */
-export function applyContextualReadingOverrides(
-  entries: MergeableEntry[],
-  tokens: any[]
-): void {
-  for (let i = 0; i < tokens.length; i++) {
-    if (entries[i].consumed) continue;
-
-    const sf = entries[i].surface || tokens[i].surface_form || "";
-    const prevIndex = previousActive(entries, i - 1);
-    const prevSf = prevIndex >= 0 ? entries[prevIndex].surface || tokens[prevIndex]?.surface_form || "" : "";
-
-    if (sf === "私" && pos1(tokens[i]) === "代名詞") {
-      // Lyrics register: prefer わたし over formal わたくし. POS-guarded so
-      // compounds such as 私立 stay dictionary-owned.
-      setReading(entries[i], "watashi", "わたし");
-      continue;
-    }
-
-    if (sf === "君" && pos1(tokens[i]) === "代名詞") {
-      // Some dictionaries emit the honorific suffix reading くん for bare 君.
-      // Independent pronoun use in lyrics should read きみ; suffix use stays kun.
-      setReading(entries[i], "kimi", "きみ");
-      continue;
-    }
-
-    if (sf === "1人" || (sf === "1" && entries[i + 1]?.surface === "人")) {
-      // Numeric shorthand is outside the tokenizer's normal Japanese reading
-      // lattice; keep this as a narrow counter normalization, not a compound
-      // reading table.
-      setReading(entries[i], "hitori", "ひとり");
-      if (sf === "1") {
-        entries[i].surface = "1人";
-        (entries[i] as any).end = (entries[i + 1] as any).end;
-        entries[i + 1].consumed = true;
-      }
-      continue;
-    }
-
-    if (sf === "2人" || (sf === "2" && entries[i + 1]?.surface === "人")) {
-      setReading(entries[i], "futari", "ふたり");
-      if (sf === "2") {
-        entries[i].surface = "2人";
-        (entries[i] as any).end = (entries[i + 1] as any).end;
-        entries[i + 1].consumed = true;
-      }
-      continue;
-    }
-
-    if (sf === "方" && PLURAL_PRONOUN_BEFORE_KATA.test(prevSf)) {
-      // Dictionary cannot infer plural-pronoun rendaku when tokenized as 貴方 + 方.
-      const prevToken = prevIndex >= 0 ? tokens[prevIndex] : undefined;
-      const currentPos = pos1(tokens[i]);
-      if ((currentPos === "接尾辞" || currentPos === "名詞" || currentPos === "接尾")
-          && pos1(prevToken) === "代名詞") {
-        setReading(entries[i], "gata", "がた");
-      }
-    }
-  }
-}
-
 export function applyPhoneticMerges(
   entries: MergeableEntry[],
-  tokens: any[]
+  tokens: readonly JapaneseAnalyzerToken[]
 ): void {
   for (const entry of entries) {
     entry.romaji = entry.romaji.replace(ClosingBeforeOpeningPunctuation, "$1 ");
@@ -121,14 +40,21 @@ export function applyPhoneticMerges(
     while (pi >= 0 && entries[pi].consumed) pi--;
     if (pi < 0) continue;
 
-    const prevSf = tokens[pi].surface_form || "";
-    const prevPron = tokens[pi].pronunciation || tokens[pi].reading || "";
-    const currSf = tokens[i].surface_form || "";
+    const prevSf = tokens[pi].surface || "";
+    const prevPron = tokens[pi].pronunciationKana || tokens[pi].readingKana || "";
+    const currSf = tokens[i].surface || "";
     if (PROLONGED_SOUND_MARK.test(currSf)) {
       const vowel = entries[pi].romaji.match(/[aeiou]$/i)?.[0];
       if (vowel) entries[i].romaji = vowel.repeat(Array.from(currSf).length);
     }
-    if (!(prevPron.endsWith("ッ") || prevPron.endsWith("っ") || prevSf.endsWith("っ") || prevSf.endsWith("ッ"))) {
+    if (
+      !(
+        prevPron.endsWith("ッ") ||
+        prevPron.endsWith("っ") ||
+        prevSf.endsWith("っ") ||
+        prevSf.endsWith("ッ")
+      )
+    ) {
       continue;
     }
 
@@ -143,42 +69,51 @@ export function applyPhoneticMerges(
  */
 export function computeNoSpaceBefore(
   entries: MergeableEntry[],
-  tokens: any[]
+  tokens: readonly JapaneseAnalyzerToken[]
 ): boolean[] {
   const noSpaceBefore: boolean[] = Array.from({ length: tokens.length }, () => false);
   for (let i = 1; i < tokens.length; i++) {
-    if (entries[i].consumed) { noSpaceBefore[i] = true; continue; }
+    if (entries[i].consumed) {
+      noSpaceBefore[i] = true;
+      continue;
+    }
 
     let pi = i - 1;
     while (pi >= 0 && entries[pi].consumed) pi--;
     if (pi < 0) continue;
 
-    const prevSf = tokens[pi].surface_form;
-    const prevPron = tokens[pi].pronunciation || tokens[pi].reading || "";
-    const currSf = tokens[i].surface_form;
-    const currPron = tokens[i].pronunciation || tokens[i].reading || "";
+    const prevSf = tokens[pi].surface;
+    const prevPron = tokens[pi].pronunciationKana || tokens[pi].readingKana || "";
+    const currSf = tokens[i].surface;
+    const currPron = tokens[i].pronunciationKana || tokens[i].readingKana || "";
 
     // っ/ッ split onto either side of a token boundary still belongs to the
     // same romanized word.
-    if (prevPron.endsWith("ッ") || prevPron.endsWith("っ") ||
-        prevSf.endsWith("っ") || prevSf.endsWith("ッ") ||
-        currPron.startsWith("ッ") || currPron.startsWith("っ") ||
-        currSf.startsWith("っ") || currSf.startsWith("ッ")) {
+    if (
+      prevPron.endsWith("ッ") ||
+      prevPron.endsWith("っ") ||
+      prevSf.endsWith("っ") ||
+      prevSf.endsWith("ッ") ||
+      currPron.startsWith("ッ") ||
+      currPron.startsWith("っ") ||
+      currSf.startsWith("っ") ||
+      currSf.startsWith("ッ")
+    ) {
       noSpaceBefore[i] = true;
     }
 
     // う extending previous o-row sound (long vowel)
-    if ((currSf === "う" || currPron === "ウ") && prevPron) {
+    if ((currSf === "う" || currPron === "う") && prevPron) {
       const last = prevPron[prevPron.length - 1];
-      if ("オコソトノホモヨロヲゴゾドボポョウクスツヌフムユルグズヅブプュ".includes(last)) {
+      if ("おこそとのほもよろをごぞどぼぽょうくすつぬふむゆるぐずづぶぷゅ".includes(last)) {
         noSpaceBefore[i] = true;
       }
     }
 
     // い extending previous e-row sound (long vowel)
-    if ((currSf === "い" || currPron === "イ") && prevPron) {
+    if ((currSf === "い" || currPron === "い") && prevPron) {
       const last = prevPron[prevPron.length - 1];
-      if ("エケセテネヘメレゲゼデベペェ".includes(last)) {
+      if ("えけせてねへめれげぜでべぺぇ".includes(last)) {
         noSpaceBefore[i] = true;
       }
     }
@@ -188,15 +123,24 @@ export function computeNoSpaceBefore(
       noSpaceBefore[i] = true;
     }
 
-    const prevPos1 = tokens[pi].pos || tokens[pi].part_of_speech || "";
-    const prevPos2 = tokens[pi].pos_detail_1 || "";
-    const currPos1 = tokens[i].pos || tokens[i].part_of_speech || "";
-    const currPos2 = tokens[i].pos_detail_1 || "";
-    const prevVerbLike = prevPos1 === "動詞" || prevPos1 === "助動詞" || prevPos2 === "接続助詞";
+    const prevPos = tokens[pi].partOfSpeech;
+    const prevFeatures = tokens[pi].morphologyFeatures;
+    const currPos = tokens[i].partOfSpeech;
+    const currFeatures = tokens[i].morphologyFeatures;
+    const prevVerbLike =
+      prevPos === "verb" ||
+      prevPos === "auxiliaryVerb" ||
+      prevFeatures.includes("conjunctiveParticle");
     if (prevVerbLike) {
-      if (currPos1 === "動詞" && (currPos2 === "非自立" || currPos2 === "接尾")) noSpaceBefore[i] = true;
-      if (currPos1 === "助詞" && currPos2 === "接続助詞") noSpaceBefore[i] = true;
-      if (currPos1 === "助動詞" && !/^(?:でしょ|です|だろ)/.test(currSf)) noSpaceBefore[i] = true;
+      if (
+        currPos === "verb" &&
+        (currFeatures.includes("nonIndependent") || currFeatures.includes("suffix"))
+      )
+        noSpaceBefore[i] = true;
+      if (currPos === "particle" && currFeatures.includes("conjunctiveParticle"))
+        noSpaceBefore[i] = true;
+      if (currPos === "auxiliaryVerb" && !/^(?:でしょ|です|だろ)/.test(currSf))
+        noSpaceBefore[i] = true;
     }
 
     // Closing punctuation stays attached to the preceding text. Opening
@@ -212,8 +156,10 @@ export function computeNoSpaceBefore(
     // Preserve authored slash adjacency instead of treating every slash as a
     // word separator. Entry offsets retain the source distinction between
     // `D/N/A`, `A/ B`, and `A / B` after tokenization.
-    const adjacentInSource = entries[pi].end !== undefined && entries[i].start !== undefined
-      && entries[pi].end === entries[i].start;
+    const adjacentInSource =
+      entries[pi].end !== undefined &&
+      entries[i].start !== undefined &&
+      entries[pi].end === entries[i].start;
     const slashToken = /^[/／]+$/u;
     if (adjacentInSource && (slashToken.test(currSf) || slashToken.test(prevSf))) {
       noSpaceBefore[i] = true;
@@ -224,10 +170,11 @@ export function computeNoSpaceBefore(
     // Japanese token boundaries still use grammatical romaji spacing.
     const JapaneseText = /[぀-ヿ一-鿿々]/u;
     const LatinOrNumberText = /[\p{Script=Latin}\p{N}]/u;
-    if (adjacentInSource && (
-      (JapaneseText.test(prevSf) && LatinOrNumberText.test(currSf)) ||
-      (LatinOrNumberText.test(prevSf) && JapaneseText.test(currSf))
-    )) {
+    if (
+      adjacentInSource &&
+      ((JapaneseText.test(prevSf) && LatinOrNumberText.test(currSf)) ||
+        (LatinOrNumberText.test(prevSf) && JapaneseText.test(currSf)))
+    ) {
       noSpaceBefore[i] = true;
     }
   }
