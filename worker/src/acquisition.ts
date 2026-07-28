@@ -40,15 +40,15 @@ export type ProviderAcquisitionOutcome =
   | { kind: "error"; error: unknown };
 
 function nativeAdapter(provider: LyricsProvider): ProviderAdapter {
-  return async (track) => {
-    const lyrics = await provider(track);
+  return async (track, context) => {
+    const lyrics = await provider(track, context);
     return lyrics ? { format: "json", lyrics } : undefined;
   };
 }
 
 export const providerAdapters: ProviderAdapterRegistry = {
-  amlldb: async (track) => {
-    const result = await amllDbProvider(track);
+  amlldb: async (track, context) => {
+    const result = await amllDbProvider(track, context);
     return result ? { format: "ttml", ...result } : undefined;
   },
   qq: nativeAdapter(qqProvider),

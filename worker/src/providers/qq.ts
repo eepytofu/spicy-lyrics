@@ -3,7 +3,7 @@ import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../conver
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries, simplify } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries, simplify, throwIfAborted } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
 export function decryptQrc(hex: string): string | undefined {
@@ -124,7 +124,7 @@ function addQqSearchItems(found: Map<number, SearchSong>, items: any[]): void {
   }
 }
 
-async function searchQqCatalogFallback(query: string): Promise<any[]> {
+async function searchQqCatalogFallback(query: string, signal?: AbortSignal): Promise<any[]> {
   const url = new URL("https://c.y.qq.com/soso/fcgi-bin/client_search_cp");
   url.search = new URLSearchParams({
     w: query,
@@ -139,19 +139,21 @@ async function searchQqCatalogFallback(query: string): Promise<any[]> {
   try {
     const response = await fetchWithTimeout(url.toString(), {
       headers: { Referer: "https://y.qq.com/", "User-Agent": "Mozilla/5.0" },
+      signal,
     });
     if (!response.ok) return [];
     const json = await response.json<any>();
     return json?.code === 0 && json?.subcode === 0 ? json?.data?.song?.list ?? [] : [];
   } catch {
+    throwIfAborted(signal);
     return [];
   }
 }
 
-async function searchQqLegacy(track: Parameters<LyricsProvider>[0]): Promise<SearchSong[]> {
+async function searchQqLegacy(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<SearchSong[]> {
   const url = new URL("https://c.y.qq.com/lyric/fcgi-bin/fcg_search_pc_lrc.fcg");
   url.search = new URLSearchParams({ SONGNAME: track.title, SINGERNAME: track.artists[0] ?? "", TYPE: "2", RANGE_MIN: "1", RANGE_MAX: "20" }).toString();
-  const response = await fetchWithTimeout(url.toString(), { headers: { Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" } });
+  const response = await fetchWithTimeout(url.toString(), { headers: { Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" }, signal });
   if (!response.ok) return [];
   const xml = await response.text();
   return [...xml.matchAll(/<songinfo\s+id="(\d+)"[^>]*>([\s\S]*?)<\/songinfo>/g)].map((match) => {
@@ -160,14 +162,15 @@ async function searchQqLegacy(track: Parameters<LyricsProvider>[0]): Promise<Sea
   });
 }
 
-export async function searchQq(track: Parameters<LyricsProvider>[0]): Promise<SearchSong[]> {
+export async function searchQq(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<SearchSong[]> {
   const found = new Map<number, SearchSong>();
   for (const query of qqSearchQueries(track)) {
+    throwIfAborted(signal);
     const body = { req_1: { method: "DoSearchForQQMusicDesktop", module: "music.search.SearchCgiService", param: { num_per_page: "20", page_num: "1", query, search_type: 0 } } };
     let response: Response | undefined;
     try {
-      response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json;charset=utf-8", Referer: "https://c.y.qq.com/", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body) });
-    } catch {}
+      response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json;charset=utf-8", Referer: "https://c.y.qq.com/", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body), signal });
+    } catch { throwIfAborted(signal); }
     let desktopSearchUnavailable = !response?.ok;
     let json: any;
     if (response?.ok) {
@@ -183,17 +186,17 @@ export async function searchQq(track: Parameters<LyricsProvider>[0]): Promise<Se
       desktopSearchUnavailable = true;
     }
     if (desktopSearchUnavailable) {
-      addQqSearchItems(found, await searchQqCatalogFallback(query));
+      addQqSearchItems(found, await searchQqCatalogFallback(query, signal));
     }
     if ([...found.values()].some((song) => isStrongCandidate(assessSearchSong(track, song)))) break;
   }
   if (![...found.values()].some((song) => isAcceptableCandidate(assessSearchSong(track, song)))) {
-    for (const song of await searchQqLegacy(track)) found.set(song.id, song);
+    for (const song of await searchQqLegacy(track, signal)) found.set(song.id, song);
   }
   return [...found.values()].sort((a, b) => assessSearchSong(track, b).score - assessSearchSong(track, a).score);
 }
 
-export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsProvider>[0]): Promise<any | undefined> {
+export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<any | undefined> {
   const encode = (value: string) => Buffer.from(value, "utf8").toString("base64");
   const key = "music.musichallSong.PlayLyricInfo.GetPlayLyricInfo";
   const body = {
@@ -205,8 +208,9 @@ export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsPro
   };
   let response: Response;
   try {
-    response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json", Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body) });
+    response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json", Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body), signal });
   } catch {
+    throwIfAborted(signal);
     return undefined;
   }
   if (!response.ok) return undefined;
@@ -238,7 +242,7 @@ function extractLegacyQqField(value: string, name: "content" | "contentts" | "co
 // The bounded lyric_download fallback and parenthetical QRC parsing are
 // adapted from Lyricify Lyrics Helper (Apache-2.0). The newer QQ payload stays
 // primary because it also carries native translation and romanization data.
-export async function fetchQqLegacyLyrics(song: SearchSong): Promise<QqLyricBundle | undefined> {
+export async function fetchQqLegacyLyrics(song: SearchSong, signal?: AbortSignal): Promise<QqLyricBundle | undefined> {
   let response: Response;
   try {
     response = await fetchWithTimeout("https://c.y.qq.com/qqmusic/fcgi-bin/lyric_download.fcg", {
@@ -249,8 +253,10 @@ export async function fetchQqLegacyLyrics(song: SearchSong): Promise<QqLyricBund
         "User-Agent": "Mozilla/5.0",
       },
       body: new URLSearchParams({ version: "15", miniversion: "82", lrctype: "4", musicid: String(song.id) }),
+      signal,
     });
   } catch {
+    throwIfAborted(signal);
     return undefined;
   }
   if (!response.ok) return undefined;
@@ -296,15 +302,16 @@ function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong,
   } : undefined;
 }
 
-export const qqProvider: LyricsProvider = async (track) => {
+export const qqProvider: LyricsProvider = async (track, context = {}) => {
   let canUseLegacyFallback = true;
-  for (const song of await searchQq(track)) {
+  for (const song of await searchQq(track, context.signal)) {
+    throwIfAborted(context.signal);
     if (!isAcceptableCandidate(assessSearchSong(track, song))) continue;
-    const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track)), "search");
+    const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track, context.signal)), "search");
     if (current) return current;
     if (canUseLegacyFallback) {
       canUseLegacyFallback = false;
-      const legacyBundle = await fetchQqLegacyLyrics(song);
+      const legacyBundle = await fetchQqLegacyLyrics(song, context.signal);
       const legacy = legacyBundle ? convertQqBundle(track, song, legacyBundle, "search-lyric-download") : undefined;
       if (legacy) return legacy;
     }

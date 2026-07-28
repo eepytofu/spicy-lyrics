@@ -9,4 +9,4 @@ export {
 } from "../matching/score";
 export { normalize, simplify, versionTags } from "../matching/normalize";
 export { searchQueries } from "../matching/queries";
-export { fetchWithTimeout } from "../http/fetch";
+export { fetchWithTimeout, throwIfAborted } from "../http/fetch";

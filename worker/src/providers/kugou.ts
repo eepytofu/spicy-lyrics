@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, searchQueries, versionTags } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, searchQueries, throwIfAborted, versionTags } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -102,7 +102,7 @@ export function isKugouCandidateCompatible(
     && (candidateAssessment.evidence.duration ?? 1) >= 0.8;
 }
 
-export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Promise<KugouSong[]> {
+export async function searchKugouSongs(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<KugouSong[]> {
   const queries = searchQueries(track);
   const found = new Map<string, KugouSong>();
   const addResults = (items: any[], catalog: KugouSong["catalog"]) => {
@@ -134,14 +134,19 @@ export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Pr
     try {
       const response = await fetchWithTimeout(url.toString(), {
         headers: { Referer: "https://www.kugou.com/", "User-Agent": "Mozilla/5.0" },
+        signal,
       });
       if (!response.ok) return;
       const body = await response.json<any>();
       addResults(body?.data?.lists ?? body?.data?.info ?? [], catalog);
-    } catch { /* try the next catalog/query */ }
+    } catch {
+      throwIfAborted(signal);
+      /* try the next catalog/query */
+    }
   };
 
   for (const keyword of queries) {
+    throwIfAborted(signal);
     // Lyricify's mobile catalog exposes variants that KuGou WebFilter omits.
     // Its HTTPS hostname currently fails certificate validation, so this
     // catalog request intentionally uses the upstream HTTP endpoint. It
@@ -160,7 +165,7 @@ export async function searchKugouSongs(track: Parameters<LyricsProvider>[0]): Pr
   return [...found.values()].sort((a, b) => assessKugouSong(track, b).score - assessKugouSong(track, a).score);
 }
 
-export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0], song: KugouSong): Promise<KugouCandidate[]> {
+export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0], song: KugouSong, signal?: AbortSignal): Promise<KugouCandidate[]> {
   const url = new URL("https://lyrics.kugou.com/search");
   url.search = new URLSearchParams({
     ver: "1",
@@ -172,6 +177,7 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
   }).toString();
   const response = await fetchWithTimeout(url.toString(), {
     headers: { Referer: "https://kugou.com", "User-Agent": "Mozilla/5.0" },
+    signal,
   });
   if (!response.ok) return [];
   let body: any;
@@ -190,11 +196,12 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
       assessKugouCandidate(track, song, b).score - assessKugouCandidate(track, song, a).score);
 }
 
-export async function fetchKugouKrc(candidate: KugouCandidate): Promise<string | undefined> {
+export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSignal): Promise<string | undefined> {
   const url = new URL("https://lyrics.kugou.com/download");
   url.search = new URLSearchParams({ ver: "1", client: "pc", id: candidate.id, accesskey: candidate.accesskey, fmt: "krc", charset: "utf8" }).toString();
   const response = await fetchWithTimeout(url.toString(), {
     headers: { Referer: "https://kugou.com", "User-Agent": "Mozilla/5.0" },
+    signal,
   });
   if (!response.ok) return undefined;
   let body: any;
@@ -203,12 +210,14 @@ export async function fetchKugouKrc(candidate: KugouCandidate): Promise<string |
   return decryptKrc(body?.content ?? "");
 }
 
-export const kugouProvider: LyricsProvider = async (track) => {
-  for (const song of await searchKugouSongs(track)) {
+export const kugouProvider: LyricsProvider = async (track, context = {}) => {
+  for (const song of await searchKugouSongs(track, context.signal)) {
+    throwIfAborted(context.signal);
     if (!isAcceptableCandidate(assessKugouSong(track, song))) continue;
-    for (const candidate of await searchKugouCandidates(track, song)) {
+    for (const candidate of await searchKugouCandidates(track, song, context.signal)) {
+      throwIfAborted(context.signal);
       if (!isKugouCandidateCompatible(track, song, candidate)) continue;
-      const raw = await fetchKugouKrc(candidate); if (!raw) continue;
+      const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
       const result = toSyllableLyrics(parseKrc(raw), "kugou");
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
       if (result) return {

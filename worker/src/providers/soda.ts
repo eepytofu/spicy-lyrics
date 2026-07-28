@@ -17,6 +17,7 @@ import {
   isStrongCandidate,
   matchMetadata,
   searchQueries,
+  throwIfAborted,
 } from "./shared";
 
 const SODA_USER_AGENT = "LunaPC/2.1.0(12292405)";
@@ -105,9 +106,11 @@ function successfulSodaBody(body: any): boolean {
 export async function searchSoda(
   track: Parameters<LyricsProvider>[0],
   clientParams = sodaClientParams(),
+  signal?: AbortSignal,
 ): Promise<SodaSong[]> {
   const found = new Map<string, SodaSong>();
   for (const query of searchQueries(track)) {
+    throwIfAborted(signal);
     const url = new URL("https://api.qishui.com/luna/pc/search/track");
     url.search = new URLSearchParams({
       ...clientParams,
@@ -134,7 +137,7 @@ export async function searchSoda(
       search_scene: "",
     }).toString();
     try {
-      const response = await fetchWithTimeout(url.toString(), { headers: sodaHeaders });
+      const response = await fetchWithTimeout(url.toString(), { headers: sodaHeaders, signal });
       if (!response.ok) continue;
       const body = await response.json<any>();
       if (!successfulSodaBody(body)) continue;
@@ -143,7 +146,10 @@ export async function searchSoda(
         const song = sodaSong(item?.entity?.track);
         if (song) found.set(song.id, song);
       }
-    } catch { /* try the next metadata query */ }
+    } catch {
+      throwIfAborted(signal);
+      /* try the next metadata query */
+    }
     if ([...found.values()].some((song) => isStrongCandidate(assessSodaSong(track, song)))) break;
   }
   return [...found.values()].sort((a, b) => assessSodaSong(track, b).score - assessSodaSong(track, a).score);
@@ -152,6 +158,7 @@ export async function searchSoda(
 export async function fetchSodaDetail(
   song: SodaSong,
   clientParams = sodaClientParams(),
+  signal?: AbortSignal,
 ): Promise<any | undefined> {
   const url = new URL("https://api.qishui.com/luna/pc/track_v2");
   url.search = new URLSearchParams(clientParams).toString();
@@ -167,12 +174,14 @@ export async function fetchSodaDetail(
         media_type: "track",
         queue_type: "",
       }),
+      signal,
     });
     if (!response.ok) return undefined;
     const body = await response.json<any>();
     if (!successfulSodaBody(body) || String(body?.track?.id ?? "") !== song.id) return undefined;
     return body;
   } catch {
+    throwIfAborted(signal);
     return undefined;
   }
 }
@@ -230,12 +239,13 @@ function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefi
 // from Lyricify Lyrics Helper (Apache-2.0). Spicy adds independent metadata
 // validation, structured-timing preservation, sidecar handling, and bounded
 // failure behavior. See worker/NOTICE.md and worker/LICENSES/Apache-2.0.txt.
-export const sodaProvider: LyricsProvider = async (track) => {
+export const sodaProvider: LyricsProvider = async (track, context = {}) => {
   const clientParams = sodaClientParams();
-  for (const song of await searchSoda(track, clientParams)) {
+  for (const song of await searchSoda(track, clientParams, context.signal)) {
+    throwIfAborted(context.signal);
     const searchAssessment = assessSodaSong(track, song);
     if (!isAcceptableCandidate(searchAssessment) || searchAssessment.evidence.versionConflict) continue;
-    const body = await fetchSodaDetail(song, clientParams);
+    const body = await fetchSodaDetail(song, clientParams, context.signal);
     if (!body) continue;
     const detail = sodaSong(body.track);
     if (!detail) continue;

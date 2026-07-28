@@ -2,7 +2,7 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries, throwIfAborted } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
@@ -16,15 +16,17 @@ export function encryptEapi(path: string, payload: unknown): string {
   return encrypted.ciphertext.toString(Hex).toUpperCase();
 }
 
-async function eapi<T>(endpoint: string, path: string, payload: unknown): Promise<T | undefined> {
+async function eapi<T>(endpoint: string, path: string, payload: unknown, signal?: AbortSignal): Promise<T | undefined> {
   try {
     const response = await fetchWithTimeout(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Origin: "https://music.163.com", Referer: "https://music.163.com", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
       body: new URLSearchParams({ params: encryptEapi(path, payload) }).toString(),
+      signal,
     });
     return response.ok ? await response.json<T>() : undefined;
   } catch {
+    throwIfAborted(signal);
     return undefined;
   }
 }
@@ -89,12 +91,13 @@ function addNeteaseSongs(found: Map<number, Song>, values: any[], searchMethod: 
   }
 }
 
-export async function searchNetease(track: Parameters<LyricsProvider>[0]): Promise<Song[]> {
+export async function searchNetease(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<Song[]> {
   const found = new Map<number, Song>();
   for (const keyword of searchQueries(track)) {
+    throwIfAborted(signal);
     const batch = await eapi<any>("https://interface.music.163.com/eapi/batch", "/api/search/song/list/page", {
       keyword, needCorrect: "1", channel: "typing", offset: 0, scene: "normal", total: true, limit: 10,
-    });
+    }, signal);
     addNeteaseSongs(
       found,
       (batch?.data?.resources ?? []).map((resource: any) => resource?.baseInfo?.simpleSongData).filter(Boolean),
@@ -106,7 +109,7 @@ export async function searchNetease(track: Parameters<LyricsProvider>[0]): Promi
       // this HTTPS catalog only when the primary has not found a strong match.
       const cloud = await eapi<any>("https://interface.music.163.com/eapi/cloudsearch/pc", "/api/cloudsearch/pc", {
         s: keyword, type: "1", limit: "30", offset: "0", total: "true",
-      });
+      }, signal);
       addNeteaseSongs(found, cloud?.result?.songs ?? [], "cloud-search");
     }
     if ([...found.values()].some((song) => isStrongCandidate(assessSong(track, song)))) break;
@@ -155,7 +158,7 @@ export function neteaseProviderCredits(body: any): ProviderCredit[] {
   ]);
 }
 
-async function fetchLegacyNeteaseLyrics(songId: number): Promise<any | undefined> {
+async function fetchLegacyNeteaseLyrics(songId: number, signal?: AbortSignal): Promise<any | undefined> {
   const url = new URL("https://music.163.com/api/song/lyric");
   url.search = new URLSearchParams({
     id: String(songId),
@@ -168,11 +171,13 @@ async function fetchLegacyNeteaseLyrics(songId: number): Promise<any | undefined
   try {
     const response = await fetchWithTimeout(url.toString(), {
       headers: { Referer: "https://music.163.com/", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+      signal,
     });
     if (!response.ok) return undefined;
     const body = await response.json<any>();
     return body?.code === 200 ? body : undefined;
   } catch {
+    throwIfAborted(signal);
     return undefined;
   }
 }
@@ -181,15 +186,16 @@ function hasNeteaseLyrics(body: any): boolean {
   return [body?.yrc?.lyric, body?.lrc?.lyric].some((value) => typeof value === "string" && value.trim());
 }
 
-export const neteaseProvider: LyricsProvider = async (track) => {
-  for (const song of await searchNetease(track)) {
+export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
+  for (const song of await searchNetease(track, context.signal)) {
+    throwIfAborted(context.signal);
     if (!isAcceptableCandidate(assessSong(track, song))) continue;
     let lyricMethod = "eapi-lyric";
     let body = await eapi<any>("https://interface3.music.163.com/eapi/song/lyric/v1", "/api/song/lyric/v1", {
       id: song.id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0,
-    });
+    }, context.signal);
     if (!hasNeteaseLyrics(body)) {
-      body = await fetchLegacyNeteaseLyrics(song.id);
+      body = await fetchLegacyNeteaseLyrics(song.id, context.signal);
       lyricMethod = "public-lrc-fallback";
     }
     const ProviderCredits = neteaseProviderCredits(body);
