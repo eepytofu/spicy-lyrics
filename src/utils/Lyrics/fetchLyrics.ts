@@ -52,20 +52,21 @@ import {
 import { publishLyricsInteropSnapshot } from "./Interop.ts";
 import { isLyricsSourceCacheCompatible } from "./LyricsSourceCache.ts";
 import { ensureSourceEvidence } from "./Processing/SourceEvidence.ts";
+import {
+  LyricsRequestCoordinator,
+  type LyricsRequestSession,
+} from "./LyricsRequestSession.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
 const lyricsPrefetchLogger = new Logger("Lyrics Prefetch");
 const prefetchInFlight = new Set<string>();
-let lyricsPipelineEpoch = 0;
+type FetchLyricsResult = [object | string, number] | null;
+const foregroundLyricsRequests = new LyricsRequestCoordinator<FetchLyricsResult>();
 
 export function invalidateLyricsPipeline(): void {
-  lyricsPipelineEpoch += 1;
+  foregroundLyricsRequests.invalidate();
   $currentlyFetching.set(false);
-}
-
-function isLyricsPipelineCurrent(epoch: number): boolean {
-  return epoch === lyricsPipelineEpoch;
 }
 
 // recently updated key structure - changed name
@@ -118,10 +119,16 @@ function currentProcessingContextKey(): string {
   });
 }
 
-async function setProcessedLyricsStoreItem(trackId: string, lyrics: any): Promise<void> {
+async function setProcessedLyricsStoreItem(
+  trackId: string,
+  lyrics: any,
+  session?: LyricsRequestSession,
+): Promise<void> {
+  if (session && !session.isCurrent()) return;
   ensureSourceEvidence(lyrics);
   lyrics.ProcessingContextKey = currentProcessingContextKey();
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
+  if (session && !session.isCurrent()) return;
   await LyricsStore.SetItem(trackId, lyrics);
 }
 
@@ -135,11 +142,15 @@ function setRomanizationClass(hasTransliterations: boolean | undefined): void {
 
 /**
  * Shared "lyrics are ready" presentation: toggle the romanization class, hide the
- * loader, publish the type, reveal the containers and view controls, and clear the
- * fetching flag. Used by every successful return path.
+ * loader, publish the type, and reveal the containers and view controls. Used by
+ * every successful return path.
  */
-function dispatchProcessingReady(trackId: string, lyrics: any): void {
-  if (SpotifyPlayer.GetId() !== trackId) return;
+function dispatchProcessingReady(
+  trackId: string,
+  lyrics: any,
+  session: LyricsRequestSession,
+): void {
+  if (!session.isCurrent() || SpotifyPlayer.GetId() !== trackId) return;
   ensureSourceEvidence(lyrics);
   $currentLyricsData.set(JSON.stringify(lyrics));
   publishLyricsInteropSnapshot(lyrics);
@@ -150,18 +161,38 @@ function dispatchProcessingReady(trackId: string, lyrics: any): void {
   );
 }
 
-async function finishProcessingInBackground(trackId: string, lyrics: any, pipelineEpoch: number): Promise<void> {
+async function finishTranslationInBackground(
+  trackId: string,
+  lyrics: any,
+  session: LyricsRequestSession,
+): Promise<void> {
+  try {
+    await translateLyrics(lyrics);
+  } catch (error) {
+    lyricsCacheLogger.error("Background lyrics translation failed", error);
+  }
+  if (!session.isCurrent()) return;
+  lyrics.TranslationPending = false;
+  await setProcessedLyricsStoreItem(trackId, lyrics, session);
+  dispatchProcessingReady(trackId, lyrics, session);
+}
+
+async function finishProcessingInBackground(
+  trackId: string,
+  lyrics: any,
+  session: LyricsRequestSession,
+): Promise<void> {
   const shouldTranslate = lyrics.TranslationPending === true;
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
     await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: false });
-    if (!isLyricsPipelineCurrent(pipelineEpoch)) return;
+    if (!session.isCurrent()) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
     lyrics.TranslationPending = shouldTranslate;
-    await setProcessedLyricsStoreItem(trackId, lyrics);
-    if (shouldRerenderAfterRomanization) dispatchProcessingReady(trackId, lyrics);
+    await setProcessedLyricsStoreItem(trackId, lyrics, session);
+    if (shouldRerenderAfterRomanization) dispatchProcessingReady(trackId, lyrics, session);
   } catch (error) {
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
@@ -171,16 +202,7 @@ async function finishProcessingInBackground(trackId: string, lyrics: any, pipeli
   }
 
   if (!shouldTranslate) return;
-
-  try {
-    await translateLyrics(lyrics);
-  } catch (error) {
-    lyricsCacheLogger.error("Background lyrics translation failed", error);
-  }
-  if (!isLyricsPipelineCurrent(pipelineEpoch)) return;
-  lyrics.TranslationPending = false;
-  await setProcessedLyricsStoreItem(trackId, lyrics);
-  dispatchProcessingReady(trackId, lyrics);
+  await finishTranslationInBackground(trackId, lyrics, session);
 }
 
 const RomanizableScriptQuickTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
@@ -242,7 +264,8 @@ function markProcessedWithoutBackground(lyrics: any): void {
   lyrics.IncludesTranslation = lyrics.IncludesTranslation === true;
 }
 
-function presentLyrics(lyricsData: any): void {
+function presentLyrics(lyricsData: any, session: LyricsRequestSession): void {
+  if (!session.isCurrent()) return;
   ensureSourceEvidence(lyricsData);
   publishLyricsInteropSnapshot(lyricsData);
   $lyricsSelectionDiagnostics.set(lyricsData?.SelectionDiagnostics ?? null);
@@ -256,10 +279,19 @@ function presentLyrics(lyricsData: any): void {
   PageContainer?.querySelector<HTMLElement>(".ContentBox")?.classList.remove("LyricsHidden");
   PageContainer?.querySelector(".ContentBox .LyricsContainer")?.classList.remove("Hidden");
   PageView.AppendViewControls(true);
-  $currentlyFetching.set(false);
 }
 
-async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any): Promise<any> {
+type ProcessingVersionResult = {
+  lyrics: any;
+  translationPending: boolean;
+};
+
+async function ensureProcessingVersion(
+  trackId: string,
+  uri: string,
+  lyrics: any,
+  session: LyricsRequestSession,
+): Promise<ProcessingVersionResult> {
   if (lyrics) {
     lyrics.uri = lyrics.uri || uri;
     lyrics.id = lyrics.id || trackId;
@@ -269,7 +301,7 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
 
   const processingContextKey = currentProcessingContextKey();
 
-  if (!lyrics) return lyrics;
+  if (!lyrics) return { lyrics, translationPending: false };
 
   // ProcessingPending === true means a previous session cached raw lyrics and
   // died before its background processing finished — treat as stale and
@@ -280,14 +312,17 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
     && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
     && lyrics.ProcessingContextKey === processingContextKey
   ) {
-    return lyrics;
+    return {
+      lyrics,
+      translationPending: lyrics.TranslationPending === true,
+    };
   }
 
   if (!hasRomanizationWorkQuick(lyrics) && !hasTranslationWorkQuick(lyrics)) {
     markProcessedWithoutBackground(lyrics);
     lyrics.id = lyrics.id || trackId;
-    await setProcessedLyricsStoreItem(trackId, lyrics);
-    return lyrics;
+    await setProcessedLyricsStoreItem(trackId, lyrics, session);
+    return { lyrics, translationPending: false };
   }
 
   lyricsCacheLogger.debug("Reprocessing stale cached lyrics", {
@@ -297,12 +332,14 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
     fromContext: lyrics.ProcessingContextKey,
     toContext: processingContextKey,
   });
-  await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: true });
+  const translationPending = hasTranslationWorkQuick(lyrics);
+  await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: false });
+  if (!session.isCurrent()) return { lyrics, translationPending: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
-  lyrics.TranslationPending = false;
-  await setProcessedLyricsStoreItem(trackId, lyrics);
-  return lyrics;
+  lyrics.TranslationPending = translationPending;
+  await setProcessedLyricsStoreItem(trackId, lyrics, session);
+  return { lyrics, translationPending };
 }
 
 export async function PrefetchLyrics(uri: string): Promise<void> {
@@ -383,8 +420,10 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
   }
 }
 
-export default async function fetchLyrics(uri: string): Promise<[object | string, number] | null> {
-  const pipelineEpoch = lyricsPipelineEpoch;
+async function fetchLyricsForSession(
+  uri: string,
+  session: LyricsRequestSession,
+): Promise<FetchLyricsResult> {
   lyricsLogger.debug("Fetch requested", uri);
   //if (!PageContainer) return;
   const LyricsContent =
@@ -397,7 +436,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   //if (!Fullscreen.IsOpen) PageView.AppendViewControls(true);
 
   if (SpotifyPlayer.IsDJ()) {
-    $currentlyFetching.set(false);
     return ["dj", 400];
   }
 
@@ -407,7 +445,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     mediaType &&
     mediaType !== "audio"
   ) {
-    $currentlyFetching.set(false);
     if (mediaType === "video") {
       return ["video-track", 400];
     } else if (mediaType === "mixed") {
@@ -418,7 +455,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
 
   const contentType = SpotifyPlayer.GetContentType();
   if (contentType !== "track") {
-    $currentlyFetching.set(false);
     if (contentType === "episode") {
       return ["episode-track", 400];
     }
@@ -426,13 +462,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   }
 
   const trackId = uri.split(":")[2];
-
-  if ($currentlyFetching.get()) {
-    $currentlyFetching.set(false);
-    return null;
-  }
-
-  $currentlyFetching.set(true);
   $lyricsSelectionDiagnostics.set(null);
 
   if (LyricsContent) {
@@ -460,27 +489,30 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         // URI guard; fall back to id only for pre-uri cache entries.
         const isCurrentTrack = lyricsData?.uri === uri || (!lyricsData?.uri && lyricsData?.id === trackId);
         if (isCurrentTrack && lyricsData?.ProcessingPending !== true && isSourceCacheCompatible(lyricsData)) {
-          const processedLyrics = await ensureProcessingVersion(trackId, uri, lyricsData);
-          if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
+          const processed = await ensureProcessingVersion(trackId, uri, lyricsData, session);
+          if (!session.isCurrent()) return null;
+          const processedLyrics = processed.lyrics;
           $currentLyricsData.set(JSON.stringify(processedLyrics));
-          presentLyrics(processedLyrics);
+          presentLyrics(processedLyrics, session);
+          if (processed.translationPending) {
+            void finishTranslationInBackground(trackId, processedLyrics, session);
+          }
           return [processedLyrics, 200];
         }
       }
     } catch (error) {
       lyricsCacheLogger.error("Error parsing saved lyrics data", error);
-      $currentlyFetching.set(false);
       HideLoaderContainer();
     }
   }
 
   const localLyric = await LocalLyricsManager.get(uri);
-  if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
+  if (!session.isCurrent()) return null;
   if (localLyric) {
     const lyricsData = { ...localLyric, uri };
     captureSourceTranslations(lyricsData);
     $currentLyricsData.set(JSON.stringify(lyricsData));
-    presentLyrics(lyricsData);
+    presentLyrics(lyricsData, session);
     return [lyricsData, 200];
   }
 
@@ -489,7 +521,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
   // API. Bail out here — after LocalLyricsManager.get() (which serves any
   // user-uploaded TTML) but before the meaningless remote cache read.
   if (uri.startsWith("spotify:local:")) {
-    $currentlyFetching.set(false);
     return ["local-track", 400];
   }
 
@@ -503,26 +534,28 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
         // Tag the cached payload with the current uri so the saved-data and
         // re-fetch checks (which match on uri) recognise it — older cache
         // entries predate the uri field.
-        const lyricsFromCache = await ensureProcessingVersion(trackId, uri, {
+        const processed = await ensureProcessingVersion(trackId, uri, {
           ...lyricsFromCacheRes,
           uri,
-        });
-        if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
+        }, session);
+        if (!session.isCurrent()) return null;
+        const lyricsFromCache = processed.lyrics;
         $currentLyricsData.set(JSON.stringify(lyricsFromCache));
-        presentLyrics(lyricsFromCache);
+        presentLyrics(lyricsFromCache, session);
+        if (processed.translationPending) {
+          void finishTranslationInBackground(trackId, lyricsFromCache, session);
+        }
         return [{ ...lyricsFromCache, fromCache: true }, 200];
         }
       }
     } catch (error) {
       lyricsCacheLogger.error("Error parsing cache entry", error);
-      $currentlyFetching.set(false);
       return ["unknown-error", 0];
     }
   }
 
 
   if (!navigator.onLine) {
-    $currentlyFetching.set(false);
     return ["offline", 400];
   }
 
@@ -536,7 +569,7 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     const providers = getActiveLyricsSourceOrder();
     lyricsLogger.debug("Provider lyrics query", { trackId, providers });
     const providerResult = await fetchLyricsFromProviders(uri, providers);
-    if (!isLyricsPipelineCurrent(pipelineEpoch)) return null;
+    if (!session.isCurrent()) return null;
 
     if (providerResult?.status === 503) {
       // The server accepted the request but hasn't processed it yet — it's
@@ -544,14 +577,12 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
       // loop, which keeps polling with backoff (and survives page close / view
       // swaps). We deliberately leave the loader up and return a sentinel so no
       // error notice is rendered.
-      $currentlyFetching.set(false);
       LyricsQueueRetry.HandleQueued(uri);
       return ["lyrics-queued", 503];
     }
 
     if (!providerResult || providerResult.status !== 200) {
       HideLoaderContainer();
-      $currentlyFetching.set(false);
       return ["lyrics-not-found", 404];
     }
 
@@ -559,7 +590,6 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
 
     if (lyrics === null || lyrics === undefined || lyrics === "") {
       HideLoaderContainer();
-      $currentlyFetching.set(false);
       return ["lyrics-not-found", 404];
     }
 
@@ -575,9 +605,10 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
 
     if (!needsRomanization && !needsTranslation) {
       markProcessedWithoutBackground(lyrics);
-      await setProcessedLyricsStoreItem(trackId, lyrics);
+      await setProcessedLyricsStoreItem(trackId, lyrics, session);
+      if (!session.isCurrent()) return null;
       $currentLyricsData.set(JSON.stringify(lyrics));
-      presentLyrics(lyrics);
+      presentLyrics(lyrics, session);
       return [{ ...lyrics, fromCache: false }, 200];
     }
 
@@ -586,15 +617,25 @@ export default async function fetchLyrics(uri: string): Promise<[object | string
     lyrics.TranslationPending = needsTranslation;
     $currentLyricsData.set(JSON.stringify(lyrics));
 
-    presentLyrics(lyrics);
-    void finishProcessingInBackground(trackId, lyrics, pipelineEpoch);
+    presentLyrics(lyrics, session);
+    void finishProcessingInBackground(trackId, lyrics, session);
     return [{ ...lyrics, fromCache: false }, 200];
   } catch (error) {
     lyricsLogger.error("Error fetching lyrics", error);
-    $currentlyFetching.set(false);
     HideLoaderContainer();
     return ["unknown-error", 0];
   }
+}
+
+export default function fetchLyrics(uri: string): Promise<FetchLyricsResult> {
+  return foregroundLyricsRequests.run(uri, async (session) => {
+    $currentlyFetching.set(true);
+    try {
+      return await fetchLyricsForSession(uri, session);
+    } finally {
+      if (session.isCurrent()) $currentlyFetching.set(false);
+    }
+  });
 }
 
 let ContainerShowLoaderTimeout: ReturnType<typeof setTimeout> | null = null;

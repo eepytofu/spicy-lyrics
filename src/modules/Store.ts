@@ -166,12 +166,37 @@ export function GetExpireStore<ItemType>(
 		if (forceNewData) return undefined
 
 		const cache = await caches.open(storeName)
-		const response = await cache.match(requestUrl(itemName))
+		const url = requestUrl(itemName)
+		const response = await cache.match(url)
 		if (!response) return undefined
+		const deleteInvalidEntry = async (): Promise<void> => {
+			try {
+				await cache.delete(url)
+			} catch (err) {
+				console.warn(
+					`ExpireStore "${storeName}": failed to delete invalid item "${itemName}"`,
+					err,
+				)
+			}
+		}
 
-		const wrapped = (await response.json()) as ExpireItem<ItemType>
-		if (wrapped.CacheVersion !== version) return undefined
-		if (wrapped.ExpiresAt < Date.now()) return undefined
+		let wrapped: ExpireItem<ItemType>
+		try {
+			wrapped = (await response.json()) as ExpireItem<ItemType>
+		} catch {
+			await deleteInvalidEntry()
+			return undefined
+		}
+		if (
+			typeof wrapped !== "object"
+			|| wrapped === null
+			|| wrapped.CacheVersion !== version
+			|| !Number.isFinite(wrapped.ExpiresAt)
+			|| wrapped.ExpiresAt < Date.now()
+		) {
+			await deleteInvalidEntry()
+			return undefined
+		}
 
 		return wrapped.Content
 	}
