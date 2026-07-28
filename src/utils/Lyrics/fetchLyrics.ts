@@ -569,7 +569,7 @@ async function fetchLyricsForSession(
   try {
     const providers = getActiveLyricsSourceOrder();
     lyricsLogger.debug("Provider lyrics query", { trackId, providers });
-    const providerResult = await fetchLyricsFromProviders(uri, providers);
+    const providerResult = await fetchLyricsFromProviders(uri, providers, session.signal);
     if (!session.isCurrent()) return null;
 
     if (providerResult?.status === 503) {

@@ -6,7 +6,6 @@ import {
   $customLyricsServers,
   $externalLyricsWorkerUrl,
   $ignoreMusixmatchWordSync,
-  $lyricsSelectionDiagnostics,
   $lyricsSelectionMode,
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
@@ -17,6 +16,7 @@ import {
   normalizeLyricsServerUrl,
   parseCustomLyricsServers,
   resolveLyricsSourceLabel,
+  type BuiltInLyricsSourceId,
   type LyricsSourceProviderId,
 } from "./LyricsSourcePreferences.ts";
 import {
@@ -26,6 +26,11 @@ import {
 } from "./LyricsCandidateSelector.ts";
 import { externalSourceRequestUrl } from "./ExternalSourceRequest.ts";
 import { normalizedDisplayText } from "./TextCompare.ts";
+import {
+  acquireProviderOutcomes,
+  runProviderAcquisition,
+  type ProviderAcquisitionOutcome,
+} from "./ProviderAcquisition.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -141,21 +146,17 @@ async function fetchSpicy(
   id: string, expectedSource: "spl" | "aml", provider: "spicy" | "apple",
   request: ReturnType<typeof spicyRaw> = spicyRaw(id),
 ): Promise<ExternalLyricsResult | null> {
-  try {
-    const result = await request;
-    if (result.status === 503) return { lyrics: null, status: 503 };
-    return result.data?.source === expectedSource ? stamp(result.data, provider) : null;
-  } catch (error) { console.error(`[SpicyLyrics] ${provider} failed`, error); return null; }
+  const result = await request;
+  if (result.status === 503) return { lyrics: null, status: 503 };
+  return result.data?.source === expectedSource ? stamp(result.data, provider) : null;
 }
 
 async function fetchSpotify(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
-  try {
-    const body = await Spicetify.CosmosAsync.get(`https://spclient.wg.spotify.com/color-lyrics/v2/track/${info.id}?format=json&vocalRemoval=false&market=from_token`);
-    const data = body?.lyrics; const rows = Array.isArray(data?.lines) ? data.lines : [];
-    const label = data?.provider ? `Spotify (${data.provider})` : "Spotify";
-    if (data?.syncType === "LINE_SYNCED") return stamp(buildLine(rows.map((row: any) => ({ text: row.words, startTimeMs: Number(row.startTimeMs) })), info.durationMs, "spotify", label), "spotify", label);
-    return stamp(buildStatic(rows.map((row: any) => row.words), "spotify", label), "spotify", label);
-  } catch (error) { console.error("[SpicyLyrics] Spotify lyrics failed", error); return null; }
+  const body = await Spicetify.CosmosAsync.get(`https://spclient.wg.spotify.com/color-lyrics/v2/track/${info.id}?format=json&vocalRemoval=false&market=from_token`);
+  const data = body?.lyrics; const rows = Array.isArray(data?.lines) ? data.lines : [];
+  const label = data?.provider ? `Spotify (${data.provider})` : "Spotify";
+  if (data?.syncType === "LINE_SYNCED") return stamp(buildLine(rows.map((row: any) => ({ text: row.words, startTimeMs: Number(row.startTimeMs) })), info.durationMs, "spotify", label), "spotify", label);
+  return stamp(buildStatic(rows.map((row: any) => row.words), "spotify", label), "spotify", label);
 }
 
 function userToken(): string { return $musixmatchToken.get().trim() || DEFAULT_MUSIXMATCH_TOKEN; }
@@ -231,15 +232,13 @@ function mxmPlain(calls: any): string[] | null {
 }
 
 async function fetchMusixmatch(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
-  try {
-    const calls = await mxmMacro(info); if (!calls) return null;
-    const match = mxmMatch(calls);
-    if (!$ignoreMusixmatchWordSync.get()) {
-      const rich = await mxmRichSync(calls); if (rich) { const result = stamp(buildSyllable(richSyncLines(rich), "musixmatch", "Musixmatch"), "musixmatch", undefined, match); if (result) return result; }
-    }
-    const synced = mxmSynced(calls); if (synced) return stamp(buildLine(synced, info.durationMs, "musixmatch", "Musixmatch"), "musixmatch", undefined, match);
-    const plain = mxmPlain(calls); return plain ? stamp(buildStatic(plain, "musixmatch", "Musixmatch"), "musixmatch", undefined, match) : null;
-  } catch (error) { console.error("[SpicyLyrics] Musixmatch failed", error); return null; }
+  const calls = await mxmMacro(info); if (!calls) return null;
+  const match = mxmMatch(calls);
+  if (!$ignoreMusixmatchWordSync.get()) {
+    const rich = await mxmRichSync(calls); if (rich) { const result = stamp(buildSyllable(richSyncLines(rich), "musixmatch", "Musixmatch"), "musixmatch", undefined, match); if (result) return result; }
+  }
+  const synced = mxmSynced(calls); if (synced) return stamp(buildLine(synced, info.durationMs, "musixmatch", "Musixmatch"), "musixmatch", undefined, match);
+  const plain = mxmPlain(calls); return plain ? stamp(buildStatic(plain, "musixmatch", "Musixmatch"), "musixmatch", undefined, match) : null;
 }
 
 function parseLrc(text: string): { synced: TimedLine[]; plain: string[] } {
@@ -253,16 +252,19 @@ function parseLrc(text: string): { synced: TimedLine[]; plain: string[] } {
   return { synced, plain };
 }
 
-async function fetchLrclib(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
-  try {
-    const query = new URLSearchParams({ track_name: info.title, artist_name: info.artist, album_name: info.album, duration: String(info.durationMs / 1000) });
-    const response = await fetch(`https://lrclib.net/api/get?${query}`, { headers: { "x-user-agent": "Spicy Lyrics (https://github.com/amarinne/spicy-lyrics)" } });
-    if (!response.ok) return null; const body = await response.json();
-    const match: LyricsMatchMetadata = { title: body?.trackName ?? info.title, artists: body?.artistName ? [body.artistName] : info.artists, album: body?.albumName, durationMs: Number(body?.duration) > 0 ? Number(body.duration) * 1000 : undefined, confidence: 0.9, method: "metadata-query" };
-    if (body?.instrumental) return stamp(buildStatic(["♪ Instrumental ♪"], "lrclib", "LRCLIB"), "lrclib", undefined, match);
-    if (body?.syncedLyrics) { const parsed = parseLrc(body.syncedLyrics); if (parsed.synced.length) return stamp(buildLine(parsed.synced, info.durationMs, "lrclib", "LRCLIB"), "lrclib", undefined, match); }
-    return body?.plainLyrics ? stamp(buildStatic(body.plainLyrics.split(/\r?\n/), "lrclib", "LRCLIB"), "lrclib", undefined, match) : null;
-  } catch (error) { console.error("[SpicyLyrics] LRCLIB failed", error); return null; }
+async function fetchLrclib(info: TrackLyricsInfo, signal: AbortSignal): Promise<ExternalLyricsResult | null> {
+  const query = new URLSearchParams({ track_name: info.title, artist_name: info.artist, album_name: info.album, duration: String(info.durationMs / 1000) });
+  const response = await fetch(`https://lrclib.net/api/get?${query}`, {
+    headers: { "x-user-agent": "Spicy Lyrics (https://github.com/amarinne/spicy-lyrics)" },
+    signal,
+  });
+  if (response.status === 404 || response.status === 204) return null;
+  if (!response.ok) throw new Error(`LRCLIB request failed with status ${response.status}`);
+  const body = await response.json();
+  const match: LyricsMatchMetadata = { title: body?.trackName ?? info.title, artists: body?.artistName ? [body.artistName] : info.artists, album: body?.albumName, durationMs: Number(body?.duration) > 0 ? Number(body.duration) * 1000 : undefined, confidence: 0.9, method: "metadata-query" };
+  if (body?.instrumental) return stamp(buildStatic(["♪ Instrumental ♪"], "lrclib", "LRCLIB"), "lrclib", undefined, match);
+  if (body?.syncedLyrics) { const parsed = parseLrc(body.syncedLyrics); if (parsed.synced.length) return stamp(buildLine(parsed.synced, info.durationMs, "lrclib", "LRCLIB"), "lrclib", undefined, match); }
+  return body?.plainLyrics ? stamp(buildStatic(body.plainLyrics.split(/\r?\n/), "lrclib", "LRCLIB"), "lrclib", undefined, match) : null;
 }
 
 function responseMatch(response: Response): LyricsMatchMetadata | undefined {
@@ -273,7 +275,8 @@ function responseMatch(response: Response): LyricsMatchMetadata | undefined {
 }
 
 async function parseServerResponse(response: Response, info: TrackLyricsInfo, provider: LyricsSourceProviderId, label: string): Promise<ExternalLyricsResult | null> {
-  if (!response.ok) return null;
+  if (response.status === 404 || response.status === 204) return null;
+  if (!response.ok) throw new Error(`${label} request failed with status ${response.status}`);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const match = responseMatch(response);
   const text = await response.text(); if (!text.trim()) return null;
@@ -290,35 +293,91 @@ async function parseServerResponse(response: Response, info: TrackLyricsInfo, pr
   return parsed.synced.length ? stamp(buildLine(parsed.synced, info.durationMs, provider, label), provider, label, match) : stamp(buildStatic(parsed.plain, provider, label), provider, label, match);
 }
 
-async function fetchWorker(info: TrackLyricsInfo, provider: "amlldb" | "qq" | "kugou" | "netease" | "soda"): Promise<ExternalLyricsResult | null> {
-  const base = normalizeLyricsServerUrl($externalLyricsWorkerUrl.get()); if (!base) return null;
-  try { return await parseServerResponse(await fetch(externalSourceRequestUrl(base, info, provider)), info, provider, getLyricsSourceDefinition(provider, []).label); }
-  catch (error) { console.error(`[SpicyLyrics] ${provider} Worker failed`, error); return null; }
-}
-
-async function fetchCustom(info: TrackLyricsInfo, provider: LyricsSourceProviderId): Promise<ExternalLyricsResult | null> {
-  const server = parseCustomLyricsServers($customLyricsServers.get()).find((entry) => entry.id === provider); if (!server) return null;
-  try { return await parseServerResponse(await fetch(externalSourceRequestUrl(server.url, info)), info, provider, server.name); }
-  catch (error) { console.error(`[SpicyLyrics] custom server ${server.name} failed`, error); return null; }
-}
-
-async function timeout<T>(promise: Promise<T>, ms = 6500): Promise<T | null> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try { return await Promise.race([promise, new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), ms); })]); }
-  finally { if (timer) clearTimeout(timer); }
-}
-
-async function fetchProviderResult(
+async function fetchWorker(
   info: TrackLyricsInfo,
-  provider: LyricsSourceProviderId,
-  spicyRequest?: ReturnType<typeof spicyRaw>,
+  provider: "amlldb" | "qq" | "kugou" | "netease" | "soda",
+  signal: AbortSignal,
 ): Promise<ExternalLyricsResult | null> {
-  return provider === "spicy" ? fetchSpicy(info.id, "spl", "spicy", spicyRequest) :
-    provider === "apple" ? fetchSpicy(info.id, "aml", "apple", spicyRequest) :
-    provider === "spotify" ? fetchSpotify(info) :
-    provider === "musixmatch" ? fetchMusixmatch(info) :
-    provider === "lrclib" ? fetchLrclib(info) :
-    provider === "amlldb" || provider === "qq" || provider === "kugou" || provider === "netease" || provider === "soda" ? fetchWorker(info, provider) : fetchCustom(info, provider);
+  const base = normalizeLyricsServerUrl($externalLyricsWorkerUrl.get()); if (!base) return null;
+  const response = await fetch(externalSourceRequestUrl(base, info, provider), { signal });
+  return parseServerResponse(response, info, provider, getLyricsSourceDefinition(provider, []).label);
+}
+
+async function fetchCustom(
+  info: TrackLyricsInfo,
+  provider: `custom:${string}`,
+  signal: AbortSignal,
+): Promise<ExternalLyricsResult | null> {
+  const server = parseCustomLyricsServers($customLyricsServers.get()).find((entry) => entry.id === provider); if (!server) return null;
+  const response = await fetch(externalSourceRequestUrl(server.url, info), { signal });
+  return parseServerResponse(response, info, provider, server.name);
+}
+
+type ProviderAdapterContext = {
+  info: TrackLyricsInfo;
+  getSpicyRequest: () => ReturnType<typeof spicyRaw>;
+};
+
+type ProviderAdapter = {
+  acquire: (
+    context: ProviderAdapterContext,
+    signal: AbortSignal,
+  ) => Promise<ProviderAcquisitionOutcome<ExternalLyricsResult>>;
+};
+
+async function asProviderOutcome(
+  request: Promise<ExternalLyricsResult | null>,
+): Promise<ProviderAcquisitionOutcome<ExternalLyricsResult>> {
+  const result = await request;
+  if (result?.status === 503) return { kind: "queued" };
+  return result?.lyrics
+    ? { kind: "lyrics", result }
+    : { kind: "no-match" };
+}
+
+const BUILT_IN_PROVIDER_ADAPTERS: Record<BuiltInLyricsSourceId, ProviderAdapter> = {
+  spicy: {
+    acquire: ({ info, getSpicyRequest }) =>
+      asProviderOutcome(fetchSpicy(info.id, "spl", "spicy", getSpicyRequest())),
+  },
+  apple: {
+    acquire: ({ info, getSpicyRequest }) =>
+      asProviderOutcome(fetchSpicy(info.id, "aml", "apple", getSpicyRequest())),
+  },
+  spotify: {
+    acquire: ({ info }) => asProviderOutcome(fetchSpotify(info)),
+  },
+  musixmatch: {
+    acquire: ({ info }) => asProviderOutcome(fetchMusixmatch(info)),
+  },
+  lrclib: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchLrclib(info, signal)),
+  },
+  amlldb: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchWorker(info, "amlldb", signal)),
+  },
+  qq: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchWorker(info, "qq", signal)),
+  },
+  kugou: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchWorker(info, "kugou", signal)),
+  },
+  netease: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchWorker(info, "netease", signal)),
+  },
+  soda: {
+    acquire: ({ info }, signal) => asProviderOutcome(fetchWorker(info, "soda", signal)),
+  },
+};
+
+function providerAdapter(provider: LyricsSourceProviderId): ProviderAdapter {
+  if (!provider.startsWith("custom:")) {
+    return BUILT_IN_PROVIDER_ADAPTERS[provider as BuiltInLyricsSourceId];
+  }
+  return {
+    acquire: ({ info }, signal) =>
+      asProviderOutcome(fetchCustom(info, provider as `custom:${string}`, signal)),
+  };
 }
 
 type ProviderEntry = {
@@ -333,35 +392,66 @@ function finalizeSelection(
   mode: ReturnType<typeof $lyricsSelectionMode.get>,
 ): ExternalLyricsResult | null {
   const selection = selectLyricsCandidate(entries.map((entry) => entry.candidate), durationMs, mode, $prioritizeAppleMusicQuality.get());
-  $lyricsSelectionDiagnostics.set(selection.diagnostics);
   const chosen = entries.find((entry) => entry.candidate === selection.candidate);
   if (!chosen) return null;
   chosen.result.lyrics.SelectionDiagnostics = selection.diagnostics;
   return chosen.result;
 }
 
-export async function fetchLyricsFromProviders(uri: string, order: LyricsSourceProviderId[]): Promise<ExternalLyricsResult | null> {
+function reportProviderFailure(
+  provider: LyricsSourceProviderId,
+  outcome: ProviderAcquisitionOutcome<ExternalLyricsResult>,
+): void {
+  if (outcome.kind === "timeout") {
+    console.warn(`[SpicyLyrics] ${provider} acquisition timed out`);
+  } else if (outcome.kind === "error") {
+    console.error(`[SpicyLyrics] ${provider} acquisition failed`, outcome.error);
+  }
+}
+
+export async function fetchLyricsFromProviders(
+  uri: string,
+  order: LyricsSourceProviderId[],
+  parentSignal?: AbortSignal,
+): Promise<ExternalLyricsResult | null> {
+  if (parentSignal?.aborted) return null;
   const info = trackInfo(uri); if (!info) return null;
   const mode = $lyricsSelectionMode.get();
-  const spicyRequest = order.some((provider) => provider === "spicy" || provider === "apple") ? spicyRaw(info.id) : undefined;
-  $lyricsSelectionDiagnostics.set(null);
-  if (mode === "strict") {
-    for (const [orderIndex, provider] of order.entries()) {
-      const result = await timeout(fetchProviderResult(info, provider, spicyRequest));
-      if (result?.status === 503 && provider === "spicy") return result;
-      if (!result?.lyrics) continue;
-      return finalizeSelection([{ provider, result, candidate: { provider, orderIndex, lyrics: result.lyrics, match: result.match } }], info.durationMs, mode);
-    }
-    return null;
+  let sharedSpicyRequest: ReturnType<typeof spicyRaw> | undefined;
+  const context: ProviderAdapterContext = {
+    info,
+    getSpicyRequest: () => {
+      sharedSpicyRequest ??= spicyRaw(info.id);
+      return sharedSpicyRequest;
+    },
+  };
+  const records = await acquireProviderOutcomes(
+    order,
+    mode === "strict" ? "strict" : "concurrent",
+    (provider) => runProviderAcquisition(
+      (signal) => providerAdapter(provider).acquire(context, signal),
+      parentSignal,
+    ),
+  );
+
+  for (const { provider, outcome } of records) reportProviderFailure(provider, outcome);
+  if (records.some(({ outcome }) => outcome.kind === "queued")) {
+    return { lyrics: null, status: 503 };
   }
 
-  const fetched = await Promise.all(order.map(async (provider, orderIndex) => {
-    const result = await timeout(fetchProviderResult(info, provider, spicyRequest));
-    return { provider, orderIndex, result };
-  }));
-  const spicyUnavailable = fetched.find((entry) => entry.provider === "spicy" && entry.result?.status === 503);
-  if (spicyUnavailable?.result) return spicyUnavailable.result;
-  const entries = fetched.flatMap(({ provider, orderIndex, result }): ProviderEntry[] =>
-    result?.lyrics ? [{ provider, result, candidate: { provider, orderIndex, lyrics: result.lyrics, match: result.match } }] : []);
+  const entries = records.flatMap(({ provider, orderIndex, outcome }): ProviderEntry[] =>
+    outcome.kind === "lyrics"
+      ? [{
+        provider,
+        result: outcome.result,
+        candidate: {
+          provider,
+          orderIndex,
+          lyrics: outcome.result.lyrics,
+          match: outcome.result.match,
+        },
+      }]
+      : []
+  );
   return finalizeSelection(entries, info.durationMs, mode);
 }
