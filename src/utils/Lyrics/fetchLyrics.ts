@@ -167,8 +167,9 @@ async function finishTranslationInBackground(
   session: LyricsRequestSession,
 ): Promise<void> {
   try {
-    await translateLyrics(lyrics);
+    await translateLyrics(lyrics, { signal: session.signal });
   } catch (error) {
+    if (session.signal.aborted) return;
     lyricsCacheLogger.error("Background lyrics translation failed", error);
   }
   if (!session.isCurrent()) return;

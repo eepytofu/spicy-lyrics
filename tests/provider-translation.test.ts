@@ -60,6 +60,25 @@ test("word-synced provider translations use the same independent display lane", 
   assert.equal((lyrics as any).IncludesTranslation, true);
 });
 
+test("word-synced compatibility groups without an explicit Type keep translations", () => {
+  const lyrics = {
+    Type: "Syllable",
+    Content: [{
+      Lead: {
+        Syllables: [{ Text: "どうせ水は乾く土地さ" }],
+        TranslatedText: "反正水是干旱的土地上的",
+      },
+    }],
+  } as any;
+
+  assert.equal(captureSourceTranslations(lyrics), 1);
+  assert.equal(lyrics.Content[0].Lead.TranslatedText, undefined);
+  assert.equal(
+    lyrics.Content[0].Lead.ProviderTranslatedText,
+    "反正水是干旱的土地上的",
+  );
+});
+
 test("a normalized provider payload remains raw and preference-independent", () => {
   const lyrics = chineseProviderLine();
   normalizeProviderTranslations(lyrics);

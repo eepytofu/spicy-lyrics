@@ -4,6 +4,8 @@ import {
   batchTranslate,
   buildBatchChunks,
   buildBatchQuery,
+  clearTranslationCache,
+  effectiveTranslationSource,
   looksLikeRomanizationEcho,
   parseBatchTranslation,
   shouldTranslateLine,
@@ -58,17 +60,62 @@ test("translation guard rejects Korean romanization echoes", () => {
 
 test("English target translates short Latin lyric-looking lines", () => {
   assert.equal(shouldTranslateLine("Apna bana le piya", "eng", "en"), true);
+  assert.equal(effectiveTranslationSource("Apna bana le piya", "eng", "en"), "und");
   assert.equal(shouldTranslateLine("yeah", "eng", "en"), false);
+  assert.equal(effectiveTranslationSource("時は流れていく", "jpn", "en"), "jpn");
 });
 
-test("batch translation retries romanization echoes once individually", async () => {
+test("batch translation caches romanization echoes without individual retries", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (url: URL | RequestInfo) => {
+    requests.push(String(url));
+    return {
+      ok: true,
+      json: async () => [[["[[SPX_000]] Aldadynby,"]]],
+    } as Response;
+  };
+
+  try {
+    clearTranslationCache();
+    assert.deepEqual(await batchTranslate(["Алдадыңбы,"], "und", "en"), [""]);
+    assert.deepEqual(await batchTranslate(["Алдадыңбы,"], "und", "en"), [""]);
+    assert.equal(requests.length, 1);
+  } finally {
+    clearTranslationCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("known source language reaches Google instead of always using auto", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (url: URL | RequestInfo) => {
+    requests.push(String(url));
+    return {
+      ok: true,
+      json: async () => [[["[[SPX_000]] time flows on"]]],
+    } as Response;
+  };
+
+  try {
+    clearTranslationCache();
+    assert.deepEqual(await batchTranslate(["時は流れていく"], "jpn", "en"), ["time flows on"]);
+    assert.equal(new URL(requests[0]).searchParams.get("sl"), "ja");
+  } finally {
+    clearTranslationCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("only structurally missing batch entries retry individually", async () => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];
   globalThis.fetch = async (url: URL | RequestInfo) => {
     requests.push(String(url));
     const translated = requests.length === 1
-      ? "[[SPX_000]] Aldadynby,"
-      : "did you cheat";
+      ? "[[SPX_000]] first translated"
+      : "second translated";
     return {
       ok: true,
       json: async () => [[[translated]]],
@@ -76,9 +123,14 @@ test("batch translation retries romanization echoes once individually", async ()
   };
 
   try {
-    assert.deepEqual(await batchTranslate(["Алдадыңбы,"], "und", "en"), ["did you cheat"]);
+    clearTranslationCache();
+    assert.deepEqual(
+      await batchTranslate(["первая строка", "вторая строка"], "rus", "en"),
+      ["first translated", "second translated"],
+    );
     assert.equal(requests.length, 2);
   } finally {
+    clearTranslationCache();
     globalThis.fetch = originalFetch;
   }
 });
