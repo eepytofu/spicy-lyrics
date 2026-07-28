@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "jitendexRelease": "2026.07.09.0",
+    "jitendexSolverCommit": "1d3f994607c4ba1f90b6c2e5fb20f99fc5571278",
+    "jitendexSolverMode": "strict-informed",
+    "japaneseTextUtilsCommit": "a67bfbe",
+    "jitendexKnowledgeCommit": "5d422e5",
+    "jitendexOutputSha256": "b95d687cdf68f0fa62ac4ed158f324d021e596388d2dee2c609e312139685f28",
+    "specialPairsSha256": "2d467a8b4245b466c5f6415765b8e0be81f2d0c6e655fe00c9af5e412c2fa9eb",
+    "specialPairs": 461,
+    "kuromojiVersion": "0.1.2"
+  },
+  "filters": {
+    "releasedPairs": 299637,
+    "solverUnresolved": 167735,
+    "nonCompound": 4410,
+    "safeBroadFallback": 900,
+    "specialReadingFallback": 6,
+    "detailedCandidates": 126586,
+    "candidateSurfaces": 120209,
+    "singleTokenSurfaces": 38961,
+    "readingMatchedPairs": 37728
+  },
+  "oracle": {
+    "compressedBytes": 3444596,
+    "sha256": "f2f376606758f315c385f014d26bd6a976a36b76845e7bd60f409ee7b0e6da53",
+    "exact": 37465,
+    "divergent": 148,
+    "missing": 115,
+    "divergenceSamples": [
+      {
+        "surface": "一人天下",
+        "reading": "ひとりでんか",
+        "jitendex": "1:ひと|1:り|1:でん|1:か",
+        "jmdictFurigana": [
+          "2:ひとり|1:でん|1:か"
+        ]
+      },
+      {
+        "surface": "一人娘",
+        "reading": "ひとりむすめ",
+        "jitendex": "1:ひと|1:り|1:むすめ",
+        "jmdictFurigana": [
+          "2:ひとり|1:むすめ"
+        ]
+      },
+      {
+        "surface": "一人静",
+        "reading": "ひとりしずか",
+        "jitendex": "1:ひと|1:り|1:しずか",
+        "jmdictFurigana": [
+          "2:ひとり|1:しずか"
+        ]
+      },
+      {
+        "surface": "一文字",
+        "reading": "ひともじ",
+        "jitendex": "1:ひと|2:もじ",
+        "jmdictFurigana": [
+          "1:ひと|1:も|1:じ"
+        ]
+      },
+      {
+        "surface": "七五三縄",
+        "reading": "しめなわ",
+        "jitendex": "3:しめ|1:なわ",
+        "jmdictFurigana": [
+          "4:しめなわ"
+        ]
+      },
+      {
+        "surface": "三十一文字",
+        "reading": "みそひともじ",
+        "jitendex": "1:み|1:そ|1:ひと|2:もじ",
+        "jmdictFurigana": [
+          "1:み|1:そ|1:ひと|1:も|1:じ"
+        ]
+      },
+      {
+        "surface": "三椏",
+        "reading": "みつまた",
+        "jitendex": "1:みつ|1:また",
+        "jmdictFurigana": [
+          "2:みつまた"
+        ]
+      },
+      {
+        "surface": "上手",
+        "reading": "じょうず",
+        "jitendex": "1:じょう|1:ず",
+        "jmdictFurigana": [
+          "2:じょうず"
+        ]
+      },
+      {
+        "surface": "上手者",
+        "reading": "じょうずもの",
+        "jitendex": "1:じょう|1:ず|1:もの",
+        "jmdictFurigana": [
+          "2:じょうず|1:もの"
+        ]
+      },
+      {
+        "surface": "乙女",
+        "reading": "おとめ",
+        "jitendex": "1:おと|1:め",
+        "jmdictFurigana": [
+          "2:おとめ"
+        ]
+      },
+      {
+        "surface": "乙女子",
+        "reading": "おとめご",
+        "jitendex": "1:おと|1:め|1:ご",
+        "jmdictFurigana": [
+          "2:おとめ|1:ご"
+        ]
+      },
+      {
+        "surface": "乾咳",
+        "reading": "からせき",
+        "jitendex": "1:から|1:せき",
+        "jmdictFurigana": [
+          "2:からせき"
+        ]
+      },
+      {
+        "surface": "二人静",
+        "reading": "ふたりしずか",
+        "jitendex": "1:ふた|1:り|1:しずか",
+        "jmdictFurigana": [
+          "2:ふたり|1:しずか"
+        ]
+      },
+      {
+        "surface": "五人囃子",
+        "reading": "ごにんばやし",
+        "jitendex": "1:ご|1:にん|1:ばや|1:し",
+        "jmdictFurigana": [
+          "1:ご|1:にん|2:ばやし"
+        ]
+      },
+      {
+        "surface": "五十肩",
+        "reading": "ごじゅうかた",
+        "jitendex": "2:ごじゅう|1:かた",
+        "jmdictFurigana": [
+          "1:ご|1:じゅう|1:かた"
+        ]
+      },
+      {
+        "surface": "五十音",
+        "reading": "ごじゅうおん",
+        "jitendex": "2:ごじゅう|1:おん",
+        "jmdictFurigana": [
+          "1:ご|1:じゅう|1:おん"
+        ]
+      },
+      {
+        "surface": "五右衛門風呂",
+        "reading": "ごえもんぶろ",
+        "jitendex": "1:ご|2:え|1:もん|1:ぶ|1:ろ",
+        "jmdictFurigana": [
+          "1:ご|1:え|1:も|1:ん|1:ぶ|1:ろ"
+        ]
+      },
+      {
+        "surface": "人文字",
+        "reading": "ひともじ",
+        "jitendex": "1:ひと|2:もじ",
+        "jmdictFurigana": [
+          "1:ひと|1:も|1:じ"
+        ]
+      },
+      {
+        "surface": "伊呂波歌留多",
+        "reading": "いろはがるた",
+        "jitendex": "1:い|1:ろ|1:は|3:がるた",
+        "jmdictFurigana": [
+          "1:い|1:ろ|1:は|1:が|1:る|1:た"
+        ]
+      },
+      {
+        "surface": "全日本",
+        "reading": "ぜんにほん",
+        "jitendex": "1:ぜん|1:に|1:ほん",
+        "jmdictFurigana": [
+          "1:ぜん|2:にほん"
+        ]
+      }
+    ]
+  },
+  "output": {
+    "buckets": 256,
+    "entries": 37465,
+    "utf8Bytes": 994389,
+    "sha256": "0d620d50040fb65b0baa9fea4cccf6325b82451e96553de46045c79033ee6503",
+    "smallestBucketBytes": 3056,
+    "largestBucketBytes": 4848
+  }
+}

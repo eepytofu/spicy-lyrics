@@ -7,6 +7,8 @@
     "sc": "spicetify-creator",
     "dev": "spicetify-creator dev",
     "build": "spicetify-creator build",
+    "benchmark:furigana-geometry": "node --expose-gc --experimental-strip-types tools/japanese-furigana-geometry/benchmark.mjs",
+    "generate:furigana-geometry": "node tools/japanese-furigana-geometry/generate.mjs",
     "test:romanization": "node --experimental-strip-types --test tests/romanization-acceptance.test.ts tests/romanization-corpus.test.ts tests/japanese-reading.test.ts",
     "test:indic": "node --experimental-strip-types --test tests/indic-gating.test.ts",
     "test:translation": "node --experimental-strip-types --test tests/translation-batch.test.ts",
@@ -49,6 +51,7 @@
     "@types/bun": "latest",
     "@types/d3-ease": "^3.0.2",
     "@types/semver": "^7.7.1",
+    "kuromoji": "0.1.2",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.67.0"
   },

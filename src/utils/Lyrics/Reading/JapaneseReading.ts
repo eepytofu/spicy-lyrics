@@ -31,6 +31,7 @@ import {
   kuromojiJapaneseAnalyzer,
   normalizeJapaneseKana,
 } from "../Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
+import { lookupJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 
 export type FuriganaSegment = {
   start: number;
@@ -693,7 +694,17 @@ function buildFuriganaFromContext(
 
   for (const entry of context.entries) {
     if (entry.consumed) continue;
-    const tokenSegments = kanaReadingSegments(entry.surface, entry.readingKana);
+    const provenGeometry =
+      entry.readingProvenance === "providerExplicit"
+        ? undefined
+        : lookupJitendexFuriganaGeometry(entry.surface, entry.readingKana);
+    const tokenSegments = provenGeometry
+      ? provenGeometry.map((segment) => ({
+          text: segment.reading,
+          targetStart: segment.start,
+          targetEnd: segment.end,
+        }))
+      : kanaReadingSegments(entry.surface, entry.readingKana);
     const fallbackSegments =
       tokenSegments.length > 0 ? tokenSegments : entry.furigana ? [entry.furigana] : [];
 

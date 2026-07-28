@@ -124,6 +124,7 @@ The optional Worker has open CORS and no built-in authentication or rate limitin
 - [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper): provider search, matching, retrieval, and timed-lyrics parsing reference for the Worker.
 - [MuttonString/Furigana](https://github.com/MuttonString/Furigana) and [Hxjjxg/Furigana-api-fixed](https://github.com/Hxjjxg/Furigana-api-fixed): Japanese character-repair references for lyrics from Chinese services.
 - [Kuroshiro](https://github.com/hexenq/kuroshiro), [Kuromoji.js](https://github.com/takuyaa/kuromoji.js), [Pinyin Pro](https://github.com/zh-lx/pinyin-pro), and [OpenCC.js](https://github.com/nk2028/opencc-js): local reading analysis and CJK conversion.
+- [Jitendex](https://jitendex.org/), [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana), and EDRDG's [JMdict/KANJIDIC](https://www.edrdg.org/edrdg/licence.html): source and validation data for generated Japanese compound-furigana geometry.
 - [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db): community TTML database.
 - [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn): Worker architecture reference.
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC): acknowledged by retained upstream compatibility code.
