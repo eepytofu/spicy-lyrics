@@ -238,6 +238,112 @@ export function okuriganaAnchoredKanjiRunReading(
     : normalizedKana.slice(safeCursor);
 }
 
+function multiRunKanaReadingSegments(
+  chars: readonly string[],
+  utf16Offsets: readonly number[],
+  kana: string
+): TokenFuriganaReading[] | undefined {
+  type SurfacePart =
+    | { kind: "kanji"; start: number; end: number }
+    | { kind: "kana"; text: string };
+
+  const parts: SurfacePart[] = [];
+  for (let index = 0; index < chars.length; ) {
+    const start = index;
+    const kind = KanjiLikeCharTest.test(chars[index])
+      ? "kanji"
+      : KanaCharTest.test(chars[index])
+        ? "kana"
+        : undefined;
+    if (!kind) return undefined;
+
+    while (
+      index < chars.length &&
+      (kind === "kanji"
+        ? KanjiLikeCharTest.test(chars[index])
+        : KanaCharTest.test(chars[index]))
+    ) {
+      index += 1;
+    }
+
+    parts.push(
+      kind === "kanji"
+        ? { kind, start, end: index }
+        : { kind, text: chars.slice(start, index).join("") }
+    );
+  }
+
+  const memo = new Map<string, TokenFuriganaReading[] | null>();
+  const align = (
+    partIndex: number,
+    readingCursor: number
+  ): TokenFuriganaReading[] | undefined => {
+    const memoKey = `${partIndex}:${readingCursor}`;
+    if (memo.has(memoKey)) return memo.get(memoKey) || undefined;
+
+    if (partIndex >= parts.length) {
+      const result = readingCursor === kana.length ? [] : undefined;
+      memo.set(memoKey, result || null);
+      return result;
+    }
+
+    const part = parts[partIndex];
+    if (part.kind === "kana") {
+      const result = kana.startsWith(part.text, readingCursor)
+        ? align(partIndex + 1, readingCursor + part.text.length)
+        : undefined;
+      memo.set(memoKey, result || null);
+      return result;
+    }
+
+    const next = parts[partIndex + 1];
+    if (!next) {
+      const text = kana.slice(readingCursor);
+      const result = text
+        ? [
+            {
+              text,
+              targetStart: utf16Offsets[part.start],
+              targetEnd: utf16Offsets[part.end],
+            },
+          ]
+        : undefined;
+      memo.set(memoKey, result || null);
+      return result;
+    }
+    if (next.kind !== "kana") {
+      memo.set(memoKey, null);
+      return undefined;
+    }
+
+    // Try Kana anchors from left to right, but accept one only when every
+    // remaining anchor can still be aligned. This prevents a final repeated
+    // anchor from swallowing earlier runs, as in 離れ離れ[はなればなれ].
+    let anchorStart = kana.indexOf(next.text, readingCursor + 1);
+    while (anchorStart >= 0) {
+      const remaining = align(partIndex + 2, anchorStart + next.text.length);
+      if (remaining) {
+        const result = [
+          {
+            text: kana.slice(readingCursor, anchorStart),
+            targetStart: utf16Offsets[part.start],
+            targetEnd: utf16Offsets[part.end],
+          },
+          ...remaining,
+        ];
+        memo.set(memoKey, result);
+        return result;
+      }
+      anchorStart = kana.indexOf(next.text, anchorStart + 1);
+    }
+
+    memo.set(memoKey, null);
+    return undefined;
+  };
+
+  return align(0, 0);
+}
+
 function kanaReadingSegments(surface: string, reading: string): TokenFuriganaReading[] {
   const kana = resolveJapaneseTokenKanaReading(surface, reading);
   if (!kana || kana === "*") return [];
@@ -265,10 +371,22 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
     return [{ text: kana, targetStart: 0, targetEnd: normalizedSurface.length }];
   }
 
+  const kanjiRunCount = chars.reduce(
+    (count, char, index) =>
+      KanjiLikeCharTest.test(char) && !KanjiLikeCharTest.test(chars[index - 1] || "")
+        ? count + 1
+        : count,
+    0
+  );
+  if (kanjiRunCount > 1) {
+    // Multi-run words need all Kana anchors to agree. If they do not, return
+    // no detailed split so the caller uses its conservative whole-token ruby.
+    return multiRunKanaReadingSegments(chars, utf16Offsets, kana) || [];
+  }
+
   const segments: TokenFuriganaReading[] = [];
   let kanaCursor = 0;
   let charIndex = 0;
-  let kanjiRunCount = 0;
   let coveredRunCount = 0;
 
   while (charIndex < chars.length) {
@@ -288,7 +406,6 @@ function kanaReadingSegments(surface: string, reading: string): TokenFuriganaRea
     const start = charIndex;
     while (charIndex < chars.length && KanjiLikeCharTest.test(chars[charIndex])) charIndex += 1;
     const end = charIndex;
-    kanjiRunCount += 1;
     const followingKana: string[] = [];
     for (let i = charIndex; i < chars.length && KanaCharTest.test(chars[i]); i += 1) {
       followingKana.push(chars[i]);

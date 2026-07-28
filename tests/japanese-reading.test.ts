@@ -3,12 +3,49 @@ import { test } from "node:test";
 import {
   buildJapaneseLineTextMap,
   okuriganaAnchoredKanjiRunReading,
+  prepareJapaneseLineAnalysis,
   resolveJapaneseTokenKanaReading,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
+import type {
+  JapaneseAnalyzer,
+  JapaneseAnalyzerToken,
+} from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
 import {
   furiganaSegmentKey,
   utf16FuriganaSegmentKey,
 } from "../src/utils/Lyrics/Processing/Japanese/FuriganaIdentity.ts";
+
+function fixtureAnalyzer(surface: string, readingKana: string): JapaneseAnalyzer {
+  const token: JapaneseAnalyzerToken = {
+    surface,
+    start: 0,
+    end: surface.length,
+    readingKana,
+    pronunciationKana: readingKana,
+    partOfSpeech: "other",
+    morphologyFeatures: [],
+    baseForm: surface,
+    conjugationType: "",
+    conjugationForm: "",
+    provenance: { analyzerId: "reading-fixture", rangeSource: "native" },
+  };
+  return {
+    id: "reading-fixture",
+    async analyze(text) {
+      assert.equal(text, surface);
+      return [token];
+    },
+  };
+}
+
+async function projectedFurigana(surface: string, readingKana: string) {
+  return (
+    await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+      analyzer: fixtureAnalyzer(surface, readingKana),
+      kanaRomanizer: (kana) => kana,
+    })
+  )?.reading.furigana.map(({ start, end, reading }) => ({ start, end, reading }));
+}
 
 test("furigana identity matches UTF-16 readings to code-point render plans", () => {
   const source = "😀今日";
@@ -32,6 +69,39 @@ test("unknown Katakana tokens fall back to their written kana", () => {
   );
   assert.equal(resolveJapaneseTokenKanaReading("大歓声", ""), "");
   assert.equal(resolveJapaneseTokenKanaReading(")", ""), "");
+});
+
+test("repeated Kana anchors distribute readings across every Kanji run", async () => {
+  const analysis = await prepareJapaneseLineAnalysis("離れ離れ", undefined, undefined, {
+    analyzer: fixtureAnalyzer("離れ離れ", "はなればなれ"),
+    kanaRomanizer: (kana) => kana,
+  });
+
+  assert.equal(analysis?.reading.romaji, "はなればなれ");
+  assert.deepEqual(
+    analysis?.reading.furigana.map(({ start, end, reading }) => ({ start, end, reading })),
+    [
+      { start: 0, end: 1, reading: "はな" },
+      { start: 2, end: 3, reading: "ばな" },
+    ]
+  );
+});
+
+test("multi-run alignment handles distinct and leading Kana anchors", async () => {
+  assert.deepEqual(await projectedFurigana("取り扱い", "とりあつかい"), [
+    { start: 0, end: 1, reading: "と" },
+    { start: 2, end: 3, reading: "あつか" },
+  ]);
+  assert.deepEqual(await projectedFurigana("お願い致します", "おねがいいたします"), [
+    { start: 1, end: 2, reading: "ねが" },
+    { start: 3, end: 4, reading: "いた" },
+  ]);
+});
+
+test("multi-run alignment abstains when every Kana anchor cannot be proven", async () => {
+  assert.deepEqual(await projectedFurigana("離れ離れ", "はなればな"), [
+    { start: 0, end: 4, reading: "はなればな" },
+  ]);
 });
 
 test("Japanese line text map keeps Japanese TTML fragments compact", () => {
