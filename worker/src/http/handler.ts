@@ -12,6 +12,7 @@ const cors = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
   "Access-Control-Expose-Headers": "X-Spicy-Lyrics-Match",
+  "Access-Control-Max-Age": "86400",
 };
 
 function response(
@@ -19,7 +20,10 @@ function response(
   status: number,
   headers: HeadersInit = {},
 ): Response {
-  return new Response(body, { status, headers: { ...cors, ...headers } });
+  return new Response(body, {
+    status,
+    headers: { ...cors, "Cache-Control": "no-store", ...headers },
+  });
 }
 
 function matchHeader(match: unknown): Record<string, string> {
@@ -100,7 +104,11 @@ export function createWorkerHandler(
       adapters,
     );
     if (outcome.kind === "lyrics") return successfulResponse(outcome.payload);
-    if (outcome.kind === "no-match") return response("Lyrics not found", 404);
+    if (outcome.kind === "no-match") {
+      return response("Lyrics not found", 404, {
+        "Cache-Control": "public, max-age=60",
+      });
+    }
     if (outcome.kind === "timeout") return response("Upstream provider timed out", 504);
     if (outcome.kind === "aborted") return response("Request aborted", 499);
 

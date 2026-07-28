@@ -43,6 +43,8 @@ describe("Worker HTTP boundary", () => {
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(response.headers.get("Access-Control-Allow-Methods")).toBe("GET, OPTIONS");
+    expect(response.headers.get("Access-Control-Max-Age")).toBe("86400");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(adapter).not.toHaveBeenCalled();
   });
 
@@ -133,6 +135,7 @@ describe("Worker HTTP boundary", () => {
       adapters("qq", async () => undefined),
     )(request());
     expect(noMatch.status).toBe(404);
+    expect(noMatch.headers.get("Cache-Control")).toBe("public, max-age=60");
 
     const timeout = await createWorkerHandler(
       adapters("qq", async () => {
@@ -140,6 +143,7 @@ describe("Worker HTTP boundary", () => {
       }),
     )(request());
     expect(timeout.status).toBe(504);
+    expect(timeout.headers.get("Cache-Control")).toBe("no-store");
 
     const controller = new AbortController();
     controller.abort();
@@ -149,6 +153,7 @@ describe("Worker HTTP boundary", () => {
       }),
     )(request("qq", trackQuery, { signal: controller.signal }));
     expect(aborted.status).toBe(499);
+    expect(aborted.headers.get("Cache-Control")).toBe("no-store");
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
     const failed = await createWorkerHandler(
@@ -157,6 +162,7 @@ describe("Worker HTTP boundary", () => {
       }),
     )(request());
     expect(failed.status).toBe(502);
+    expect(failed.headers.get("Cache-Control")).toBe("no-store");
     expect(consoleError).toHaveBeenCalledWith(
       "[worker] qq failed",
       expect.any(Error),

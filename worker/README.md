@@ -56,9 +56,11 @@ Required query data:
 /v1/lyrics/qq/spotify-id?title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
-Successful responses set `Cache-Control: public, max-age=3600`. Provider JSON can include `SourceMatch` and `ProviderCredits`. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
+Successful responses are cached for one hour. A safe no-match result is cached for one minute so repeated source checks do not immediately query the same provider again. Invalid requests, cancellations, timeouts, and upstream failures are not cached.
 
-The Worker returns `400` for invalid metadata, `404` for an unknown route or no safe match, and `502` when an upstream request fails.
+Provider JSON can include `SourceMatch` and `ProviderCredits`. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
+
+The Worker returns `400` for invalid metadata, `404` for an unknown route or no safe match, `504` when a provider times out, and `502` when an upstream request fails.
 
 The Worker allows cross-origin `GET` and `OPTIONS`. It has no built-in authentication or rate limiting. Add Cloudflare controls before using it as a public high-traffic service.
 
