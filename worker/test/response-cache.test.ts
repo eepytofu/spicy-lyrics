@@ -32,27 +32,25 @@ describe("Worker response cache", () => {
     expect(responseCache.put).not.toHaveBeenCalled();
   });
 
-  it("stores public successes and bounded no-match responses", async () => {
-    for (const [status, maxAge] of [[200, 3600], [404, 60]] as const) {
-      const responseCache = cache();
-      const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
-      const handler = vi.fn(async () => new Response("fresh", {
-        status,
-        headers: { "Cache-Control": `public, max-age=${maxAge}` },
-      }));
+  it("stores public successful responses", async () => {
+    const responseCache = cache();
+    const waitUntil = vi.fn<(promise: Promise<unknown>) => void>();
+    const handler = vi.fn(async () => new Response("fresh", {
+      status: 200,
+      headers: { "Cache-Control": "public, max-age=3600" },
+    }));
 
-      await withResponseCache(handler, responseCache, waitUntil)(
-        new Request("https://worker.test/v1/lyrics/qq/id?title=Song"),
-      );
+    await withResponseCache(handler, responseCache, waitUntil)(
+      new Request("https://worker.test/v1/lyrics/qq/id?title=Song"),
+    );
 
-      expect(responseCache.put).toHaveBeenCalledOnce();
-      expect(waitUntil).toHaveBeenCalledOnce();
-      await waitUntil.mock.calls[0][0];
-    }
+    expect(responseCache.put).toHaveBeenCalledOnce();
+    expect(waitUntil).toHaveBeenCalledOnce();
+    await waitUntil.mock.calls[0][0];
   });
 
-  it("does not cache preflight, invalid, timeout, abort, or failure responses", async () => {
-    for (const status of [400, 499, 502, 504]) {
+  it("does not cache preflight, no-match, invalid, timeout, abort, or failure responses", async () => {
+    for (const status of [400, 404, 499, 502, 504]) {
       const responseCache = cache();
       const handler = vi.fn(async () => new Response("not reusable", {
         status,

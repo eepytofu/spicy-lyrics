@@ -135,7 +135,7 @@ describe("Worker HTTP boundary", () => {
       adapters("qq", async () => undefined),
     )(request());
     expect(noMatch.status).toBe(404);
-    expect(noMatch.headers.get("Cache-Control")).toBe("public, max-age=60");
+    expect(noMatch.headers.get("Cache-Control")).toBe("no-store");
 
     const timeout = await createWorkerHandler(
       adapters("qq", async () => {

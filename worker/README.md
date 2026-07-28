@@ -56,7 +56,7 @@ Required query data:
 /v1/lyrics/qq/spotify-id?title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
-Successful responses are cached for one hour. A safe no-match result is cached for one minute so repeated source checks do not immediately query the same provider again. Invalid requests, cancellations, timeouts, and upstream failures are not cached.
+Successful responses are cached for one hour. No-match results, invalid requests, cancellations, timeouts, and upstream failures are not cached.
 
 Provider JSON can include `SourceMatch` and `ProviderCredits`. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
 
