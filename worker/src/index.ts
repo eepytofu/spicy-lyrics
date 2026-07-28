@@ -1,14 +1,7 @@
 import { createWorkerHandler } from "./http/handler";
-import { withResponseCache } from "./http/cache";
 
-const handler = createWorkerHandler();
+const fetch = createWorkerHandler();
 
 export default {
-  fetch(request, _env, context) {
-    return withResponseCache(
-      handler,
-      caches.default,
-      (promise) => context.waitUntil(promise),
-    )(request);
-  },
+  fetch,
 } satisfies ExportedHandler;
