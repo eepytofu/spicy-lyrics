@@ -43,6 +43,37 @@ test("lyric sidecars remain stable geometry rather than animated blocks", () => 
   assert.doesNotMatch(animatorSource, /TranslationElement/u);
 });
 
+test("derived lyric roles use explicit weight, brightness, and stable glow", () => {
+  assert.doesNotMatch(
+    mainCss,
+    /LyricsContent:not\(:has\(\.LyricsNotice\)\)\s*\*\s*\{/u,
+  );
+
+  const furigana = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading",
+  );
+  assert.match(furigana, /font-weight:\s*700/u);
+  assert.match(
+    furigana,
+    /rgba\(255,\s*255,\s*255,\s*var\(--gradient-alpha,\s*0\.85\)\)/u,
+  );
+  assert.match(furigana, /text-shadow:\s*var\(--DerivedTextGlowDef\)/u);
+
+  for (const selector of [
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below",
+  ]) {
+    const body = ruleBody(selector);
+    assert.match(body, /font-weight:\s*700/u);
+    assert.match(body, /text-shadow:\s*var\(--DerivedTextGlowDef\)/u);
+  }
+
+  const translation = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below",
+  );
+  assert.match(translation, /font-style:\s*normal/u);
+});
+
 test("timed romaji and line sidecars follow paint-only extra gradient state", () => {
   assert.match(
     animatorSource,
