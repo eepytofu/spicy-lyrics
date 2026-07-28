@@ -88,8 +88,6 @@ export type TimedSyllableGroup = JapaneseReadable & {
   EndTime: number;
   Syllables: TimedSyllableEntry[];
   TranslatedText?: string;
-  IsProviderInfo?: boolean;
-  IsMetadata?: boolean;
 };
 
 export type JapaneseTimedTextSpan = {

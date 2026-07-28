@@ -1,3 +1,5 @@
+import type { BoundarySemanticKind } from "./BoundaryResolver.ts";
+
 export type TextRange = {
   readonly startCp: number;
   readonly endCp: number;
@@ -27,12 +29,6 @@ export type ParsedLine = {
   readonly providerAnnotations?: Readonly<Record<string, unknown>>;
 };
 
-export type ParsedDocument = {
-  readonly id: string;
-  readonly language: string;
-  readonly lines: readonly ParsedLine[];
-};
-
 export type CanonicalSpanMapping = {
   readonly spanId: string;
   readonly canonicalRange: TextRange;
@@ -41,6 +37,10 @@ export type CanonicalSpanMapping = {
 export type Boundary = {
   readonly offsetCp: number;
   readonly kind: BoundaryKind;
+  readonly semanticKind: Extract<
+    BoundarySemanticKind,
+    "authoredWhitespace" | "providerSemantic"
+  >;
   readonly confidence: number;
   readonly provenance: string;
 };
@@ -50,11 +50,6 @@ export type CanonicalLine = {
   readonly text: string;
   readonly spanMappings: readonly CanonicalSpanMapping[];
   readonly boundaries: readonly Boundary[];
-};
-
-export type ScriptRun = {
-  readonly script: string;
-  readonly canonicalRange: TextRange;
 };
 
 export type ReadingUnit = {
@@ -106,48 +101,10 @@ export type RenderPlan = {
   readonly primaryScript?: "Japanese" | "Chinese";
 };
 
-export type LanguageContext = {
-  readonly language: string;
-  readonly scripts?: readonly string[];
-};
-
-export type ReadingOptions = Readonly<Record<string, unknown>>;
 export type ValidationResult = { readonly valid: boolean; readonly errors: readonly string[] };
 
-export interface ProviderAdapter<Input = unknown> {
-  parse(input: Input): ParsedDocument;
-}
-
-export interface CanonicalLineBuilder {
-  build(line: ParsedLine): CanonicalLine;
-}
-
-export interface ScriptPartitioner {
-  partition(line: CanonicalLine, context: LanguageContext): readonly ScriptRun[];
-}
-
-export interface ReadingProcessor {
-  supports(run: ScriptRun, context: LanguageContext): boolean;
-  annotate(
-    line: CanonicalLine,
-    run: ScriptRun,
-    options: ReadingOptions
-  ): ReadingAnnotation | Promise<ReadingAnnotation>;
-}
-
-export interface ReadingPlanValidator {
-  validate(line: CanonicalLine, annotation: ReadingAnnotation): ValidationResult;
-}
-
-export interface RenderPlanBuilder {
-  build(
-    line: ParsedLine,
-    canonical: CanonicalLine,
-    annotations: readonly ReadingAnnotation[]
-  ): RenderPlan;
-}
-
-// Phase-0 experimental model retained for corpus evidence only. Production has no caller.
+// Korean corpus-only model retained until the separately scoped Korean consolidation.
+// Production rendering uses CanonicalLine and RenderPlan above.
 export type NormalizedSpanRef = { readonly spanId: number; readonly source: TextRange };
 export type NormalizedBoundary = {
   readonly offsetCp: number;

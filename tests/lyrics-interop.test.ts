@@ -16,8 +16,30 @@ test("interop exposes original static text and render-plan romanization separate
   });
 
   assert.equal(snapshot?.lines[0]?.originalText, "月亮");
+  assert.equal(snapshot?.lines[0]?.providerText, "月亮");
+  assert.equal(snapshot?.lines[0]?.displayText, "月亮");
   assert.equal(snapshot?.lines[0]?.readingText, "yuè liàng");
   assert.equal(snapshot?.lines[0]?.id, "lead:0");
+});
+
+test("interop keeps normalized originalText as the version-one compatibility field", () => {
+  const snapshot = buildLyricsInteropSnapshot({
+    Type: "Static",
+    uri: "spotify:track:interop-whitespace",
+    id: "interop-whitespace",
+    Lines: [{
+      Text: "  ぶち壊してshout   it\tout loud  ",
+      RomanizedText: "buchikowashiteshout it out loud",
+    }],
+  });
+
+  assert.equal(snapshot?.lines[0]?.originalText, "ぶち壊してshout it out loud");
+  assert.equal(
+    snapshot?.lines[0]?.providerText,
+    "  ぶち壊してshout   it\tout loud  ",
+  );
+  assert.equal(snapshot?.lines[0]?.displayText, "ぶち壊して shout it out loud");
+  assert.equal(snapshot?.lines[0]?.readingText, "buchikowashite shout it out loud");
 });
 
 test("interop reads Japanese group readings without requiring syllable RomanizedText", () => {
@@ -86,7 +108,18 @@ test("interop keeps Chinese-provider Japanese source text after display repair",
   });
 
   assert.equal(snapshot?.lines[0]?.originalText, "梦见ては");
+  assert.equal(snapshot?.lines[0]?.providerText, "梦见ては");
+  assert.equal(snapshot?.lines[0]?.displayText, "夢見ては");
   assert.deepEqual(snapshot?.lines[0]?.words?.map((word) => word.text), ["梦", "见", "て", "は"]);
+  assert.deepEqual(
+    snapshot?.lines[0]?.words?.map((word) => [word.providerText, word.displayText]),
+    [
+      ["梦", "夢"],
+      ["见", "見"],
+      ["て", "て"],
+      ["は", "は"],
+    ],
+  );
   assert.equal(snapshot?.lines[0]?.readingText, "yumemite wa");
 });
 

@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import {
   alignJapaneseReadingUnitTexts,
   annotateJapaneseLine,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
 import { buildJapanesePackageParsedLine } from "../src/utils/Lyrics/Processing/Japanese/JapanesePackageProcessor.ts";
-import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
+import { buildRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import {
   applyJapaneseReadingToSyllables,
   buildJapaneseLineTextMap,
@@ -18,10 +18,10 @@ test("Japanese annotation keeps split spans as unique timing owners", async () =
   const line = { id: "jp", displayText: "だんだん剥がれてく", paragraphProvenance: "lineBoundary" as const,
     spans: ["だん", "だん", "剥", "がれて", "く"].map((text, index) => ({ id: String(index), rawText: text,
       cleanText: text, startMs: index * 100, endMs: (index + 1) * 100, providerPartOfWord: true })) };
-  const canonical = new DefaultCanonicalLineBuilder().build(line);
+  const canonical = buildCanonicalLine(line);
   const annotation = await annotateJapaneseLine(canonical, "dandan hagareteku");
   assert.ok(annotation);
-  const plan = new DefaultRenderPlanBuilder().build(line, canonical, [annotation!]);
+  const plan = buildRenderPlan(line, canonical, [annotation!]);
   assert.equal(plan.timedReadingUnits.length, 5);
   assert.equal(new Set(plan.timedReadingUnits.map((unit) => unit.spanId)).size, 5);
   assert.equal(plan.joinedDisplayText.length > 0, true);
@@ -47,7 +47,7 @@ test("structured-provider Japanese lines keep authored English spaces without du
     map.spans,
     syllables.map((_, index) => ({ StartTime: index * 100, EndTime: (index + 1) * 100 })),
   );
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
 
   assert.equal(canonical.text, "ぶち壊して shout it out loud");
   assert.equal(new Set(canonical.spanMappings.map((unit) => unit.spanId)).size, syllables.length);
@@ -92,7 +92,7 @@ test("Japanese furigana ranges are exported as code-point coordinates", async ()
   const line = { id: "astral-jp", displayText: "😀今日", paragraphProvenance: "lineBoundary" as const,
     spans: [{ id: "0", rawText: "😀", cleanText: "😀", startMs: 0, endMs: 100, providerPartOfWord: true },
       { id: "1", rawText: "今日", cleanText: "今日", startMs: 100, endMs: 200, providerPartOfWord: false }] };
-  const canonical = new DefaultCanonicalLineBuilder().build(line);
+  const canonical = buildCanonicalLine(line);
   const annotation = await annotateJapaneseLine(canonical, "😀 kyou");
   for (const segment of (annotation?.furigana || []) as any[]) {
     assert.ok(segment.canonicalRange.startCp >= 1);
@@ -157,8 +157,8 @@ test("compound explicit provenance crosses timed syllables and reaches romaji ow
   const line = { id: "compound", displayText: "永久に", paragraphProvenance: "lineBoundary" as const,
     spans: ["永", "久", "に"].map((text, index) => ({ id: String(index), rawText: text,
       cleanText: text, startMs: index * 100, endMs: (index + 1) * 100, providerPartOfWord: true })) };
-  const canonical = new DefaultCanonicalLineBuilder().build(line);
-  const result = new DefaultRenderPlanBuilder().build(line, canonical, [{
+  const canonical = buildCanonicalLine(line);
+  const result = buildRenderPlan(line, canonical, [{
     processor: "Japanese",
     mode: "romaji",
     provenance: "local",

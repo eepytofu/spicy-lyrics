@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
-import { DefaultRenderPlanBuilder } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import { annotateKoreanLine } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
 import { romanizeCantonese } from "../src/utils/Lyrics/Fork/Romanization.ts";
 import type { ParsedLine, ReadingAnnotation } from "../src/utils/Lyrics/Processing/Model.ts";
@@ -24,7 +24,7 @@ function charSpans(text: string): ParsedLine {
 
 test("render plan builder carries typed annotation furigana", () => {
   const parsed = charSpans("AB");
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
   const annotation: ReadingAnnotation = {
     processor: "Japanese",
     mode: "romaji",
@@ -38,12 +38,12 @@ test("render plan builder carries typed annotation furigana", () => {
     })),
     furigana: [{ canonicalRange: { startCp: 0, endCp: 2 }, reading: "かな", provenance: "local" }],
   };
-  const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
+  const plan = buildRenderPlan(parsed, canonical, [annotation]);
   assert.deepEqual(plan.furigana, annotation.furigana);
 });
 
 test("korean annotation stays aligned when normalization inserts whitespace", () => {
-  const canonical = new DefaultCanonicalLineBuilder().build(charSpans("사랑합니다"));
+  const canonical = buildCanonicalLine(charSpans("사랑합니다"));
   const annotation = annotateKoreanLine(canonical, "rrStandard");
   assert.equal(annotation.units.map((unit) => unit.text).join(""), "sarang hapnida");
   assert.deepEqual(

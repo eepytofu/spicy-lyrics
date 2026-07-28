@@ -1,0 +1,139 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import {
+  applyLineState,
+  finiteAnimationValue,
+  getElementState,
+  getProgressPercentage,
+  safeAnimationDelay,
+  setClassPresence,
+  shouldHideDotLine,
+  timedGroupEnvelopeAt,
+  wordGradientTargets,
+} from "../src/utils/Lyrics/Animator/Lyrics/AnimatorState.ts";
+
+const animatorSource = readFileSync(
+  new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
+  "utf8"
+);
+
+class FakeClassList {
+  readonly values = new Set<string>();
+
+  toggle(className: string, force?: boolean): boolean {
+    const present = force ?? !this.values.has(className);
+    if (present) this.values.add(className);
+    else this.values.delete(className);
+    return present;
+  }
+}
+
+test("animation state keeps exact start/end and zero-duration semantics", () => {
+  assert.equal(getElementState(99, 100, 200), "NotSung");
+  assert.equal(getElementState(100, 100, 200), "Active");
+  assert.equal(getElementState(199, 100, 200), "Active");
+  assert.equal(getElementState(200, 100, 200), "Sung");
+  assert.equal(getElementState(100, 100, 100), "Sung");
+
+  assert.equal(getProgressPercentage(99, 100, 200), 0);
+  assert.equal(getProgressPercentage(100, 100, 200), 0);
+  assert.equal(getProgressPercentage(150, 100, 200), 0.5);
+  assert.equal(getProgressPercentage(200, 100, 200), 1);
+  assert.equal(getProgressPercentage(100, 100, 100), 0);
+  assert.equal(getProgressPercentage(101, 100, 100), 1);
+});
+
+test("forward, pause, backward, and rapid seeks resolve deterministically", () => {
+  const positions = [90, 120, 120, 190, 250, 150, 50, 180];
+  assert.deepEqual(
+    positions.map((position) => getElementState(position, 100, 200)),
+    ["NotSung", "Active", "Active", "Active", "Sung", "Active", "NotSung", "Active"]
+  );
+});
+
+test("animation delay guards NaN, infinity, and browser-clamped negatives", () => {
+  assert.equal(safeAnimationDelay(250, 1000), 250);
+  assert.equal(safeAnimationDelay(-25, 1000), 0);
+  assert.equal(safeAnimationDelay(Number.NaN, 1000), 1000);
+  assert.equal(safeAnimationDelay(Number.POSITIVE_INFINITY, 1000), 1000);
+  assert.equal(safeAnimationDelay(Number.NaN, Number.NaN), 0);
+  assert.equal(finiteAnimationValue(undefined, 0.75), 0.75);
+  assert.equal(finiteAnimationValue(Number.NaN, 0.75), 0.75);
+  assert.equal(finiteAnimationValue(0.5, 0.75), 0.5);
+});
+
+test("line state writes one mutually exclusive class set", () => {
+  const classList = new FakeClassList();
+  const target = { classList };
+
+  applyLineState(target, "Active");
+  assert.deepEqual([...classList.values], ["Active"]);
+
+  applyLineState(target, "Sung");
+  assert.deepEqual([...classList.values], ["Sung"]);
+
+  applyLineState(target, "NotSung");
+  assert.deepEqual([...classList.values], ["NotSung"]);
+
+  setClassPresence(target, "pre-hidden", true);
+  assert.equal(classList.values.has("pre-hidden"), true);
+  setClassPresence(target, "pre-hidden", false);
+  assert.equal(classList.values.has("pre-hidden"), false);
+});
+
+test("simple and full word gradients keep their distinct paint ranges", () => {
+  assert.deepEqual(wordGradientTargets("NotSung", 0, false), {
+    base: -20,
+    extra: -40,
+  });
+  assert.deepEqual(wordGradientTargets("Active", 0.5, false), {
+    base: 40,
+    extra: 30,
+  });
+  assert.deepEqual(wordGradientTargets("NotSung", 0, true), {
+    base: -50,
+    extra: -50,
+  });
+  assert.deepEqual(wordGradientTargets("Active", 0.5, true), {
+    base: 10,
+    extra: 10,
+  });
+  assert.deepEqual(wordGradientTargets("Sung", 0, false), {
+    base: 100,
+    extra: 100,
+  });
+});
+
+test("timed group attack, hold, and release remain monotonic", () => {
+  const times = {
+    start: 100,
+    firstEnd: 200,
+    lastStart: 400,
+    end: 500,
+  };
+
+  assert.equal(timedGroupEnvelopeAt(times, 50, 0.7), 0);
+  assert.equal(timedGroupEnvelopeAt(times, 150, 0.7), 0.5);
+  assert.equal(timedGroupEnvelopeAt(times, 250, 0.7), 0.7);
+  assert.equal(timedGroupEnvelopeAt(times, 420, 0.7), 0.7);
+  assert.equal(timedGroupEnvelopeAt(times, 480, 0.7), 0.8);
+  assert.equal(timedGroupEnvelopeAt(times, 500, 0.7), 1);
+});
+
+test("dot-line pre-hide state follows timeline direction", () => {
+  assert.equal(shouldHideDotLine("NotSung", 0, 1000, 200), true);
+  assert.equal(shouldHideDotLine("Active", 700, 1000, 200), false);
+  assert.equal(shouldHideDotLine("Active", 801, 1000, 200), true);
+  assert.equal(shouldHideDotLine("Sung", 1000, 1000, 200), false);
+});
+
+test("live animator has no dormant dot-group or invalid fallback paths", () => {
+  assert.doesNotMatch(
+    animatorSource,
+    /DotGroupAnimations|_createDotGroupSprings|_calculateOpacity|_calculateLineGlowOpacity/u
+  );
+  assert.doesNotMatch(animatorSource, /Number\([^)]+\)\s*\?\?/u);
+  assert.equal(animatorSource.match(/applyDotVisualState\(/gu)?.length, 4);
+  assert.equal(animatorSource.match(/safeAnimationDelay\(/gu)?.length, 2);
+});

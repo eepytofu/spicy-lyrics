@@ -3,34 +3,35 @@ import type {
   ParsedLine,
   ReadingAnnotation,
   RenderPlan,
-  RenderPlanBuilder,
   TimedReadingUnit,
   ValidationResult,
 } from "./Model.ts";
 
-export class DefaultRenderPlanBuilder implements RenderPlanBuilder {
-  build(line: ParsedLine, canonical: CanonicalLine, annotations: readonly ReadingAnnotation[]): RenderPlan {
-    const readingUnits = annotations.flatMap((annotation) => annotation.units)
-      .sort((a, b) => a.canonicalRange.startCp - b.canonicalRange.startCp);
-    const timedReadingUnits: TimedReadingUnit[] = readingUnits.flatMap((unit) =>
-      unit.timingRefs.map((spanId) => ({
-        spanId,
-        canonicalRange: unit.canonicalRange,
-        text: unit.text,
-        logicalGroupId: unit.logicalGroupId,
-        ...(unit.provenance ? { provenance: unit.provenance } : {}),
-      }))
-    );
-    const furigana = annotations.flatMap((annotation) => annotation.furigana ?? []);
-    return {
-      lineId: line.id,
-      sourceUnits: canonical.spanMappings,
-      readingUnits,
-      timedReadingUnits,
-      joinedDisplayText: readingUnits.map((unit) => unit.text).join(""),
-      ...(furigana.length > 0 ? { furigana } : {}),
-    };
-  }
+export function buildRenderPlan(
+  line: ParsedLine,
+  canonical: CanonicalLine,
+  annotations: readonly ReadingAnnotation[],
+): RenderPlan {
+  const readingUnits = annotations.flatMap((annotation) => annotation.units)
+    .sort((a, b) => a.canonicalRange.startCp - b.canonicalRange.startCp);
+  const timedReadingUnits: TimedReadingUnit[] = readingUnits.flatMap((unit) =>
+    unit.timingRefs.map((spanId) => ({
+      spanId,
+      canonicalRange: unit.canonicalRange,
+      text: unit.text,
+      logicalGroupId: unit.logicalGroupId,
+      ...(unit.provenance ? { provenance: unit.provenance } : {}),
+    }))
+  );
+  const furigana = annotations.flatMap((annotation) => annotation.furigana ?? []);
+  return {
+    lineId: line.id,
+    sourceUnits: canonical.spanMappings,
+    readingUnits,
+    timedReadingUnits,
+    joinedDisplayText: readingUnits.map((unit) => unit.text).join(""),
+    ...(furigana.length > 0 ? { furigana } : {}),
+  };
 }
 
 export function validateRenderPlan(plan: RenderPlan): ValidationResult {

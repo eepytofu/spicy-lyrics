@@ -9,15 +9,13 @@ import {
   isValidCodePointRange,
   utf16IndexToCodePointOffset,
 } from "../src/utils/Lyrics/Processing/CodePoint.ts";
-import {
-  DefaultCanonicalLineBuilder,
-  DefaultScriptPartitioner,
-} from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import {
   annotateKoreanLine,
   joinReadingUnits,
 } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
-import type { ParsedDocument, ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
+import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
+import { partitionCanonicalFixture } from "./helpers/CanonicalFixture.ts";
 
 test("reading contract uses Unicode code-point coordinates", () => {
   const text = "A😀한국";
@@ -29,20 +27,51 @@ test("reading contract uses Unicode code-point coordinates", () => {
   assert.equal(isValidCodePointRange(text, { startCp: 3, endCp: 5 }), false);
 });
 
-test("parsed contract represents unavailable paragraph provenance explicitly", () => {
-  const document: ParsedDocument = {
-    id: "provider-capture",
-    language: "ko",
-    lines: [{
-      id: "line-1",
-      displayText: "주저 없이 다, Probably delete it",
-      paragraphProvenance: "unavailable",
-      spans: [],
-    }],
+test("parsed lines represent unavailable paragraph provenance explicitly", () => {
+  const line: ParsedLine = {
+    id: "line-1",
+    displayText: "주저 없이 다, Probably delete it",
+    paragraphProvenance: "unavailable",
+    spans: [],
   };
 
-  assert.equal(document.lines[0].paragraphId, undefined);
-  assert.equal(document.lines[0].paragraphProvenance, "unavailable");
+  assert.equal(line.paragraphId, undefined);
+  assert.equal(line.paragraphProvenance, "unavailable");
+});
+
+test("canonical boundaries retain legacy fixture kinds with typed semantics", () => {
+  const canonical = buildCanonicalLine({
+    id: "typed-boundary",
+    displayText: "魂 大",
+    paragraphProvenance: "provider",
+    spans: [
+      {
+        id: "typed-boundary-s0",
+        rawText: "魂 ",
+        cleanText: "魂 ",
+        startMs: 0,
+        endMs: 100,
+        providerPartOfWord: true,
+      },
+      {
+        id: "typed-boundary-s1",
+        rawText: "大",
+        cleanText: "大",
+        startMs: 100,
+        endMs: 200,
+        providerPartOfWord: true,
+      },
+    ],
+  });
+
+  assert.equal(canonical.text, "魂 大");
+  assert.deepEqual(canonical.boundaries, [{
+    offsetCp: 1,
+    kind: "explicitWhitespace",
+    semanticKind: "authoredWhitespace",
+    confidence: 1,
+    provenance: "providerTextWhitespace",
+  }]);
 });
 
 function parsedLine(raw: any): ParsedLine {
@@ -68,11 +97,9 @@ function assertFixtureSemantics(name: string) {
   const path = fileURLToPath(new URL(`./fixtures/lyrics-reading/v1/${name}`, import.meta.url));
   const fixture = JSON.parse(readFileSync(path, "utf8"));
   assert.equal(fixture.schemaVersion, 1);
-  const builder = new DefaultCanonicalLineBuilder();
-  const partitioner = new DefaultScriptPartitioner();
   for (const raw of fixture.lines) {
     const expected = raw.expected;
-    const canonical = builder.build(parsedLine(raw));
+    const canonical = buildCanonicalLine(parsedLine(raw));
     assert.equal(canonical.text, expected.canonicalText, raw.id);
     assert.deepEqual(
       canonical.boundaries.map((b: any) => [b.offsetCp, b.kind]),
@@ -80,11 +107,17 @@ function assertFixtureSemantics(name: string) {
       `${raw.id} boundaries`
     );
     assert.deepEqual(
+      canonical.boundaries.map((b) => b.semanticKind),
+      canonical.boundaries.map((b) =>
+        b.kind === "explicitWhitespace" ? "authoredWhitespace" : "providerSemantic"),
+      `${raw.id} typed boundary semantics`
+    );
+    assert.deepEqual(
       canonical.spanMappings.map((m: any) => [m.canonicalRange.startCp, m.canonicalRange.endCp]),
       expected.spanMappings,
       `${raw.id} spanMappings`
     );
-    const runs = partitioner.partition(canonical, { language: fixture.language });
+    const runs = partitionCanonicalFixture(canonical);
     assert.deepEqual(
       runs.map((r: any) => [r.canonicalRange.startCp, r.canonicalRange.endCp, r.script]),
       expected.scriptRuns,

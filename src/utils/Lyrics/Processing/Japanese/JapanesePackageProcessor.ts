@@ -7,13 +7,13 @@ import {
   type JapaneseReadable,
   type JapaneseTimedTextSpan,
 } from "../../Reading/JapaneseReading.ts";
-import { DefaultCanonicalLineBuilder } from "../Canonical.ts";
+import { buildCanonicalLine } from "../Canonical.ts";
 import {
   projectProviderAuthoredJapaneseReadings,
   projectProviderSourceOffset,
 } from "./ProviderAuthoredReading.ts";
 import { annotateJapaneseLine } from "./JapaneseAnnotationProcessor.ts";
-import { DefaultRenderPlanBuilder, validateRenderPlan } from "../RenderPlan.ts";
+import { buildRenderPlan, validateRenderPlan } from "../RenderPlan.ts";
 import type { ParsedLine, RenderPlan } from "../Model.ts";
 
 export function buildJapanesePackageParsedLine(
@@ -81,10 +81,10 @@ export async function processJapanesePackageLine(
   }));
 
   const parsed = buildJapanesePackageParsedLine(finalDisplayText, displaySpans, times);
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
   const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, analysisOptions, analysis);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
-  const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
+  const plan = buildRenderPlan(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
   if (!validation.valid) throw new Error(validation.errors.join("; "));
   return { plan, romaji, furigana: reading?.furigana || [], displayText: finalDisplayText };

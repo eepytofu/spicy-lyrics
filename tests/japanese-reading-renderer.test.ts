@@ -359,6 +359,88 @@ test("semantic romaji projection differences still fall back to plain text", () 
   assert.equal(romanized.textContent, "sora");
 });
 
+test("attached mixed-script source stays exact while lyric and romaji display readable gaps", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  const entry = {
+    Text: "ぶち壊してshout it out loud",
+    JapaneseReading: {
+      sourceText: "ぶち壊してshout it out loud",
+      romaji: "buchikowashiteshout it out loud",
+      furigana: [],
+    },
+  };
+
+  appendLineExtras(
+    line as unknown as HTMLElement,
+    entry,
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
+  assert.equal(entry.Text, "ぶち壊してshout it out loud");
+  assert.equal(entry.JapaneseReading.sourceText, "ぶち壊してshout it out loud");
+  assert.equal(romanized.textContent, "buchikowashite shout it out loud");
+  assert.equal(line.classList.values.has("HasExtras"), true);
+  assert.equal(romanized.className, "romanized-below");
+
+  const base = new FakeElement();
+  renderBaseTextWithReadings(
+    base as unknown as HTMLElement,
+    entry,
+    { useRomanized: false, isJapaneseLyrics: true },
+  );
+  assert.equal(base.textContent, "ぶち壊して shout it out loud");
+});
+
+test("timed mixed-script romaji gets a visual gap without changing timing units", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  const timedUnits = [
+    {
+      spanId: "0",
+      canonicalRange: { startCp: 0, endCp: 5 },
+      text: "buchikowashite",
+      logicalGroupId: "jp",
+    },
+    {
+      spanId: "1",
+      canonicalRange: { startCp: 5, endCp: 10 },
+      text: "shout it out loud",
+      logicalGroupId: "latin",
+    },
+  ];
+
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [
+      { Text: "ぶち壊して", IsPartOfWord: true },
+      { Text: "shout it out loud", IsPartOfWord: true },
+    ],
+    "ぶち壊してshout it out loud",
+    "buchikowashiteshout it out loud",
+    undefined,
+    undefined,
+    [{}, {}],
+    {
+      ...plan,
+      timedReadingUnits: timedUnits,
+      joinedDisplayText: "buchikowashiteshout it out loud",
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  const row = line.children.find((child) => child.className.includes("reading-plan-row"))!;
+  assert.deepEqual(row.children.map((group) => group.style.marginLeft), ["", "0.25em"]);
+  assert.deepEqual(
+    timedUnits.map((unit) => [unit.spanId, unit.text]),
+    [
+      ["0", "buchikowashite"],
+      ["1", "shout it out loud"],
+    ],
+  );
+});
+
 test("an explicit Chinese reading route overrides an embedded kana island", () => {
   assert.equal(isJapaneseEntry({
     Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",

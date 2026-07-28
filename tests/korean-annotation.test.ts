@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import {
   annotateKoreanLine,
   joinReadingUnits,
@@ -21,10 +21,9 @@ function parsedLine(raw: any): ParsedLine {
 }
 
 test("Korean annotation derives joined display from timed units in all modes", () => {
-  const builder = new DefaultCanonicalLineBuilder();
   const modes: KoreanDisplayMode[] = ["wordTranslit", "rrStandard", "rrPronunciation", "vnPronunciation"];
   for (const raw of fixture.lines.filter((line: any) => /[가-힯]/u.test(line.expected.canonicalText))) {
-    const canonical = builder.build(parsedLine(raw));
+    const canonical = buildCanonicalLine(parsedLine(raw));
     for (const mode of modes) {
       const annotation = annotateKoreanLine(canonical, mode);
       assert.equal(joinReadingUnits(annotation), romanizeKoreanForDisplay(canonical.text, mode).display, `${raw.id}:${mode}`);
@@ -35,7 +34,7 @@ test("Korean annotation derives joined display from timed units in all modes", (
 
 test("mixed English is typed passthrough and remains source ordered", () => {
   const raw = fixture.lines.find((line: any) => line.id === "camouflage-29");
-  const annotation = annotateKoreanLine(new DefaultCanonicalLineBuilder().build(parsedLine(raw)), "vnPronunciation");
+  const annotation = annotateKoreanLine(buildCanonicalLine(parsedLine(raw)), "vnPronunciation");
   assert.equal(joinReadingUnits(annotation), "jujo opssi da, Probably delete it");
   assert.deepEqual(annotation.units.slice(-3).map((unit) => [unit.kind, unit.text.trim()]), [
     ["passthrough", "Probably"], ["passthrough", "delete"], ["passthrough", "it"],

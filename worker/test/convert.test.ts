@@ -50,7 +50,7 @@ describe("native word-sync conversion", () => {
     }
   });
 
-  it("marks structured title and credit lines as provider info without changing text", () => {
+  it("preserves structured title and credit rows as ordinary timed lyrics", () => {
     const fixtures = [
       parseQrc(
         "[0,2000]Title - Artist(0,2000)\n[2000,1000]词(2000,300)：(2300,200)Stack(2500,500)\n[3000,1000]曲(3000,300)：(3300,200)ZUN(3500,500)\n[4000,1000]first lyric(4000,1000)",
@@ -65,10 +65,10 @@ describe("native word-sync conversion", () => {
 
     for (const lines of fixtures) {
       const lyrics = toSyllableLyrics(lines, "qq") as any;
-      expect(lyrics.Content.map((line: any) => line.Lead.IsProviderInfo === true))
-        .toEqual([true, true, true, false]);
-      expect(lyrics.Content.map((line: any) => line.Lead.IsMetadata === true))
-        .toEqual([true, false, false, false]);
+      expect(lyrics.Content.every((line: any) =>
+        line.Lead.IsProviderInfo === undefined &&
+        line.Lead.IsMetadata === undefined
+      )).toBe(true);
       expect(lyrics.Content.map((line: any) =>
         line.Lead.Syllables.map((word: any) => word.Text).join("")))
         .toEqual(["Title - Artist", "词：Stack", "曲：ZUN", "first lyric"]);
@@ -88,19 +88,28 @@ describe("native word-sync conversion", () => {
     ), "qq") as any;
     const title = lyrics.Content[0].Lead;
 
-    expect(title.IsProviderInfo).toBe(true);
-    expect(title.IsMetadata).toBe(true);
-    expect(lyrics.Content.slice(1, 3).map((line: any) => [
-      line.Lead.IsProviderInfo,
-      line.Lead.IsMetadata,
-    ])).toEqual([[true, true], [true, true]]);
+    expect(lyrics.Content.every((line: any) =>
+      line.Lead.IsProviderInfo === undefined &&
+      line.Lead.IsMetadata === undefined
+    )).toBe(true);
     expect(title.Syllables.map((word: any) => word.Text).join(""))
       .toBe("Shout It Out Loud!!! - 暁Records (akatsuki records)");
     expect(title.Syllables.map((word: any) => word.IsPartOfWord))
       .toEqual([false, false, false, false, true, true, false, true]);
+    expect(title.Syllables.map((word: any) => [word.StartTime, word.EndTime]))
+      .toEqual([
+        [0, 2.391],
+        [2.392, 4.783],
+        [4.784, 7.175],
+        [7.175, 9.566],
+        [9.567, 19.134],
+        [19.134, 21.525],
+        [21.526, 23.917],
+        [23.918, 26.309],
+      ]);
   });
 
-  it("keeps normally timed QQ production credits active and speaker cues vocal", () => {
+  it("does not guess semantic roles from arbitrary QQ label text", () => {
     const lyrics = toSyllableLyrics(parseQrc(
       "[885,3648]晚(885,288)夜(1173,170)微(1343,230)雨(1573,224)问(1797,224)海(2021,248)棠(2269,136) - (2405,136)镜(2541,248)予(2789,280)歌(3069,216)\n"
       + "[4533,744]词(4533,256)：(4789,0)唐(4789,248)酱(5037,240)\n"
@@ -111,19 +120,21 @@ describe("native word-sync conversion", () => {
       + "[38952,2000]那(38952,500)年(39452,500)风(39952,500)吹(40452,500)",
     ), "qq") as any;
 
-    expect(lyrics.Content.slice(0, 5).map((line: any) => [
-      line.Lead.IsProviderInfo === true,
-      line.Lead.IsMetadata === true,
-    ])).toEqual([
-      [true, false],
-      [true, false],
-      [true, false],
-      [true, false],
-      [true, false],
+    expect(lyrics.Content.every((line: any) =>
+      line.Lead.IsProviderInfo === undefined &&
+      line.Lead.IsMetadata === undefined
+    )).toBe(true);
+    expect(lyrics.Content.map((line: any) =>
+      line.Lead.Syllables.map((word: any) => word.Text).join("")
+    )).toEqual([
+      "晚夜微雨问海棠 - 镜予歌",
+      "词：唐酱",
+      "编曲：Mzf小慕",
+      "二胡：辰小弦",
+      "混音：圣雨轻纱",
+      "喧笑：",
+      "那年风吹",
     ]);
-    expect(lyrics.Content[5].Lead.IsProviderInfo).toBeUndefined();
-    expect(lyrics.Content[5].Lead.IsMetadata).toBeUndefined();
-    expect(lyrics.Content[6].Lead.IsProviderInfo).toBeUndefined();
   });
 
   it("does not demote ordinary lyrics when no compact intro-credit block exists", () => {

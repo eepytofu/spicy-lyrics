@@ -1,36 +1,23 @@
-import { $fixHanGlyphVariants, $lyricsContainerExists, $minimalLyricsMode, $simpleLyricsMode } from "../../../../utils/stores.ts";
-import { PageContainer } from "../../../../components/Pages/PageView.ts";
-import { applyStyles, removeAllStyles } from "../../../CSS/Styles.ts";
 import {
-  ClearScrollSimplebar,
-  MountScrollSimplebar,
-  RecalculateScrollSimplebar,
-  ScrollSimplebar,
-} from "../../../Scrolling/Simplebar/ScrollSimplebar.ts";
+  $fixHanGlyphVariants,
+  $lyricsContainerExists,
+  $minimalLyricsMode,
+  $simpleLyricsMode,
+} from "../../../../utils/stores.ts";
 import { IdleEmphasisLyricsScale, IdleLyricsScale } from "../../Animator/Shared.ts";
 import { ConvertTime } from "../../ConvertTime.ts";
-import { ClearLyricsPageContainer } from "../../fetchLyrics.ts";
 import isRtl from "../../isRtl.ts";
 import {
-  ClearLyricsContentArrays,
   CurrentLineLyricsObject,
   LyricsObject,
   SetWordArrayInCurentLine,
   getInterludeTimePadding,
   getLyricsBetweenShow,
-  setRomanizedStatus,
   type SyllableLead,
   type TimedGroupWindow,
 } from "../../lyrics.ts";
-import { CreateLyricsContainer, DestroyAllLyricsContainers } from "../CreateLyricsContainer.ts";
-import { initLyricsVirtualizer } from "../../LyricsVirtualizer.ts";
-import { ApplyIsByCommunity } from "../Credits/ApplyIsByCommunity.tsx";
-import { ApplyLyricsCredits } from "../Credits/ApplyLyricsCredits.ts";
-import { EmitApply, EmitNotApplyed } from "../OnApply.ts";
 import Emphasize from "../Utils/Emphasize.ts";
 import { IsLetterCapable } from "../Utils/IsLetterCapable.ts";
-import { ApplyLyricsProvider } from "../Credits/ApplyProvider.ts";
-import { ApplyProviderCredits } from "../Credits/ApplyProviderCredits.ts";
 import {
   appendSyllableRomanizedBelow,
   isJapaneseEntry,
@@ -40,12 +27,8 @@ import {
 } from "../ReadingRenderer.ts";
 import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
-import {
-  isProviderInfoLine,
-  providerMetadataSeekTimeMs,
-  useReadingsForProviderLine,
-} from "../../Processing/ProviderMetadata.ts";
 import { needsSyllableSpaceBefore } from "../../Processing/SyllableBoundaries.ts";
+import { needsMixedScriptReadabilityGapBefore } from "../../Processing/MixedScriptReadability.ts";
 import {
   timedFuriganaGroups,
   timedGroupContinuesAt,
@@ -54,6 +37,8 @@ import {
   type TimedFuriganaGroups,
 } from "../../Processing/Japanese/TimedGroupIds.ts";
 import { applyHanLanguageTag } from "../../HanLanguage.ts";
+import { createInterludeLine } from "./Interlude.ts";
+import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
 
 // Define the data structure for syllable lyrics
 type SyllableData = TimedSyllableEntry;
@@ -76,21 +61,35 @@ interface LyricsData {
   styles?: Record<string, string>;
 }
 
-const joinSyllableDisplayText = (syllables: SyllableData[]): string => {
-  return syllables.reduce((acc, syl, index) => {
-    const text = syl.Text || "";
-    if (index === 0) return text;
-    return `${acc}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
-  }, "").trim();
+const appendInterludeLine = (
+  lineElements: HTMLElement[],
+  startTime: number,
+  endTime: number,
+  oppositeAligned: boolean
+): void => {
+  const interlude = createInterludeLine(
+    startTime,
+    endTime,
+    oppositeAligned,
+    getInterludeTimePadding()
+  );
+  LyricsObject.Types.Syllable.Lines.push(interlude.line);
+  SetWordArrayInCurentLine();
+  const lead = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
+  if (lead) lead.push(...interlude.dots);
+  else console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
+  lineElements.push(interlude.element);
 };
 
-const METADATA_TIME = -0.001;
-
-export const syllableAnimationWindow = (
-  group: Pick<TimedSyllableGroup, "StartTime" | "EndTime" | "IsMetadata">
-): { startTime: number; endTime: number } => group.IsMetadata
-  ? { startTime: METADATA_TIME, endTime: METADATA_TIME }
-  : { startTime: group.StartTime, endTime: group.EndTime };
+const joinSyllableDisplayText = (syllables: SyllableData[]): string => {
+  return syllables
+    .reduce((acc, syl, index) => {
+      const text = syl.Text || "";
+      if (index === 0) return text;
+      return `${acc}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
+    }, "")
+    .trim();
+};
 
 const applyWordPositionClasses = (
   element: HTMLElement,
@@ -102,6 +101,9 @@ const applyWordPositionClasses = (
     element.classList.add("LastWordInLine");
   } else if (syllable.IsPartOfWord) {
     element.classList.add("PartOfWord");
+  }
+  if (needsMixedScriptReadabilityGapBefore(all, index)) {
+    element.classList.add("MixedScriptReadabilityGapBefore");
   }
 };
 
@@ -126,22 +128,32 @@ const registerSyllableWord = (
   });
 };
 
+interface SyllableWordPresentation {
+  isBackground?: boolean;
+}
+
 const createSyllableWord = (
   syllable: SyllableData,
   index: number,
   all: SyllableData[],
   renderOptions: ReadingRenderOptions,
   useRomanized: boolean,
-  isBackground: boolean = false
+  presentation: SyllableWordPresentation = {}
 ): HTMLElement => {
+  const isBackground = presentation.isBackground === true;
   let word = document.createElement("span");
   const totalDuration = ConvertTime(syllable.EndTime) - ConvertTime(syllable.StartTime);
   const letterLength = syllable.Text.split("").length;
   const hasFurigana = shouldRenderFurigana(syllable, renderOptions);
-  const reservesFuriganaRow = hasFurigana || (renderOptions.reserveFurigana === true && useRomanized);
+  const reservesFuriganaRow =
+    hasFurigana || (renderOptions.reserveFurigana === true && useRomanized);
   // Package-backed Japanese words need a registered word element in every
   // display mode. Letter emphasis returns before timing registration.
-  const letterCapable = IsLetterCapable(letterLength, totalDuration) && !isRtl(syllable.Text) && !reservesFuriganaRow && !syllable.JapaneseReading;
+  const letterCapable =
+    IsLetterCapable(letterLength, totalDuration) &&
+    !isRtl(syllable.Text) &&
+    !reservesFuriganaRow &&
+    !syllable.JapaneseReading;
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
@@ -251,7 +263,8 @@ const appendTimedFuriganaMember = (
     const entry = lastRegisteredWordEntry();
     if (entry) {
       entry.TimedRubyAnchorElement = timedGroup.anchor;
-      entry.TimedRubyAnchorOffsetEm = group.rubyCenterCh - Array.from(syllable.Text || "").length / 2;
+      entry.TimedRubyAnchorOffsetEm =
+        group.rubyCenterCh - Array.from(syllable.Text || "").length / 2;
       state.times = {
         start: entry.StartTime,
         firstEnd: entry.EndTime,
@@ -300,160 +313,48 @@ export function ApplySyllableLyrics(
   ShowProviderTranslations: boolean = false
 ): void {
   if (!$lyricsContainerExists.get()) return;
-  EmitNotApplyed();
 
-  DestroyAllLyricsContainers();
-  const LyricsContainerParent = PageContainer?.querySelector<HTMLElement>(
-    ".LyricsContainer .LyricsContent"
+  const hasOppositeAligned = data.Content.some((item) => item.OppositeAligned === true);
+  const hasRtlLines = data.Content.some(
+    (line) =>
+      line.Lead.Syllables.some((syllable) => isRtl(syllable.Text)) ||
+      line.Background?.some((bg) => bg.Syllables.some((syllable) => isRtl(syllable.Text))) === true
   );
-  const LyricsContainerInstance = CreateLyricsContainer();
-  const LyricsContainer = LyricsContainerInstance.Container;
-
-  // Check if LyricsContainer exists
-  if (!LyricsContainer) {
-    console.error("LyricsContainer not found");
-    return;
-  }
-
-  const hasOppositeAligned = data.Content.some(item => item.OppositeAligned === true);
-  LyricsContainer.classList.toggle("HasDuetLines", hasOppositeAligned);
-  const hasRtlLines = data.Content.some(line =>
-    line.Lead.Syllables.some(syllable => isRtl(syllable.Text)) ||
-    line.Background?.some(bg => bg.Syllables.some(syllable => isRtl(syllable.Text))) === true
-  );
-  LyricsContainer.classList.toggle("HasRtlLines", hasRtlLines);
-
-  LyricsContainer.setAttribute("data-lyrics-type", "Syllable");
-
-  ClearLyricsContentArrays();
-  ClearScrollSimplebar();
-
-  ClearLyricsPageContainer();
-
-  const virtualContainer = document.createElement("div");
-  virtualContainer.classList.add("VirtualLyricsContainer");
-  LyricsContainer.appendChild(virtualContainer);
-
-  const lineElements: HTMLElement[] = [];
+  const applyContext = beginLyricsApply("Syllable", hasOppositeAligned, hasRtlLines);
+  if (!applyContext) return;
+  const { lineElements } = applyContext;
 
   if (data.StartTime >= getLyricsBetweenShow()) {
-    const musicalLine = document.createElement("div");
-    musicalLine.classList.add("line");
-    musicalLine.classList.add("musical-line");
-    LyricsObject.Types.Syllable.Lines.push({
-      HTMLElement: musicalLine,
-      StartTime: 0,
-      EndTime: ConvertTime(data.StartTime),
-      TotalTime: ConvertTime(data.StartTime),
-      DotLine: true,
-    });
-
-    SetWordArrayInCurentLine();
-
-    if (data.Content[0].OppositeAligned) {
-      musicalLine.classList.add("OppositeAligned");
-    }
-
-    const dotGroup = document.createElement("div");
-    dotGroup.classList.add("dotGroup");
-
-    const musicalDots1 = document.createElement("span");
-    const musicalDots2 = document.createElement("span");
-    const musicalDots3 = document.createElement("span");
-
-    const totalTime = ConvertTime(data.StartTime);
-    const baseDotTime = totalTime / 3;
-    const dotPadding = getInterludeTimePadding() / 3;
-    const dot1EndTime = Math.max(0, baseDotTime + dotPadding);
-    const dot2EndTime = Math.max(dot1EndTime, baseDotTime * 2 + dotPadding * 2);
-    const dot3EndTime = Math.max(dot2EndTime, totalTime + getInterludeTimePadding());
-
-    musicalDots1.classList.add("word");
-    musicalDots1.classList.add("dot");
-    musicalDots1.textContent = "•";
-
-    // Check if Syllables.Lead exists
-    if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-      LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-        HTMLElement: musicalDots1,
-        StartTime: 0,
-        EndTime: dot1EndTime,
-        TotalTime: dot1EndTime,
-        Dot: true,
-      });
-    } else {
-      console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-    }
-
-    musicalDots2.classList.add("word");
-    musicalDots2.classList.add("dot");
-    musicalDots2.textContent = "•";
-
-    // Check if Syllables.Lead exists
-    if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-      LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-        HTMLElement: musicalDots2,
-        StartTime: dot1EndTime,
-        EndTime: dot2EndTime,
-        TotalTime: dot2EndTime - dot1EndTime,
-        Dot: true,
-      });
-    } else {
-      console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-    }
-
-    musicalDots3.classList.add("word");
-    musicalDots3.classList.add("dot");
-    musicalDots3.textContent = "•";
-
-    // Check if Syllables.Lead exists
-    if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-      LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-        HTMLElement: musicalDots3,
-        StartTime: dot2EndTime,
-        EndTime: dot3EndTime,
-        TotalTime: dot3EndTime - dot2EndTime,
-        Dot: true,
-      });
-    } else {
-      console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-    }
-
-    dotGroup.appendChild(musicalDots1);
-    dotGroup.appendChild(musicalDots2);
-    dotGroup.appendChild(musicalDots3);
-
-    musicalLine.appendChild(dotGroup);
-    lineElements.push(musicalLine);
+    appendInterludeLine(lineElements, 0, data.StartTime, data.Content[0].OppositeAligned === true);
   }
   const translationPending = (data as any).TranslationPending === true;
   const romanizationPending = (data as any).RomanizationPending === true;
   const isJapaneseLyrics =
     (data as any).Language === "jpn" ||
-    data.Content.some((line) =>
-      line.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
-      line.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
+    data.Content.some(
+      (line) =>
+        line.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
+        line.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
     );
   data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
-    const lineWindow = syllableAnimationWindow(line.Lead);
-    const isProviderInfo = isProviderInfoLine(line.Lead);
-    if (isProviderInfo) lineElem.classList.add("provider-info-line");
-    if (line.Lead.IsMetadata) lineElem.classList.add("provider-metadata-line");
-    const leadSourceText = line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
+    const lineWindow = {
+      startTime: line.Lead.StartTime,
+      endTime: line.Lead.EndTime,
+    };
+    const leadSourceText =
+      line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
     lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
     lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
-    const metadataSeekTime = providerMetadataSeekTimeMs(line.Lead);
-    if (metadataSeekTime !== undefined) {
-      lineElem.dataset.spicyLyricsSeekTime = String(metadataSeekTime);
-    }
-    applyHanLanguageTag(lineElem, joinSyllableDisplayText(line.Lead.Syllables), data, $fixHanGlyphVariants.get());
+    applyHanLanguageTag(
+      lineElem,
+      joinSyllableDisplayText(line.Lead.Syllables),
+      data,
+      $fixHanGlyphVariants.get()
+    );
     const lineRenderOptions = {
-      // Metadata is already classified by the structured-source adapter.
-      // Keep it literal even during the raw-first processing frame so
-      // provider readings cannot flash before background cleanup finishes.
-      useRomanized: useReadingsForProviderLine(line.Lead, UseRomanized),
+      useRomanized: UseRomanized,
       romanizationPending,
       translationPending,
       showProviderTranslations: ShowProviderTranslations,
@@ -462,21 +363,20 @@ export function ApplySyllableLyrics(
     };
 
     const nextLineStartTime = arr[index + 1]
-      ? syllableAnimationWindow(arr[index + 1].Lead).startTime
+      ? arr[index + 1].Lead.StartTime
       : 0;
 
     const lineEndTimeAndNextLineStartTimeDistance =
       nextLineStartTime !== 0 ? nextLineStartTime - lineWindow.endTime : 0;
 
-    const lineEndTime =
-      $minimalLyricsMode.get()
-        ? nextLineStartTime === 0
-          ? lineWindow.endTime
-          : lineEndTimeAndNextLineStartTimeDistance < getLyricsBetweenShow() &&
-              nextLineStartTime > lineWindow.endTime
-            ? nextLineStartTime
-            : lineWindow.endTime
-        : lineWindow.endTime;
+    const lineEndTime = $minimalLyricsMode.get()
+      ? nextLineStartTime === 0
+        ? lineWindow.endTime
+        : lineEndTimeAndNextLineStartTimeDistance < getLyricsBetweenShow() &&
+            nextLineStartTime > lineWindow.endTime
+          ? nextLineStartTime
+          : lineWindow.endTime
+      : lineWindow.endTime;
 
     LyricsObject.Types.Syllable.Lines.push({
       HTMLElement: lineElem,
@@ -495,8 +395,11 @@ export function ApplySyllableLyrics(
 
     let currentWordGroup: HTMLSpanElement | null = null;
     let currentSemanticGroupId: string | undefined;
-    const leadHasFurigana = shouldRenderFurigana(line.Lead, lineRenderOptions) || line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
-    const leadUsesSemanticGroups = line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
+    const leadHasFurigana =
+      shouldRenderFurigana(line.Lead, lineRenderOptions) ||
+      line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
+    const leadUsesSemanticGroups =
+      line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
     const leadRenderOptions = { ...lineRenderOptions, reserveFurigana: leadHasFurigana };
     const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
     const leadTimedFurigana = leadHasFurigana
@@ -505,78 +408,67 @@ export function ApplySyllableLyrics(
     const leadTexts = line.Lead.Syllables.map((s) => s.Text || "");
     const leadTimedFuriganaState = createTimedFuriganaRenderState();
 
-    if (isProviderInfo && line.Lead.Syllables.length > 0) {
-      // Provider-info timing fragments are transport detail, not karaoke
-      // units. Keep a single literal run, but retain real line timing unless
-      // the adapter identified stretched synthetic metadata timing.
-      // One exact text run preserves the provider's punctuation shaping and
-      // avoids visual seams around attached mixed-script text.
-      const metadataLead: SyllableData = {
-        ...line.Lead.Syllables[0],
-        Text: leadSourceText,
-        StartTime: lineWindow.startTime,
-        EndTime: lineWindow.endTime,
-        IsPartOfWord: false,
-      };
-      const metadataSyllables = [metadataLead];
-      const word = createSyllableWord(
-        metadataLead,
-        0,
-        metadataSyllables,
-        leadRenderOptions,
-        false
-      );
-      lineElem.appendChild(word);
-    } else line.Lead.Syllables.forEach((lead, iL, aL) => {
-      if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
-        lineElem.classList.add("rtl");
-      }
-
-      // Ruby crossing timed syllables is drawn once above a display-only
-      // group; member words suppress only their copy of that reading but
-      // keep their timing registration. The line is never collapsed.
-      const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
-      const word = createSyllableWord(
-        lead,
-        iL,
-        aL,
-        timedFuriganaGroup
-          ? { ...leadRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-          : leadRenderOptions,
-        UseRomanized
-      );
-      if (timedFuriganaGroup) {
-        appendTimedFuriganaMember(lineElem, word, lead, timedFuriganaGroup, leadTimedFuriganaState);
-        currentWordGroup = null;
-        currentSemanticGroupId = undefined;
-        return;
-      }
-      // Authored whitespace spans between members stay inside the open group
-      // so the ruby is not split into duplicates.
-      if (
-        leadTimedFuriganaState.root &&
-        !(lead.Text || "").trim() &&
-        timedGroupContinuesAt(leadTexts, leadTimedFurigana, iL + 1, leadTimedFuriganaState.groupId)
-      ) {
-        leadTimedFuriganaState.root.appendChild(word);
-        currentWordGroup = null;
-        currentSemanticGroupId = undefined;
-        return;
-      }
-      resetTimedFuriganaRenderState(leadTimedFuriganaState);
-
-      const semanticGroupId = leadLogicalGroupIds.get(String(iL));
-      if (leadUsesSemanticGroups && semanticGroupId) {
-        if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
-          currentWordGroup = document.createElement("span");
-          currentWordGroup.classList.add("word-group", "semantic-word-group");
-          lineElem.appendChild(currentWordGroup);
-          currentSemanticGroupId = semanticGroupId;
+    line.Lead.Syllables.forEach((lead, iL, aL) => {
+        if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
+          lineElem.classList.add("rtl");
         }
-        currentWordGroup.appendChild(word);
-      } else {
-        currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
-      }
+
+        // Ruby crossing timed syllables is drawn once above a display-only
+        // group; member words suppress only their copy of that reading but
+        // keep their timing registration. The line is never collapsed.
+        const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
+        const word = createSyllableWord(
+          lead,
+          iL,
+          aL,
+          timedFuriganaGroup
+            ? { ...leadRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
+            : leadRenderOptions,
+          UseRomanized
+        );
+        if (timedFuriganaGroup) {
+          appendTimedFuriganaMember(
+            lineElem,
+            word,
+            lead,
+            timedFuriganaGroup,
+            leadTimedFuriganaState
+          );
+          currentWordGroup = null;
+          currentSemanticGroupId = undefined;
+          return;
+        }
+        // Authored whitespace spans between members stay inside the open group
+        // so the ruby is not split into duplicates.
+        if (
+          leadTimedFuriganaState.root &&
+          !(lead.Text || "").trim() &&
+          timedGroupContinuesAt(
+            leadTexts,
+            leadTimedFurigana,
+            iL + 1,
+            leadTimedFuriganaState.groupId
+          )
+        ) {
+          leadTimedFuriganaState.root.appendChild(word);
+          currentWordGroup = null;
+          currentSemanticGroupId = undefined;
+          return;
+        }
+        resetTimedFuriganaRenderState(leadTimedFuriganaState);
+
+        const semanticGroupId = leadLogicalGroupIds.get(String(iL));
+        if (leadUsesSemanticGroups && semanticGroupId) {
+          if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
+            currentWordGroup = document.createElement("span");
+            currentWordGroup.classList.add("word-group", "semantic-word-group");
+            lineElem.appendChild(currentWordGroup);
+            currentSemanticGroupId = semanticGroupId;
+          }
+          currentWordGroup.appendChild(word);
+        } else {
+          currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+        }
     });
     packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".furigana-cluster"));
 
@@ -619,10 +511,14 @@ export function ApplySyllableLyrics(
 
         let currentBGWordGroup: HTMLSpanElement | null = null;
         let currentBGSemanticGroupId: string | undefined;
-        const bgHasFurigana = shouldRenderFurigana(bg, bgRenderOptions) || bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
-        const bgUsesSemanticGroups = bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
+        const bgHasFurigana =
+          shouldRenderFurigana(bg, bgRenderOptions) ||
+          bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
+        const bgUsesSemanticGroups =
+          bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
         const bgWordRenderOptions = { ...bgRenderOptions, reserveFurigana: bgHasFurigana };
-        const bgSourceText = bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
+        const bgSourceText =
+          bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
         const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
         const bgTimedFurigana = bgHasFurigana
           ? timedFuriganaGroups(bg.ReadingRenderPlan)
@@ -644,7 +540,7 @@ export function ApplySyllableLyrics(
               ? { ...bgWordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
               : bgWordRenderOptions,
             UseRomanized,
-            true
+            { isBackground: true }
           );
           if (timedFuriganaGroup) {
             appendTimedFuriganaMember(lineE, word, bw, timedFuriganaGroup, bgTimedFuriganaState);
@@ -680,7 +576,8 @@ export function ApplySyllableLyrics(
         packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".furigana-cluster"));
 
         const bgRomanizedText = bg.RomanizedText || bg.TransliteratedText;
-        const allEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
+        const allEntries =
+          LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
         const bgEntries = allEntries.filter((entry: any) => entry.BGWord);
         appendSyllableRomanizedBelow(
           lineE,
@@ -695,140 +592,16 @@ export function ApplySyllableLyrics(
         );
       });
     }
-    const interludeStartTime = line.Lead.IsMetadata
-      ? Math.max(lineWindow.endTime, nextLineStartTime - getLyricsBetweenShow())
-      : lineWindow.endTime;
+    const interludeStartTime = lineWindow.endTime;
     if (arr[index + 1] && nextLineStartTime - interludeStartTime >= getLyricsBetweenShow()) {
-      const musicalLine = document.createElement("div");
-      musicalLine.classList.add("line");
-      musicalLine.classList.add("musical-line");
-
-      LyricsObject.Types.Syllable.Lines.push({
-        HTMLElement: musicalLine,
-        StartTime: ConvertTime(interludeStartTime),
-        EndTime: ConvertTime(arr[index + 1].Lead.StartTime),
-        TotalTime:
-          ConvertTime(nextLineStartTime) -
-          ConvertTime(interludeStartTime),
-        DotLine: true,
-      });
-
-      SetWordArrayInCurentLine();
-
-      if (arr[index + 1].OppositeAligned) {
-        musicalLine.classList.add("OppositeAligned");
-      }
-
-      const dotGroup = document.createElement("div");
-      dotGroup.classList.add("dotGroup");
-
-      const musicalDots1 = document.createElement("span");
-      const musicalDots2 = document.createElement("span");
-      const musicalDots3 = document.createElement("span");
-
-      const gapStartTime = ConvertTime(interludeStartTime);
-      const totalTime = ConvertTime(nextLineStartTime) - gapStartTime;
-      const baseDotTime = totalTime / 3;
-      const dotPadding = getInterludeTimePadding() / 3;
-      const dot1EndTime = Math.max(gapStartTime, gapStartTime + baseDotTime + dotPadding);
-      const dot2EndTime = Math.max(dot1EndTime, gapStartTime + baseDotTime * 2 + dotPadding * 2);
-      const dot3EndTime = Math.max(dot2EndTime, gapStartTime + totalTime + getInterludeTimePadding());
-
-      musicalDots1.classList.add("word");
-      musicalDots1.classList.add("dot");
-      musicalDots1.textContent = "•";
-
-      // Check if Syllables.Lead exists
-      if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-        LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-          HTMLElement: musicalDots1,
-          StartTime: gapStartTime,
-          EndTime: dot1EndTime,
-          TotalTime: dot1EndTime - gapStartTime,
-          Dot: true,
-        });
-      } else {
-        console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-      }
-
-      musicalDots2.classList.add("word");
-      musicalDots2.classList.add("dot");
-      musicalDots2.textContent = "•";
-
-      // Check if Syllables.Lead exists
-      if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-        LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-          HTMLElement: musicalDots2,
-          StartTime: dot1EndTime,
-          EndTime: dot2EndTime,
-          TotalTime: dot2EndTime - dot1EndTime,
-          Dot: true,
-        });
-      } else {
-        console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-      }
-
-      musicalDots3.classList.add("word");
-      musicalDots3.classList.add("dot");
-      musicalDots3.textContent = "•";
-
-      // Check if Syllables.Lead exists
-      if (LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead) {
-        LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject].Syllables?.Lead.push({
-          HTMLElement: musicalDots3,
-          StartTime: dot2EndTime,
-          EndTime: dot3EndTime,
-          TotalTime: dot3EndTime - dot2EndTime,
-          Dot: true,
-        });
-      } else {
-        console.warn("Syllables.Lead is undefined for CurrentLineLyricsObject");
-      }
-
-      dotGroup.appendChild(musicalDots1);
-      dotGroup.appendChild(musicalDots2);
-      dotGroup.appendChild(musicalDots3);
-
-      musicalLine.appendChild(dotGroup);
-      lineElements.push(musicalLine);
+      appendInterludeLine(
+        lineElements,
+        interludeStartTime,
+        nextLineStartTime,
+        arr[index + 1].OppositeAligned === true
+      );
     }
   });
 
-  ApplyLyricsCredits(data, LyricsContainer);
-  ApplyLyricsProvider(data, LyricsContainer);
-  ApplyProviderCredits(data, LyricsContainer);
-  ApplyIsByCommunity(data, LyricsContainer);
-
-  if (LyricsContainerParent) {
-    LyricsContainerInstance.Append(LyricsContainerParent);
-  }
-
-  if (ScrollSimplebar) RecalculateScrollSimplebar();
-  else MountScrollSimplebar();
-
-  const scrollEl = ScrollSimplebar?.getScrollElement() as HTMLElement | undefined;
-  if (scrollEl) initLyricsVirtualizer(scrollEl, virtualContainer, lineElements);
-
-  const LyricsStylingContainer = PageContainer?.querySelector<HTMLElement>(
-    ".LyricsContainer .LyricsContent .simplebar-content"
-  );
-
-  // Check if LyricsStylingContainer exists
-  if (LyricsStylingContainer) {
-    removeAllStyles(LyricsStylingContainer);
-
-    if (data.classes) {
-      LyricsStylingContainer.className = data.classes;
-    }
-
-    if (data.styles) {
-      applyStyles(LyricsStylingContainer, data.styles);
-    }
-  } else {
-    console.warn("LyricsStylingContainer not found");
-  }
-
-  EmitApply(data.Type, data.Content);
-
-  setRomanizedStatus(UseRomanized);
+  finishLyricsApply(applyContext, data, data.Content, UseRomanized, true);
 }

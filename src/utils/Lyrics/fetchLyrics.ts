@@ -51,6 +51,7 @@ import {
 } from "./LyricsSourcePreferences.ts";
 import { publishLyricsInteropSnapshot } from "./Interop.ts";
 import { isLyricsSourceCacheCompatible } from "./LyricsSourceCache.ts";
+import { ensureSourceEvidence } from "./Processing/SourceEvidence.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -74,7 +75,7 @@ export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 2, 
 }, isDev as true);
 
 const lyricsPacker = new SLObjPack();
-const LYRICS_SOURCE_CACHE_VERSION = 12;
+const LYRICS_SOURCE_CACHE_VERSION = 13;
 
 function getActiveLyricsSourceOrder(): LyricsSourceProviderId[] {
   const custom = parseCustomLyricsServers($customLyricsServers.get());
@@ -118,6 +119,7 @@ function currentProcessingContextKey(): string {
 }
 
 async function setProcessedLyricsStoreItem(trackId: string, lyrics: any): Promise<void> {
+  ensureSourceEvidence(lyrics);
   lyrics.ProcessingContextKey = currentProcessingContextKey();
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   await LyricsStore.SetItem(trackId, lyrics);
@@ -138,6 +140,7 @@ function setRomanizationClass(hasTransliterations: boolean | undefined): void {
  */
 function dispatchProcessingReady(trackId: string, lyrics: any): void {
   if (SpotifyPlayer.GetId() !== trackId) return;
+  ensureSourceEvidence(lyrics);
   $currentLyricsData.set(JSON.stringify(lyrics));
   publishLyricsInteropSnapshot(lyrics);
   window.dispatchEvent(
@@ -228,6 +231,7 @@ function hasTranslationWorkQuick(lyrics: any): boolean {
 }
 
 function markProcessedWithoutBackground(lyrics: any): void {
+  ensureSourceEvidence(lyrics);
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   lyrics.ProcessingPending = false;
@@ -239,6 +243,7 @@ function markProcessedWithoutBackground(lyrics: any): void {
 }
 
 function presentLyrics(lyricsData: any): void {
+  ensureSourceEvidence(lyricsData);
   publishLyricsInteropSnapshot(lyricsData);
   $lyricsSelectionDiagnostics.set(lyricsData?.SelectionDiagnostics ?? null);
   // Lyrics are in hand — end any 503 retry loop that was running for this track.
@@ -258,6 +263,7 @@ async function ensureProcessingVersion(trackId: string, uri: string, lyrics: any
   if (lyrics) {
     lyrics.uri = lyrics.uri || uri;
     lyrics.id = lyrics.id || trackId;
+    ensureSourceEvidence(lyrics);
     normalizeProviderTranslations(lyrics);
   }
 

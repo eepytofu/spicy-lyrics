@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { annotateKoreanLine } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
-import { DefaultRenderPlanBuilder, validateRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
+import { buildRenderPlan, validateRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 
 const fixture = JSON.parse(readFileSync(fileURLToPath(new URL(
@@ -20,8 +20,8 @@ function parsed(raw: any): ParsedLine {
 test("render plan gives every provider span one unique timing owner", () => {
   const raw = fixture.lines.find((line: any) => line.id === "camouflage-29");
   const line = parsed(raw);
-  const canonical = new DefaultCanonicalLineBuilder().build(line);
-  const plan = new DefaultRenderPlanBuilder().build(line, canonical, [annotateKoreanLine(canonical, "vnPronunciation")]);
+  const canonical = buildCanonicalLine(line);
+  const plan = buildRenderPlan(line, canonical, [annotateKoreanLine(canonical, "vnPronunciation")]);
   assert.equal(plan.joinedDisplayText, "jujo opssi da, Probably delete it");
   assert.equal(plan.timedReadingUnits.length, line.spans.length);
   assert.equal(new Set(plan.timedReadingUnits.map((unit) => unit.spanId)).size, line.spans.length);

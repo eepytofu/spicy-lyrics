@@ -15,8 +15,14 @@ import {
   type JapaneseReading,
 } from "../Reading/JapaneseReading.ts";
 import type { RenderPlan } from "../Processing/Model.ts";
-import { renderExperimentalReadingPlan } from "./ExperimentalReadingPlanRenderer.ts";
-import { needsSyllableSpaceBefore } from "../Processing/SyllableBoundaries.ts";
+import { renderReadingPlan } from "./ReadingPlanRenderer.ts";
+import { resolveSyllableBoundary } from "../Processing/SyllableBoundaries.ts";
+import {
+  formatMixedScriptReadingForDisplay,
+  needsMixedScriptReadabilityGapBefore,
+  projectFuriganaSegmentsForReadability,
+  projectMixedScriptReadability,
+} from "../Processing/MixedScriptReadability.ts";
 
 export type ReadingRenderOptions = {
   useRomanized: boolean;
@@ -199,15 +205,21 @@ export function renderBaseTextWithReadings(
   options: ReadingRenderOptions
 ): boolean {
   const reading = getJapaneseReading(entry);
-  const text = reading?.displayText ?? entry.Text ?? "";
+  const sourceDisplayText = reading?.displayText ?? entry.Text ?? "";
+  const readabilityProjection = projectMixedScriptReadability(sourceDisplayText);
+  const text = readabilityProjection.text;
 
   if (shouldRenderFurigana(entry, options) && reading) {
-    const segments = options.suppressedFuriganaKeys?.length
+    const sourceSegments = options.suppressedFuriganaKeys?.length
       ? reading.furigana.filter((segment) =>
           segment.lineSegmentKey === undefined
           || !options.suppressedFuriganaKeys!.includes(segment.lineSegmentKey)
         )
       : reading.furigana;
+    const segments = projectFuriganaSegmentsForReadability(
+      sourceSegments,
+      readabilityProjection,
+    );
     if (segments.length > 0) {
       element.classList.add("has-furigana");
       appendFuriganaText(element, text, segments);
@@ -274,8 +286,11 @@ export function appendRomanizedBelow(
 ): boolean {
   if (!shouldRenderRomanization(entry, options)) return false;
 
-  const sourceText = entry.Text || "";
-  const romanizedText = getRomanizedText(entry);
+  const sourceText = entry.JapaneseReading?.displayText ?? entry.Text ?? "";
+  const romanizedText = formatMixedScriptReadingForDisplay(
+    sourceText,
+    getRomanizedText(entry),
+  );
   const hasDistinctRomanization = isMeaningfullyDifferent(romanizedText, sourceText);
   if (!hasDistinctRomanization && !options.romanizationPending) return false;
 
@@ -345,14 +360,26 @@ export function appendSyllableRomanizedBelow(
     ReadingPrimaryScript: readingPlan?.primaryScript,
   };
 
+  const readabilityGapSpanIds = new Set(
+    syllables.flatMap((_, index) =>
+      needsMixedScriptReadabilityGapBefore(syllables, index)
+        ? [String(index)]
+        : []
+    ),
+  );
+
   if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
     forceStackedLine(lineElem, options.oppositeAligned);
-    renderExperimentalReadingPlan(lineElem, readingPlan, (spanId, element) => {
+    renderReadingPlan(lineElem, readingPlan, (spanId, element) => {
       const index = Number(spanId);
       if (Number.isInteger(index) && animatorEntries?.[index]) animatorEntries[index].RomajiElement = element;
-    });
+    }, readabilityGapSpanIds);
   } else if (shouldRenderRomanization(groupEntry, options)) {
-    const hasDistinctRomanization = isMeaningfullyDifferent(groupRomanizedText, sourceText);
+    const readableGroupRomanizedText = formatMixedScriptReadingForDisplay(
+      sourceText,
+      groupRomanizedText,
+    );
+    const hasDistinctRomanization = isMeaningfullyDifferent(readableGroupRomanizedText, sourceText);
     if (hasDistinctRomanization || options.romanizationPending) {
       forceStackedLine(lineElem, options.oppositeAligned);
       const romanizedDiv = document.createElement("div");
@@ -372,14 +399,16 @@ export function appendSyllableRomanizedBelow(
             romajiSpan.classList.add("reading-origin-provider-explicit");
             romajiSpan.dataset.readingOrigin = "provider-explicit";
           }
-          if (syl.RomajiSpaceBefore || needsSyllableSpaceBefore(syllables, index)) {
+          if (
+            resolveSyllableBoundary(syllables, index).needsReadingSpace
+          ) {
             romajiSpan.style.marginLeft = "0.25em";
           }
           romanizedDiv.appendChild(romajiSpan);
           if (animatorEntries?.[index]) animatorEntries[index].RomajiElement = romajiSpan;
         });
       } else {
-        romanizedDiv.textContent = groupRomanizedText || "";
+        romanizedDiv.textContent = readableGroupRomanizedText || "";
       }
 
       lineElem.appendChild(romanizedDiv);

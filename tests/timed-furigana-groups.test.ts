@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DefaultCanonicalLineBuilder } from "../src/utils/Lyrics/Processing/Canonical.ts";
+import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { timedFuriganaGroups, timedGroupContinuesAt } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
 import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 
@@ -21,7 +21,7 @@ function charSpans(text: string): ParsedLine {
 }
 
 function planFor(text: string, furigana: unknown[]) {
-  const canonical = new DefaultCanonicalLineBuilder().build(charSpans(text));
+  const canonical = buildCanonicalLine(charSpans(text));
   return { sourceUnits: canonical.spanMappings, furigana } as any;
 }
 
@@ -51,7 +51,7 @@ test("ruby centers over the annotated range inside oversized provider fragments"
       { id: "1", rawText: "酔", cleanText: "酔", startMs: 1, endMs: 2, providerPartOfWord: true },
     ],
   };
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
   const plan = {
     sourceUnits: canonical.spanMappings,
     furigana: [{ canonicalRange: { startCp: 4, endCp: 6 }, reading: "ますい", provenance: "local" }],

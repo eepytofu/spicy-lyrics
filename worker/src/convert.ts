@@ -7,17 +7,6 @@ const labels: Record<ProviderId, string> = {
   soda: "Soda Music",
 };
 const NETEASE_INSTRUMENTAL_SENTINEL = "纯音乐请欣赏";
-const PROVIDER_CREDIT_LABELS = new Set([
-  "词", "詞", "曲", "作词", "作詞", "作曲", "词曲", "詞曲",
-  "编曲", "編曲", "制作", "製作", "制作人", "製作人", "监制", "監製",
-  "和声", "和音", "混音", "录音", "錄音", "母带", "母帶",
-  "二胡", "笛", "笛子", "吉他", "贝斯", "貝斯", "钢琴", "鋼琴",
-  "弦乐", "弦樂", "鼓", "古筝", "古箏", "琵琶", "制作团队", "製作團隊",
-  "出品", "发行", "發行", "策划", "策劃", "统筹", "統籌",
-  "lyrics", "lyric", "lyricist", "composer", "arranger", "producer",
-  "vocal", "vocals", "chorus", "mix", "mixing", "mastering", "recording",
-  "guitar", "bass", "drums", "piano", "violin", "strings", "percussion",
-]);
 
 function normalizeMarkerText(text: string): string {
   return text.normalize("NFKC").trim();
@@ -59,54 +48,6 @@ function hasAuthoredBoundaryAfter(words: TimedWord[], index: number): boolean {
   return false;
 }
 
-function providerCreditLabel(text: string): string | undefined {
-  const match = /^(.{1,32}?)\s*[:：]\s*(.+)$/u.exec(text.trim());
-  if (!match) return undefined;
-  const label = match[1].replace(/\s+/gu, "").toLowerCase();
-  return PROVIDER_CREDIT_LABELS.has(label) ? label : undefined;
-}
-
-function isSpeakerCue(text: string): boolean {
-  // A bare `name:`/`合:` line introduces the next vocal part. It is not a
-  // production credit even when the name itself contains Han characters.
-  return /^.{1,32}[:：]\s*$/u.test(text.trim());
-}
-
-function looksLikeTitleArtistLine(text: string): boolean {
-  return /\s[-–—]\s/u.test(text);
-}
-
-function providerInfoIndexes(lines: TimedLine[]): Set<number> {
-  const indexes = new Set<number>();
-  const texts = lines.map((line) => line.words.map((word) => word.text).join("").trim());
-
-  for (let index = 0; index < texts.length; index += 1) {
-    if (!isSpeakerCue(texts[index]) && providerCreditLabel(texts[index])) indexes.add(index);
-  }
-
-  // A combined title/artist header has no role label. Recognize it only when
-  // it is the first line, starts at the beginning, and is immediately followed
-  // by a real credit so an ordinary lyric containing a dash is left alone.
-  if (
-    texts.length > 1 &&
-    lines[0].startMs <= 1000 &&
-    looksLikeTitleArtistLine(texts[0]) &&
-    indexes.has(1)
-  ) {
-    indexes.add(0);
-  }
-  return indexes;
-}
-
-function hasSyntheticInfoTiming(line: TimedLine): boolean {
-  const durations = line.words
-    .filter((word) => word.text.trim() && word.durationMs > 0)
-    .map((word) => word.durationMs);
-  if (!durations.length) return false;
-  const averageDuration = durations.reduce((sum, duration) => sum + duration, 0) / durations.length;
-  return averageDuration >= 1500;
-}
-
 export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): NativeLyrics | undefined {
   const usableLines = lines.flatMap((line) => {
     // QRC, KRC, and YRC already encode their authored text as ordered
@@ -118,9 +59,8 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
     return [{ ...line, words }];
   });
   if (isInstrumentalSentinelDocument(usableLines.map((line) => line.words.map((word) => word.text).join("")), provider)) return undefined;
-  const infoIndexes = providerInfoIndexes(usableLines);
 
-  const Content = usableLines.map((line, lineIndex) => {
+  const Content = usableLines.map((line) => {
     const words = line.words;
     const Syllables = words.map((word, index) => ({
       Text: word.text,
@@ -137,8 +77,6 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
       StartTime: Syllables[0].StartTime,
       EndTime: Syllables.at(-1)!.EndTime,
       Syllables,
-      ...(infoIndexes.has(lineIndex) ? { IsProviderInfo: true } : {}),
-      ...(infoIndexes.has(lineIndex) && hasSyntheticInfoTiming(line) ? { IsMetadata: true } : {}),
     };
     const translation = cleanSidecarText(line.translation, provider);
     if (translation) {

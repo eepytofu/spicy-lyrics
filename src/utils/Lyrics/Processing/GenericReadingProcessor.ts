@@ -1,5 +1,5 @@
-import { DefaultCanonicalLineBuilder } from "./Canonical.ts";
-import { DefaultRenderPlanBuilder, validateRenderPlan } from "./RenderPlan.ts";
+import { buildCanonicalLine } from "./Canonical.ts";
+import { buildRenderPlan, validateRenderPlan } from "./RenderPlan.ts";
 import type { ParsedLine, ReadingAnnotation, RenderPlan } from "./Model.ts";
 
 function align(chunks: string[], display: string): string[] {
@@ -158,7 +158,7 @@ export function buildTimedGenericPlan(
     displayText: syllables.map((s: any) => s.Text || "").join(""), paragraphProvenance: "unavailable",
     spans: syllables.map((s: any, i: number) => ({ id: String(i), rawText: s.Text || "", cleanText: s.Text || "",
       startMs: Number(s.StartTime || 0), endMs: Number(s.EndTime || 0), providerPartOfWord: s.IsPartOfWord === true })) };
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
   const rawChunks = syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim());
   const sourceTexts = syllables.map((s: any) => s.Text || "");
   const chunks = processor === "Chinese"
@@ -168,7 +168,7 @@ export function buildTimedGenericPlan(
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",
       logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId] })) };
-  const plan = new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
+  const plan = buildRenderPlan(parsed, canonical, [annotation]);
   if (!validateRenderPlan(plan).valid) return undefined;
   return processor === "Chinese" ? { ...plan, primaryScript: "Chinese" } : plan;
 }
@@ -176,9 +176,9 @@ export function buildTimedGenericPlan(
 export function buildLineFallbackPlan(source: string, display: string, id: string): RenderPlan {
   const parsed: ParsedLine = { id, displayText: source, paragraphProvenance: "lineBoundary",
     spans: [{ id: "line", rawText: source, cleanText: source, startMs: 0, endMs: 0, providerPartOfWord: false }] };
-  const canonical = new DefaultCanonicalLineBuilder().build(parsed);
+  const canonical = buildCanonicalLine(parsed);
   const annotation: ReadingAnnotation = { processor: "Fallback", mode: "line", provenance: "provider",
     units: [{ canonicalRange: { startCp: 0, endCp: Array.from(canonical.text).length }, text: display,
       kind: "transformed", logicalGroupId: "line", timingRefs: [] }] };
-  return new DefaultRenderPlanBuilder().build(parsed, canonical, [annotation]);
+  return buildRenderPlan(parsed, canonical, [annotation]);
 }
