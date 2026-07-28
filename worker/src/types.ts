@@ -54,3 +54,7 @@ export type ProviderMatchMetadata = {
 };
 
 export type LyricsProvider = (track: TrackMetadata) => Promise<NativeLyrics | undefined>;
+
+export type ProviderRequestContext = {
+  signal?: AbortSignal;
+};
