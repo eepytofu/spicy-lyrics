@@ -42,9 +42,6 @@ export function parseTrackMetadata(url: URL, id: string): TrackMetadata | undefi
     .getAll("artist_name")
     .map((artist) => artist.trim())
     .filter(Boolean);
-  if (!artists.length && parameter(url, "artist")) {
-    artists.push(...parameter(url, "artist").split(/\s*,\s*/).filter(Boolean));
-  }
   const durationSeconds = Number(parameter(url, "duration"));
   if (!title || !artists.length || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     return undefined;
@@ -94,7 +91,7 @@ export function createWorkerHandler(
 
     const track = parseTrackMetadata(url, trackId);
     if (!track) {
-      return response("Missing title, artist_name/artist, or duration", 400);
+      return response("Missing title, artist_name, or duration", 400);
     }
 
     const outcome = await acquireProvider(

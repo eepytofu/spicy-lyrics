@@ -294,8 +294,8 @@ async function ensureProcessingVersion(
   session: LyricsRequestSession,
 ): Promise<ProcessingVersionResult> {
   if (lyrics) {
-    lyrics.uri = lyrics.uri || uri;
-    lyrics.id = lyrics.id || trackId;
+    lyrics.uri = uri;
+    lyrics.id = trackId;
     ensureSourceEvidence(lyrics);
     normalizeProviderTranslations(lyrics);
   }
@@ -350,7 +350,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
 
   try {
     const cached = await LyricsStore.GetItem(trackId);
-    if (cached?.Value === "NO_LYRICS" || (cached && !isSourceCacheCompatible(cached))) {
+    if (cached && !isSourceCacheCompatible(cached)) {
       await LyricsStore.RemoveItem(trackId);
     } else if (cached) {
       return;
@@ -480,15 +480,13 @@ async function fetchLyricsForSession(
         // so strip the prefix rather than splitting on ":".
         const savedUri = savedLyricsData.slice("NO_LYRICS:".length);
         if (savedUri === uri) {
-          // Legacy negative entries have no source signature. Retry so a newly
-          // enabled provider gets a chance to resolve the current track.
+          // The current negative sentinel has no source signature. Retry so a
+          // newly enabled provider gets a chance to resolve the current track.
           $currentLyricsData.set("");
         }
       } else {
         const lyricsData = JSON.parse(savedLyricsData);
-        // Return stored lyrics only when they match the current track. Prefer the
-        // URI guard; fall back to id only for pre-uri cache entries.
-        const isCurrentTrack = lyricsData?.uri === uri || (!lyricsData?.uri && lyricsData?.id === trackId);
+        const isCurrentTrack = lyricsData?.uri === uri;
         if (isCurrentTrack && lyricsData?.ProcessingPending !== true && isSourceCacheCompatible(lyricsData)) {
           const processed = await ensureProcessingVersion(trackId, uri, lyricsData, session);
           if (!session.isCurrent()) return null;
@@ -529,24 +527,23 @@ async function fetchLyricsForSession(
     try {
       const lyricsFromCacheRes = await LyricsStore.GetItem(trackId);
       if (lyricsFromCacheRes) {
-        if (lyricsFromCacheRes?.Value === "NO_LYRICS" || !isSourceCacheCompatible(lyricsFromCacheRes)) {
+        if (!isSourceCacheCompatible(lyricsFromCacheRes)) {
           await LyricsStore.RemoveItem(trackId);
         } else {
-        // Tag the cached payload with the current uri so the saved-data and
-        // re-fetch checks (which match on uri) recognise it — older cache
-        // entries predate the uri field.
-        const processed = await ensureProcessingVersion(trackId, uri, {
-          ...lyricsFromCacheRes,
-          uri,
-        }, session);
-        if (!session.isCurrent()) return null;
-        const lyricsFromCache = processed.lyrics;
-        $currentLyricsData.set(JSON.stringify(lyricsFromCache));
-        presentLyrics(lyricsFromCache, session);
-        if (processed.translationPending) {
-          void finishTranslationInBackground(trackId, lyricsFromCache, session);
-        }
-        return [{ ...lyricsFromCache, fromCache: true }, 200];
+          const processed = await ensureProcessingVersion(
+            trackId,
+            uri,
+            lyricsFromCacheRes,
+            session,
+          );
+          if (!session.isCurrent()) return null;
+          const lyricsFromCache = processed.lyrics;
+          $currentLyricsData.set(JSON.stringify(lyricsFromCache));
+          presentLyrics(lyricsFromCache, session);
+          if (processed.translationPending) {
+            void finishTranslationInBackground(trackId, lyricsFromCache, session);
+          }
+          return [{ ...lyricsFromCache, fromCache: true }, 200];
         }
       }
     } catch (error) {

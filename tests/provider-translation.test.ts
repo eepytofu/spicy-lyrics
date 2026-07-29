@@ -18,12 +18,11 @@ function chineseProviderLine() {
     Content: [{
       Text: "どうせ水は乾く土地さ",
       ProviderTranslatedText: "反正水是干旱的土地上的",
-      TranslatedText: "反正水是干旱的土地上的",
     }],
   };
 }
 
-test("legacy provider duplicates normalize to one provider lane", () => {
+test("current provider translations remain in their independent lane", () => {
   const lyrics = chineseProviderLine();
   const available = normalizeProviderTranslations(lyrics);
   const line = lyrics.Content[0] as any;
@@ -48,7 +47,6 @@ test("word-synced provider translations use the same independent display lane", 
           { Text: "水は乾く土地さ", IsPartOfWord: true },
         ],
         ProviderTranslatedText: "反正水是干旱的土地上的",
-        TranslatedText: "反正水是干旱的土地上的",
       },
     }],
   };
@@ -60,7 +58,7 @@ test("word-synced provider translations use the same independent display lane", 
   assert.equal((lyrics as any).IncludesTranslation, true);
 });
 
-test("word-synced compatibility groups without an explicit Type keep translations", () => {
+test("word-synced native groups without an explicit Type keep translations", () => {
   const lyrics = {
     Type: "Syllable",
     Content: [{
@@ -132,16 +130,16 @@ test("translation copy falls back to the provider sidecar without duplicating st
   assert.equal(preferredCopyTranslation(withBuiltIn), withBuiltIn.TranslatedText);
 });
 
-test("legacy duplicate translation values resolve to one provider lane", () => {
-  const duplicate = {
+test("provider and built-in translation lanes remain independent", () => {
+  const entry = {
     ProviderTranslatedText: "反正水是干旱的土地上的",
-    TranslatedText: "反正水是干旱的土地上的",
+    TranslatedText: "This is the selected built-in translation",
   };
 
-  assert.deepEqual(resolveTranslationSidecars(duplicate), {
-    provider: duplicate.ProviderTranslatedText,
+  assert.deepEqual(resolveTranslationSidecars(entry), {
+    provider: entry.ProviderTranslatedText,
     providerLanguage: "zh-Hans",
-    generic: undefined,
+    generic: entry.TranslatedText,
   });
 });
 

@@ -19,6 +19,7 @@ test("Worker requests carry a cache-busting contract version and every artist", 
 
   assert.equal(url.pathname, "/v1/lyrics/kugou/spotify%3Aid%2Fwith%20spaces");
   assert.deepEqual(url.searchParams.getAll("artist_name"), ["Lead", "Guest"]);
+  assert.equal(url.searchParams.has("artist"), false);
   assert.equal(url.searchParams.get("request_version"), String(EXTERNAL_WORKER_REQUEST_VERSION));
 });
 
@@ -26,5 +27,6 @@ test("custom lyric servers keep their existing unversioned request contract", ()
   const url = new URL(externalSourceRequestUrl("https://custom.example/v1/", info));
 
   assert.equal(url.pathname, "/v1/spotify%3Aid%2Fwith%20spaces");
+  assert.equal(url.searchParams.get("artist"), "Lead, Guest");
   assert.equal(url.searchParams.has("request_version"), false);
 });

@@ -17,53 +17,7 @@ function saveUiStateBlob(obj: Record<string, any>) {
   Spicetify.LocalStorage.set(UI_STATE_KEY, JSON.stringify(obj));
 }
 
-function migrateUiStateKeys(blob: Record<string, any>): Record<string, any> {
-  const renames: Record<string, string> = {
-    "IsNowBarOpen": "isNowBarOpen",
-    "NowBarSide": "nowBarSide",
-    "ForceCompactMode": "forceCompactMode",
-    "previous-version": "previousVersion",
-  };
-  let changed = false;
-  for (const [oldKey, newKey] of Object.entries(renames)) {
-    if (oldKey in blob) {
-      blob[newKey] = blob[oldKey];
-      delete blob[oldKey];
-      changed = true;
-    }
-  }
-  if (changed) saveUiStateBlob(blob);
-  return blob;
-}
-
-const _uiState: Record<string, any> = migrateUiStateKeys(readUiStateBlob());
-if (_uiState.japaneseReadingMode === undefined) {
-  _uiState.japaneseReadingMode = _uiState.japaneseFurigana
-    ? _uiState.showRomajiWithFurigana
-      ? "both"
-      : "furigana"
-    : "romaji";
-  saveUiStateBlob(_uiState);
-}
-if (_uiState.koreanDisplayMode === undefined) {
-  if (_uiState.koreanSeparators === true && _uiState.koreanRomanizationMode !== "pronunciation") {
-    _uiState.koreanDisplayMode = "wordTranslit";
-  } else if (_uiState.koreanRomanizationMode === "pronunciation") {
-    _uiState.koreanDisplayMode = _uiState.koreanOutputStyle === "vn" ? "vnPronunciation" : "rrPronunciation";
-  } else {
-    _uiState.koreanDisplayMode = "rrStandard";
-  }
-  saveUiStateBlob(_uiState);
-} else if (["plain", "blocks", "pronunciation"].includes(_uiState.koreanDisplayMode)) {
-  if (_uiState.koreanDisplayMode === "blocks") {
-    _uiState.koreanDisplayMode = "wordTranslit";
-  } else if (_uiState.koreanDisplayMode === "pronunciation") {
-    _uiState.koreanDisplayMode = _uiState.koreanOutputStyle === "vn" ? "vnPronunciation" : "rrPronunciation";
-  } else {
-    _uiState.koreanDisplayMode = "rrStandard";
-  }
-  saveUiStateBlob(_uiState);
-}
+const _uiState: Record<string, any> = readUiStateBlob();
 
 function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_uiState[key] !== undefined ? _uiState[key] : defaultValue);

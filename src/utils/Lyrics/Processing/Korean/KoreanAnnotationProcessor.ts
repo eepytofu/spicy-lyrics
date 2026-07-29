@@ -78,7 +78,7 @@ export function annotateKoreanLine(
     }
   });
 
-  // Fall back to the legacy range slice whenever the piece stream cannot be
+  // Fall back to a range-based slice whenever the piece stream cannot be
   // aligned 1:1 with the normalized source (defensive; should not happen).
   const mappingCoversCanonical = canonicalChars.every((char, cp) =>
     /\s/u.test(char) || sourceMap.includes(cp),

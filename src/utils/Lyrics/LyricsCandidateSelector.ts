@@ -291,7 +291,7 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
   });
 }
 
-function legacyCandidate(candidates: LyricsCandidate[], appleTieOverride: boolean): LyricsCandidate | null {
+function syncTypeCandidate(candidates: LyricsCandidate[], appleTieOverride: boolean): LyricsCandidate | null {
   let best: LyricsCandidate | null = null;
   for (const candidate of candidates) {
     const candidateDetail = syncDetailScore(candidate.lyrics);
@@ -311,7 +311,7 @@ export function selectLyricsCandidate(
   const assessments = assessLyricsCandidates(ordered, durationMs);
   let candidate: LyricsCandidate | null = null;
   if (mode === "strict") candidate = ordered[0] ?? null;
-  else if (mode === "syncType") candidate = legacyCandidate(ordered, appleTieOverride);
+  else if (mode === "syncType") candidate = syncTypeCandidate(ordered, appleTieOverride);
   else {
     const assessmentByProvider = new Map(assessments.map((assessment) => [assessment.provider, assessment]));
     candidate = [...ordered].sort((left, right) => {

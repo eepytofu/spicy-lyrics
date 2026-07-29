@@ -9,7 +9,6 @@ import { isMeaningfullyDifferent } from "../TextCompare.ts";
 import { batchTranslate } from "./GoogleTranslationClient.ts";
 import {
   effectiveTranslationSource,
-  normalizeCompare,
   shouldDisplayTranslation,
   shouldTranslateLine,
 } from "./TranslationEligibility.ts";
@@ -49,7 +48,7 @@ function hasGenericTranslation(ref: TranslationLineRef): boolean {
     && shouldDisplayTranslation(ref.sourceText, ref.obj.TranslatedText);
 }
 
-export const TRANSLATION_SIDECAR_SCHEMA_VERSION = 1;
+export const TRANSLATION_SIDECAR_SCHEMA_VERSION = 2;
 
 /**
  * Capture translations that arrived with freshly fetched lyrics before the
@@ -79,8 +78,6 @@ export function captureSourceTranslations(lyrics: any): number {
 
     delete ref.obj.TranslatedText;
     delete ref.obj.TranslatedTextLanguage;
-    delete ref.obj.TranslatedTextSource;
-    delete ref.obj.ChineseProviderTranslatedText;
   }
 
   lyrics.TranslationSidecarSchemaVersion = TRANSLATION_SIDECAR_SCHEMA_VERSION;
@@ -88,39 +85,16 @@ export function captureSourceTranslations(lyrics: any): number {
   return captured;
 }
 
-/**
- * Normalize provider sidecars without applying a display preference. Older
- * Workers and caches duplicated ProviderTranslatedText into TranslatedText;
- * remove only that matching legacy copy while preserving a distinct built-in
- * target-language translation.
- */
+/** Normalize provider sidecars without applying a display preference. */
 export function normalizeProviderTranslations(lyrics: any): number {
   const lineRefs = collectTranslationLineRefs(lyrics);
   let available = 0;
 
   for (const ref of lineRefs) {
-    const legacyProvider = typeof ref.obj.ChineseProviderTranslatedText === "string"
-      ? ref.obj.ChineseProviderTranslatedText.trim()
-      : "";
-    if (!ref.obj.ProviderTranslatedText && legacyProvider) {
-      ref.obj.ProviderTranslatedText = legacyProvider;
-    }
     const providerTranslation = typeof ref.obj.ProviderTranslatedText === "string"
       ? ref.obj.ProviderTranslatedText.trim()
       : "";
-    const wasProviderDisplay = ref.obj.TranslatedTextSource === "chinese-provider"
-      || (
-        !!providerTranslation
-        && normalizeCompare(ref.obj.TranslatedText) === normalizeCompare(providerTranslation)
-      );
 
-    if (wasProviderDisplay) {
-      delete ref.obj.TranslatedText;
-      delete ref.obj.TranslatedTextLanguage;
-      delete ref.obj.TranslatedTextSource;
-    }
-
-    delete ref.obj.ChineseProviderTranslatedText;
     if (shouldDisplayTranslation(ref.sourceText, providerTranslation)) available += 1;
   }
 
@@ -132,7 +106,6 @@ export function normalizeProviderTranslations(lyrics: any): number {
 function clearGoogleTranslation(ref: TranslationLineRef): void {
   delete ref.obj[ref.field];
   delete ref.obj.TranslatedTextLanguage;
-  delete ref.obj.TranslatedTextSource;
 }
 
 type TranslationOptions = {

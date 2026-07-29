@@ -42,7 +42,6 @@ import { ScrollToActiveLine } from "./utils/Scrolling/ScrollToActiveLine.ts";
 import { ScrollSimplebar } from "./utils/Scrolling/Simplebar/ScrollSimplebar.ts";
 import { $fromVersion, $lastFetchedUri, $prefetchNextLyrics, $previousVersion } from "./utils/uiState.ts";
 import { CheckForUpdates } from "./utils/version/CheckForUpdates.tsx";
-import { needsMigration, showMigrationModal } from "./utils/migration/DataMigration.tsx";
 import "./css/settings-panel.css";
 import "./components/ReactComponents/LyricsManager/styles.css";
 import "./css/polyfills/generic-modal-polyfill.css";
@@ -74,11 +73,6 @@ async function main() {
   }
 
   await Platform.OnSpotifyReady;
-
-  if (needsMigration()) {
-    showMigrationModal();
-    return;
-  }
 
   Global.SetScope("fullscreen.open", false);
 

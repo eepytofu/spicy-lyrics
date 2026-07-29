@@ -12,6 +12,5 @@ export function isLyricsSourceCacheCompatible(
   if (entry.source === "ldb") {
     return entry.TranslationSidecarSchemaVersion === translationSidecarSchemaVersion;
   }
-  if (["spl", "aml", "spt"].includes(String(entry.source ?? ""))) return false;
-  return true;
+  return false;
 }

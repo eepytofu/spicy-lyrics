@@ -793,21 +793,10 @@ export async function analyzeJapaneseLine(
     ?.reading;
 }
 
-export function clearLegacyFuriganaFields(target: JapaneseReadable): void {
-  const legacy = target as any;
-  delete legacy.FuriganaHtml;
-  delete legacy.FuriganaText;
-  delete legacy.FuriganaAnnotations;
-  delete legacy.FuriganaTargetStart;
-  delete legacy.FuriganaTargetEnd;
-  delete legacy.FuriganaSegments;
-}
-
 export function assignJapaneseReading(
   target: JapaneseReadable,
   reading: JapaneseReading | undefined
 ): void {
-  clearLegacyFuriganaFields(target);
   if (reading && (reading.romaji || reading.furigana.length > 0)) {
     target.JapaneseReading = reading;
   } else {
@@ -856,7 +845,6 @@ export async function applyJapaneseReadingToSyllables(
         );
   if (!analysis) {
     for (const syllable of syllables) {
-      clearLegacyFuriganaFields(syllable);
       delete syllable.JapaneseReading;
       delete syllable.RomanizedText;
       delete syllable.TransliteratedText;
@@ -1086,7 +1074,6 @@ function applyJapaneseReadingContextToSyllables(
     const syllStart = span?.start ?? 0;
     const syllEnd = span?.end ?? syllStart;
 
-    clearLegacyFuriganaFields(syllable);
     delete syllable.JapaneseReading;
     delete syllable.RomanizedText;
     delete syllable.TransliteratedText;

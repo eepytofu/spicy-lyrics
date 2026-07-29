@@ -31,10 +31,7 @@ function providerTranslationLanguage(text: string | undefined, declared: unknown
   return normalized;
 }
 
-/**
- * Resolve the two translation lanes without treating an older Worker's
- * duplicated provider value as a separate built-in translation.
- */
+/** Resolve the independent provider and built-in translation lanes. */
 export function resolveTranslationSidecars(entry: TranslationSidecarEntry): {
   provider?: string;
   providerLanguage?: string;

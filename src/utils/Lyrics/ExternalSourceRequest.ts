@@ -1,4 +1,4 @@
-export const EXTERNAL_WORKER_REQUEST_VERSION = 8;
+export const EXTERNAL_WORKER_REQUEST_VERSION = 9;
 
 export type ExternalSourceRequestInfo = {
   id: string;
@@ -19,7 +19,7 @@ export function externalSourceRequestUrl(
     ? `${root}/v1/lyrics/${provider}/${encodeURIComponent(info.id)}`
     : `${root}/${encodeURIComponent(info.id)}`);
   url.searchParams.set("title", info.title);
-  url.searchParams.set("artist", info.artist);
+  if (!provider) url.searchParams.set("artist", info.artist);
   url.searchParams.set("album", info.album);
   url.searchParams.set("duration", String(info.durationMs / 1000));
   info.artists.forEach((artist) => url.searchParams.append("artist_name", artist));

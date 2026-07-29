@@ -18,60 +18,7 @@ function saveSettingsBlob(obj: Record<string, any>) {
   Spicetify.LocalStorage.set(SETTINGS_KEY, JSON.stringify(obj));
 }
 
-function migrateSettingsKeys(blob: Record<string, any>): Record<string, any> {
-  const renames: Record<string, string> = {
-    "skip-spicy-font": "skipSpicyFont",
-    show_npv_dynamic_bg: "showNpvDynamicBg",
-  };
-  let changed = false;
-  for (const [oldKey, newKey] of Object.entries(renames)) {
-    if (oldKey in blob) {
-      blob[newKey] = blob[oldKey];
-      delete blob[oldKey];
-      changed = true;
-    }
-  }
-  const selectionModes = new Set(["smart", "syncType", "strict"]);
-  if ("strictLyricsSourcePriority" in blob) {
-    if (!selectionModes.has(blob.lyricsSelectionMode)) {
-      blob.lyricsSelectionMode = blob.strictLyricsSourcePriority === true ? "strict" : "syncType";
-    }
-    delete blob.strictLyricsSourcePriority;
-    changed = true;
-  } else if ("lyricsSelectionMode" in blob && !selectionModes.has(blob.lyricsSelectionMode)) {
-    blob.lyricsSelectionMode = "smart";
-    changed = true;
-  }
-  try {
-    const order = JSON.parse(blob.lyricsSourceOrder);
-    if (Array.isArray(order)) {
-      const newlyDisabled: string[] = [];
-      if (!order.includes("amlldb")) {
-        const qqIndex = order.indexOf("qq");
-        order.splice(qqIndex < 0 ? order.length : qqIndex, 0, "amlldb");
-        newlyDisabled.push("amlldb");
-      }
-      if (!order.includes("soda")) {
-        const neteaseIndex = order.indexOf("netease");
-        const spotifyIndex = order.indexOf("spotify");
-        order.splice(neteaseIndex >= 0 ? neteaseIndex + 1 : spotifyIndex >= 0 ? spotifyIndex : order.length, 0, "soda");
-        newlyDisabled.push("soda");
-      }
-      if (newlyDisabled.length) {
-        blob.lyricsSourceOrder = JSON.stringify(order);
-        const disabled = JSON.parse(blob.disabledLyricsSources ?? "[]");
-        blob.disabledLyricsSources = JSON.stringify(
-          Array.isArray(disabled) ? [...new Set([...disabled, ...newlyDisabled])] : newlyDisabled
-        );
-        changed = true;
-      }
-    }
-  } catch { /* malformed source preferences are normalized by the source manager */ }
-  if (changed) saveSettingsBlob(blob);
-  return blob;
-}
-
-const _settings: Record<string, any> = migrateSettingsKeys(readSettingsBlob());
+const _settings: Record<string, any> = readSettingsBlob();
 
 function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_settings[key] !== undefined ? _settings[key] : defaultValue);

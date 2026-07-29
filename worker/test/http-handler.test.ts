@@ -66,7 +66,7 @@ describe("Worker HTTP boundary", () => {
     expect((await handler(request("qq", "?title=Song&duration=240"))).status).toBe(400);
   });
 
-  it("parses repeated artists and the legacy comma-separated artist field", () => {
+  it("parses repeated artist fields", () => {
     expect(
       parseTrackMetadata(new URL(`https://worker.test/${trackQuery}`), "id"),
     ).toEqual({
@@ -76,15 +76,18 @@ describe("Worker HTTP boundary", () => {
       album: "Album",
       durationMs: 240_000,
     });
+  });
+
+  it("rejects the removed comma-separated artist field", () => {
     expect(
       parseTrackMetadata(
         new URL("https://worker.test/?title=Song&artist=First,Second&duration=1.5"),
         "id",
-      )?.artists,
-    ).toEqual(["First", "Second"]);
+      ),
+    ).toBeUndefined();
   });
 
-  it("serializes native JSON with the compatible cache and CORS contract", async () => {
+  it("serializes native JSON with the cache and CORS contract", async () => {
     const payload: ProviderPayload = {
       format: "json",
       lyrics: {

@@ -14,7 +14,7 @@ test("provider-owned ldb cache entries still honor the source signature", () => 
   assert.equal(isLyricsSourceCacheCompatible(lyrics, "old-order", 3), true);
 });
 
-test("legacy local ldb entries use the translation schema fallback", () => {
+test("current local ldb entries use the translation schema", () => {
   assert.equal(
     isLyricsSourceCacheCompatible(
       { source: "ldb", TranslationSidecarSchemaVersion: 3 },
@@ -33,7 +33,8 @@ test("legacy local ldb entries use the translation schema fallback", () => {
   );
 });
 
-test("unsigned legacy provider payloads are refreshed", () => {
+test("payloads without current cache ownership are refreshed", () => {
   assert.equal(isLyricsSourceCacheCompatible({ source: "spl" }, "current", 3), false);
   assert.equal(isLyricsSourceCacheCompatible({ source: "aml" }, "current", 3), false);
+  assert.equal(isLyricsSourceCacheCompatible({ source: "unknown" }, "current", 3), false);
 });
