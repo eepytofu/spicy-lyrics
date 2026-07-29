@@ -1,6 +1,10 @@
 import type { ProviderCredit, ProviderCreditRole, ProviderId } from "./types";
 
 const MAX_CREDIT_NAME_LENGTH = 120;
+const AUTOMATED_BY_CREDIT_PATTERNS = [
+  /^krc转trans工具$/u,
+  /^天琴实验室ai生成v\d+(?:\.\d+)*$/u,
+];
 
 export function cleanCreditName(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -20,7 +24,15 @@ export function extractByCredit(
   if (typeof text !== "string") return undefined;
   const match = /^\s*\[by\s*:\s*([^\]]+)\]\s*$/im.exec(text);
   const name = cleanCreditName(match?.[1]);
-  return name ? { role, name, provider } : undefined;
+  if (!name || isAutomatedByCredit(name)) return undefined;
+  return { role, name, provider };
+}
+
+export function isAutomatedByCredit(value: unknown): boolean {
+  const name = cleanCreditName(value);
+  if (!name) return false;
+  const normalized = name.normalize("NFKC").replace(/\s+/gu, "").toLowerCase();
+  return AUTOMATED_BY_CREDIT_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 export function dedupeProviderCredits(

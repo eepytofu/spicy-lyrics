@@ -1,7 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { attachSidecars, attachTimedSidecars, parseLrc, toLineLyrics, toSyllableLyrics } from "../src/convert";
-import { dedupeProviderCredits, extractByCredit } from "../src/credits";
+import { dedupeProviderCredits, extractByCredit, isAutomatedByCredit } from "../src/credits";
 import { decryptKrc, parseKrc } from "../src/providers/kugou";
 import { parseQrc, qrcContent } from "../src/providers/qq";
 import { neteaseProviderCredits, parseYrc } from "../src/providers/netease";
@@ -393,5 +393,17 @@ describe("native word-sync conversion", () => {
     expect(dedupeProviderCredits([credit, credit])).toEqual([
       { role: "lyrics", name: "contributor", provider: "qq" },
     ]);
+  });
+
+  it("drops known automated by-tags without guessing ordinary contributor names", () => {
+    expect(extractByCredit("[by:krc转trans工具]", "translation", "qq")).toBeUndefined();
+    expect(extractByCredit("[by: 天琴实验室ＡＩ生成ｖ１．０ ]", "lyrics", "kugou")).toBeUndefined();
+    expect(isAutomatedByCredit("天琴实验室AI生成v2.1")).toBe(true);
+    expect(isAutomatedByCredit("天琴实验室")).toBe(false);
+    expect(extractByCredit("[by:AIみどり]", "lyrics", "qq")).toEqual({
+      role: "lyrics",
+      name: "AIみどり",
+      provider: "qq",
+    });
   });
 });
