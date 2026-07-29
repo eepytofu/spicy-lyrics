@@ -96,3 +96,18 @@ test("the extra sweep is wider without changing base lyric or ruby constants", (
     /--ruby-on: clamp\(0%, calc\(\(var\(--gradient-position, -20%\)/u,
   );
 });
+
+test("simple syllable mode keeps furigana on its owning word paint state", () => {
+  assert.match(
+    mainCss,
+    /#SpicyLyricsPage\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.line\s+\.furigana-reading\s*\{[^}]*--ruby-on:/u,
+  );
+  assert.match(
+    mainCss,
+    /#SpicyLyricsPage\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.line\s+\.furigana-reading\.reading-origin-provider-explicit\s*\{/u,
+  );
+  assert.doesNotMatch(
+    mainCss,
+    /#SpicyLyricsPage:not\(\.SimpleLyricsMode\)\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]/u,
+  );
+});

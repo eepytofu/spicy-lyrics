@@ -275,7 +275,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    the word's animated position. The steep ramp makes it a quick pop as the
    word starts, not a gradual intra-ruby sweep; a ruby over a not-yet-sung
    word stays dim like that word instead of outshining it. */
-#SpicyLyricsPage:not(.SimpleLyricsMode)
+#SpicyLyricsPage
   .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
   .line
   .furigana-reading {
@@ -309,7 +309,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   -webkit-text-fill-color: rgba(255, 207, 128, 0.44);
 }
 
-#SpicyLyricsPage:not(.SimpleLyricsMode)
+#SpicyLyricsPage
   .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
   .line
   .furigana-reading.reading-origin-provider-explicit {
