@@ -173,6 +173,16 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   display: inline;
 }
 
+/* Keep opening and closing punctuation with the adjacent base run even when
+   ruby splits them into separate renderer nodes. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .lyric-wrap-group {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  align-items: end;
+  vertical-align: bottom;
+}
+
 /* Plain text beside ruby uses the same two-row cluster geometry with an empty
    reading row. This keeps every base glyph on one baseline without adding a
    hidden reading or placeholder character. */

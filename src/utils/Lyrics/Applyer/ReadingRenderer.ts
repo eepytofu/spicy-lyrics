@@ -61,17 +61,22 @@ const plainTextSegmenter = typeof Intl.Segmenter === "function"
   ? new Intl.Segmenter("ja", { granularity: "word" })
   : undefined;
 const OpeningPunctuation = /^[([{（［｛「『【〈《〔]+$/u;
-const ClosingPunctuation = /^[)\]}）］｝」』】〉》〕、。！？!?…,:;]+$/u;
+const ClosingPunctuation = /^[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]+$/u;
+const WrapPunctuation =
+  /([([{（［｛「『【〈《〔]+|[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]+)/gu;
 const WhitespaceOnlyText = /^\s+$/u;
 
 function plainTextWrapChunks(text: string): string[] {
   const segmented = plainTextSegmenter
     ? Array.from(plainTextSegmenter.segment(text), ({ segment }) => segment)
     : Array.from(text);
+  const punctuationAwareSegments = segmented.flatMap((segment) =>
+    segment.split(WrapPunctuation).filter(Boolean)
+  );
   const chunks: string[] = [];
   let opening = "";
 
-  for (const segment of segmented) {
+  for (const segment of punctuationAwareSegments) {
     if (OpeningPunctuation.test(segment)) {
       opening += segment;
       continue;
@@ -85,8 +90,7 @@ function plainTextWrapChunks(text: string): string[] {
   }
 
   if (opening) {
-    if (chunks.length > 0) chunks[chunks.length - 1] += opening;
-    else chunks.push(opening);
+    chunks.push(opening);
   }
   return chunks;
 }
@@ -153,6 +157,43 @@ function appendPlainText(
       parent.appendChild(run);
     }
   }
+}
+
+const baseRunText = (run: HTMLElement): string =>
+  directClusterChild(run, "furigana-base")?.textContent
+  ?? run.textContent
+  ?? "";
+
+function groupWrapPunctuationRuns(parent: HTMLElement): void {
+  const runs = Array.from(parent.children) as HTMLElement[];
+  const grouped: HTMLElement[] = [];
+
+  for (let index = 0; index < runs.length; index += 1) {
+    const run = runs[index];
+    const text = baseRunText(run);
+
+    if (OpeningPunctuation.test(text) && runs[index + 1]) {
+      const group = document.createElement("span");
+      group.className = "lyric-wrap-group";
+      group.append(run, runs[index + 1]);
+      grouped.push(group);
+      index += 1;
+      continue;
+    }
+
+    if (ClosingPunctuation.test(text) && grouped.length > 0) {
+      const group = document.createElement("span");
+      group.className = "lyric-wrap-group";
+      group.append(grouped.pop()!, run);
+      grouped.push(group);
+      continue;
+    }
+
+    grouped.push(run);
+  }
+
+  parent.textContent = "";
+  parent.append(...grouped);
 }
 
 /**
@@ -254,6 +295,7 @@ export function appendFuriganaText(
   }
 
   appendPlainText(parent, text.slice(cursor), cursor, hanLanguageContext, "furiganaRow");
+  groupWrapPunctuationRuns(parent);
 }
 
 const hasElementClass = (element: Element, className: string): boolean =>

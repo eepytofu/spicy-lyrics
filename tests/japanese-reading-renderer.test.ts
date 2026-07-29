@@ -510,6 +510,56 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
   }
 });
 
+test("opening and closing punctuation stay with their lyric-side text", () => {
+  const source = "ない(信じていない、誰ひとり)";
+  const line = new FakeElement();
+  appendFuriganaText(line as unknown as HTMLElement, source, []);
+
+  const chunks = line.children.map((run) =>
+    run.children.find((child) => child.className === "furigana-base")?.textContent
+      ?? run.textContent
+  );
+  assert.equal(chunks.join(""), source);
+  assert.equal(
+    chunks.some((chunk) => /[([{（［｛「『【〈《〔]$/u.test(chunk)),
+    false,
+  );
+  assert.equal(
+    chunks.slice(1).some((chunk) =>
+      /^[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]/u.test(chunk)
+    ),
+    false,
+  );
+});
+
+test("punctuation and adjacent ruby share one atomic wrap group", () => {
+  const source = "ない(信じていない、誰ひとり)";
+  const line = new FakeElement();
+  appendFuriganaText(line as unknown as HTMLElement, source, [
+    { start: 3, end: 4, reading: "しん" },
+  ]);
+
+  const renderedBase = (node: FakeElement): string => {
+    if (node.className.includes("furigana-reading")) return "";
+    if (node.className === "furigana-base") return node.textContent;
+    return node.children.length > 0
+      ? node.children.map(renderedBase).join("")
+      : node.textContent;
+  };
+  assert.equal(renderedBase(line), source);
+  const group = line.children.find((run) =>
+    run.className.includes("lyric-wrap-group")
+  );
+  assert.ok(group);
+  assert.deepEqual(
+    group.children.map((run) =>
+      run.children.find((child) => child.className === "furigana-base")?.textContent
+        ?? run.textContent
+    ),
+    ["(", "信"],
+  );
+});
+
 test("plain text beside or between ruby shares the ruby base row without placeholders", () => {
   $japaneseReadingMode.set("furigana");
 

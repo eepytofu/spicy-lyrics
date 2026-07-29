@@ -59,6 +59,13 @@ test("plain syllable text reserves the same base row as real ruby", () => {
     mainCss,
     /\.word\.furigana-row-reserved\s*\{[^}]*padding-top/u,
   );
+
+  const wrapGroup = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .lyric-wrap-group",
+  );
+  assert.match(wrapGroup, /display:\s*inline-grid/u);
+  assert.match(wrapGroup, /grid-auto-flow:\s*column/u);
+  assert.match(wrapGroup, /grid-auto-columns:\s*max-content/u);
 });
 
 test("lyric sidecars remain stable geometry rather than animated blocks", () => {
