@@ -23,6 +23,11 @@ import {
   projectFuriganaSegmentsForReadability,
   projectMixedScriptReadability,
 } from "../Processing/MixedScriptReadability.ts";
+import {
+  resolveHanLanguageTagForContext,
+  splitHanLanguageRuns,
+  type HanLanguageContext,
+} from "../HanLanguage.ts";
 
 export type ReadingRenderOptions = {
   useRomanized: boolean;
@@ -33,6 +38,7 @@ export type ReadingRenderOptions = {
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
   reserveFurigana?: boolean;
+  hanLanguageContext?: HanLanguageContext;
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
 };
@@ -113,18 +119,22 @@ function appendPlainText(
   parent: HTMLElement,
   text: string,
   sourceStart = 0,
+  hanLanguageContext?: HanLanguageContext,
 ): void {
   if (!text) return;
 
   let cursor = sourceStart;
   for (const chunk of plainTextWrapChunks(text)) {
-    const run = document.createElement("span");
-    run.className = "lyric-base-run lyric-base-plain";
-    run.dataset.sourceStart = String(cursor);
-    cursor += chunk.length;
-    run.dataset.sourceEnd = String(cursor);
-    run.textContent = chunk;
-    parent.appendChild(run);
+    for (const languageRun of splitHanLanguageRuns(chunk, hanLanguageContext)) {
+      const run = document.createElement("span");
+      run.className = "lyric-base-run lyric-base-plain";
+      run.dataset.sourceStart = String(cursor);
+      cursor += languageRun.text.length;
+      run.dataset.sourceEnd = String(cursor);
+      run.textContent = languageRun.text;
+      if (languageRun.language) run.lang = languageRun.language;
+      parent.appendChild(run);
+    }
   }
 }
 
@@ -163,7 +173,12 @@ export function populateFuriganaReading(
   element.appendChild(textLayer);
 }
 
-export function appendFuriganaText(parent: HTMLElement, text: string, rawSegments: FuriganaSegment[]): void {
+export function appendFuriganaText(
+  parent: HTMLElement,
+  text: string,
+  rawSegments: FuriganaSegment[],
+  hanLanguageContext?: HanLanguageContext,
+): void {
   parent.textContent = "";
 
   const segments = [...rawSegments]
@@ -179,12 +194,22 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
   let cursor = 0;
   for (const segment of segments) {
     if (segment.start < cursor) continue;
-    appendPlainText(parent, text.slice(cursor, segment.start), cursor);
+    appendPlainText(
+      parent,
+      text.slice(cursor, segment.start),
+      cursor,
+      hanLanguageContext,
+    );
 
     const cluster = document.createElement("span");
     cluster.className = "lyric-base-run furigana-cluster";
     cluster.dataset.sourceStart = String(segment.start);
     cluster.dataset.sourceEnd = String(segment.end);
+    const clusterLanguage = resolveHanLanguageTagForContext(
+      text.slice(segment.start, segment.end),
+      hanLanguageContext,
+    );
+    if (clusterLanguage) cluster.lang = clusterLanguage;
     if (segment.provenance === "providerExplicit") {
       cluster.classList.add("reading-origin-provider-explicit");
       cluster.dataset.readingOrigin = "provider-explicit";
@@ -210,7 +235,7 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     cursor = segment.end;
   }
 
-  appendPlainText(parent, text.slice(cursor), cursor);
+  appendPlainText(parent, text.slice(cursor), cursor, hanLanguageContext);
 }
 
 const hasElementClass = (element: Element, className: string): boolean =>
@@ -256,6 +281,14 @@ export function renderBaseTextWithReadings(
   const sourceDisplayText = reading?.displayText ?? entry.Text ?? "";
   const readabilityProjection = projectMixedScriptReadability(sourceDisplayText);
   const text = readabilityProjection.text;
+  const hanLanguageContext = options.hanLanguageContext
+    ? {
+        ...options.hanLanguageContext,
+        primaryScript:
+          entry.ReadingPrimaryScript
+          ?? options.hanLanguageContext.primaryScript,
+      }
+    : undefined;
 
   if (shouldRenderFurigana(entry, options) && reading) {
     const sourceSegments = options.suppressedFuriganaKeys?.length
@@ -270,7 +303,7 @@ export function renderBaseTextWithReadings(
     );
     if (segments.length > 0) {
       element.classList.add("has-furigana");
-      appendFuriganaText(element, text, segments);
+      appendFuriganaText(element, text, segments, hanLanguageContext);
       packAdjacentFuriganaClusters(
         Array.from(element.children)
           .filter((child) => hasElementClass(child, "lyric-base-run")) as HTMLElement[],
@@ -286,7 +319,7 @@ export function renderBaseTextWithReadings(
     isJapaneseEntry(entry, options.isJapaneseLyrics)
   ) {
     element.classList.add("has-furigana", "furigana-row-reserved");
-    appendPlainText(element, text);
+    appendPlainText(element, text, 0, hanLanguageContext);
     return true;
   }
 
@@ -300,7 +333,7 @@ export function renderBaseTextWithReadings(
   }
 
   element.textContent = "";
-  appendPlainText(element, text);
+  appendPlainText(element, text, 0, hanLanguageContext);
   return false;
 }
 

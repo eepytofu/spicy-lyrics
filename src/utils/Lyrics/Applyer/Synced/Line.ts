@@ -10,7 +10,7 @@ import {
 } from "../../lyrics.ts";
 import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "../ReadingRenderer.ts";
 import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
-import { applyHanLanguageTag } from "../../HanLanguage.ts";
+import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
 
@@ -72,6 +72,7 @@ export function ApplyLineLyrics(
 
   const translationPending = (data as any).TranslationPending === true;
   const romanizationPending = (data as any).RomanizationPending === true;
+  const fixHanGlyphVariants = $fixHanGlyphVariants.get();
 
   const isJapaneseLyrics = (data as any).Language === "jpn" || data.Content.some((line) => isJapaneseEntry(line));
 
@@ -79,7 +80,13 @@ export function ApplyLineLyrics(
     const lineElem = document.createElement("div");
     lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
-    applyHanLanguageTag(lineElem, line.Text, data, $fixHanGlyphVariants.get());
+    const hanLanguageContext = createHanLanguageContext(
+      data,
+      line.Text,
+      fixHanGlyphVariants,
+      line.ReadingPrimaryScript,
+    );
+    applyHanLanguageTag(lineElem, hanLanguageContext);
     const renderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,
@@ -87,6 +94,7 @@ export function ApplyLineLyrics(
       showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
+      hanLanguageContext,
     };
 
     if (renderBaseTextWithReadings(lineElem, line, renderOptions)) {

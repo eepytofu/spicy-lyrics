@@ -37,7 +37,7 @@ import {
   type TimedFuriganaGroup,
   type TimedFuriganaGroups,
 } from "../../Processing/Japanese/TimedGroupIds.ts";
-import { applyHanLanguageTag } from "../../HanLanguage.ts";
+import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
 
@@ -330,6 +330,7 @@ export function ApplySyllableLyrics(
   }
   const translationPending = (data as any).TranslationPending === true;
   const romanizationPending = (data as any).RomanizationPending === true;
+  const fixHanGlyphVariants = $fixHanGlyphVariants.get();
   const isJapaneseLyrics =
     (data as any).Language === "jpn" ||
     data.Content.some(
@@ -348,12 +349,12 @@ export function ApplySyllableLyrics(
       line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
     lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
     lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
-    applyHanLanguageTag(
-      lineElem,
-      joinSyllableDisplayText(line.Lead.Syllables),
+    const hanLanguageContext = createHanLanguageContext(
       data,
-      $fixHanGlyphVariants.get()
+      joinSyllableDisplayText(line.Lead.Syllables),
+      fixHanGlyphVariants,
     );
+    applyHanLanguageTag(lineElem, hanLanguageContext);
     const lineRenderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,
@@ -361,6 +362,7 @@ export function ApplySyllableLyrics(
       showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
+      hanLanguageContext,
     };
 
     const nextLineStartTime = arr[index + 1]

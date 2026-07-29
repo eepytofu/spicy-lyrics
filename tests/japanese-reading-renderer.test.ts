@@ -511,10 +511,35 @@ test("reading modes preserve one exact base-text run contract", () => {
     renderBaseTextWithReadings(
       line as unknown as HTMLElement,
       entry,
-      { useRomanized: true, isJapaneseLyrics: true },
+      {
+        useRomanized: true,
+        isJapaneseLyrics: true,
+        hanLanguageContext: {
+          enabled: true,
+          primaryScript: "Japanese",
+          lineLanguage: "ja",
+        },
+      },
     );
 
     assert.equal(renderedBaseText(line), source, mode);
+    const japaneseRuns = line.children.filter((run) => run.lang === "ja");
+    assert.equal(japaneseRuns.length, 1, mode);
+    assert.equal(
+      japaneseRuns[0]?.className.includes("furigana-cluster")
+        ? japaneseRuns[0]?.children.find((child) => child.className === "furigana-base")?.textContent
+        : japaneseRuns[0]?.textContent,
+      "暁",
+      mode,
+    );
+    assert.equal(
+      line.children
+        .filter((run) => run.lang === "")
+        .map((run) => run.textContent)
+        .join(""),
+      source.replace("暁", ""),
+      mode,
+    );
     assert.equal(
       line.children
         .filter((run) => run.className.includes("lyric-base-plain"))
