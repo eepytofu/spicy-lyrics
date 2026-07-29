@@ -213,6 +213,15 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
     var(--furigana-color-rgb),
     var(--furigana-dim-alpha)
   );
+  --furigana-fill-current: rgba(
+    var(--furigana-color-rgb),
+    calc(
+      var(--furigana-dim-alpha) +
+        (
+          var(--furigana-bright-alpha) - var(--furigana-dim-alpha)
+        ) * var(--line-furigana-fill-progress, 0)
+    )
+  );
   /* The bright syllable layer is composited over the real dim layer. Use only
      the incremental alpha required to reach the same endpoint as the main
      lyric instead of painting the full bright alpha twice. */
@@ -350,24 +359,15 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-shadow: none;
 }
 
-/* Line timing describes one breathing phrase, not per-word karaoke. Keep the
-   real ruby at the same bright endpoint as its active/sung main line and let
-   the inherited glyph shadow provide the breathing motion. A not-yet-sung
-   line rests at its matching dim endpoint. Fill is deliberately state-based,
-   not spring-based, so first playback and replay after a seek are identical. */
+/* Line timing describes one phrase, not per-word karaoke. Its ruby uses one
+   uniform clock-driven fill while glow remains spring-driven. Keeping those
+   owners separate makes initial playback, click-to-seek, and replay paint the
+   same frame without turning the whole reading bright at Active entry. */
 #SpicyLyricsPage:not(.SimpleLyricsMode)
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .furigana-reading {
-  color: var(--furigana-fill-dim);
-  -webkit-text-fill-color: var(--furigana-fill-dim);
-}
-
-#SpicyLyricsPage:not(.SimpleLyricsMode)
-  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
-  .line:is(.Active, .Sung)
-  .furigana-reading {
-  color: var(--furigana-fill-bright);
-  -webkit-text-fill-color: var(--furigana-fill-bright);
+  color: var(--furigana-fill-current);
+  -webkit-text-fill-color: var(--furigana-fill-current);
 }
 
 /* Simple line mode already renders the complete main line rather than running

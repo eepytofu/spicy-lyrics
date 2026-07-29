@@ -195,14 +195,18 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
   );
 });
 
-test("line furigana uses deterministic state fill and inherits breathing glow", () => {
+test("line furigana keeps direct fill separate from breathing glow", () => {
   assert.match(
     mainCss,
-    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-dim\)/u,
+    /--furigana-fill-current:\s*rgba\([\s\S]*?--line-furigana-fill-progress,\s*0/u,
   );
   assert.match(
     mainCss,
-    /\.line:is\(\.Active,\s*\.Sung\)\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-bright\)/u,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-current\)/u,
+  );
+  assert.doesNotMatch(
+    mainCss,
+    /\.line:is\(\.Active,\s*\.Sung\)\s+\.furigana-reading/u,
   );
   assert.doesNotMatch(
     mainCss,
@@ -211,6 +215,10 @@ test("line furigana uses deterministic state fill and inherits breathing glow", 
   assert.match(
     animatorSource,
     /setStyleIfChanged\(line\.HTMLElement,\s*"--text-shadow-opacity",\s*`\$\{currentGlow \* 50\}%`/u,
+  );
+  assert.match(
+    animatorSource,
+    /"--line-furigana-fill-progress"[\s\S]*?lineFuriganaFillProgress/u,
   );
   assert.doesNotMatch(mainCss, /--line-furigana-brightness/u);
   assert.doesNotMatch(animatorSource, /--line-furigana-brightness/u);

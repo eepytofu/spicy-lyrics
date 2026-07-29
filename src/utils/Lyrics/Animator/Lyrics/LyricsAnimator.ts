@@ -25,6 +25,7 @@ import {
   gradientTargetsAt,
   getElementState,
   getProgressPercentage,
+  lineFuriganaFillProgress,
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
@@ -1462,7 +1463,26 @@ export function Animate(position: number): void {
       const line = arr[index];
       if (!line.HTMLElement.isConnected) continue;
       const lineState = getElementState(ProcessedPosition, line.StartTime, line.EndTime);
+      const percentage = getProgressPercentage(
+        ProcessedPosition,
+        line.StartTime,
+        line.EndTime,
+      );
       applyLineState(line.HTMLElement, lineState);
+      if (!line.DotLine) {
+        setStyleIfChanged(
+          line.HTMLElement,
+          "--line-furigana-fill-progress",
+          String(
+            lineFuriganaFillProgress(
+              lineState,
+              percentage,
+              $simpleLyricsMode.get(),
+            ),
+          ),
+          0.001,
+        );
+      }
       if (line.DotLine) {
         setClassPresence(
           line.HTMLElement,
@@ -1476,8 +1496,6 @@ export function Animate(position: number): void {
           applyBlur(arr, index, BlurMultiplier);
           Blurring_LastLine = index;
         }
-
-        const percentage = getProgressPercentage(ProcessedPosition, line.StartTime, line.EndTime);
 
         if (line.DotLine && line.Syllables?.Lead) {
           const dotArray = line.Syllables.Lead; // Assuming Syllables.Lead holds the dots for DotLine

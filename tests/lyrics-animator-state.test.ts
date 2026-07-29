@@ -8,6 +8,7 @@ import {
   gradientTargetsAt,
   getElementState,
   getProgressPercentage,
+  lineFuriganaFillProgress,
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
@@ -134,6 +135,16 @@ test("a grouped reading sweep follows its derived window without changing ordina
   );
   assert.equal(gradientTargetsAt(150, 0, 100, false).extra, 100);
   assert.equal(gradientTargetsAt(150, 0, 300, false).extra, 30);
+});
+
+test("line furigana fill is direct, bounded, and independent from glow history", () => {
+  assert.equal(lineFuriganaFillProgress("NotSung", 0.8, false), 0);
+  assert.equal(lineFuriganaFillProgress("Active", -1, false), 0);
+  assert.equal(lineFuriganaFillProgress("Active", 0.275, false), 0.275);
+  assert.equal(lineFuriganaFillProgress("Active", 2, false), 1);
+  assert.equal(lineFuriganaFillProgress("Sung", 0, false), 1);
+  assert.equal(lineFuriganaFillProgress("NotSung", 0, true), 1);
+  assert.equal(lineFuriganaFillProgress("Active", 0.25, true), 1);
 });
 
 test("timed group attack, hold, and release remain monotonic", () => {

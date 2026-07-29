@@ -122,6 +122,21 @@ export function gradientTargetsAt(
 }
 
 /**
+ * Line-synced ruby has no word timing owner. Its fill follows the direct lyric
+ * clock while glow remains spring-driven and defocus remains line-distance
+ * driven. Simple mode paints the complete line by design.
+ */
+export function lineFuriganaFillProgress(
+  state: LyricAnimationState,
+  progress: number,
+  simpleMode: boolean,
+): number {
+  if (simpleMode || state === "Sung") return 1;
+  if (state === "NotSung") return 0;
+  return Math.max(0, Math.min(1, progress));
+}
+
+/**
  * A line reached through ordinary playback may finish its spring tail after
  * its timing window. A seek can skip that Active phase entirely, so those
  * lines must snap to their terminal paint state instead.
