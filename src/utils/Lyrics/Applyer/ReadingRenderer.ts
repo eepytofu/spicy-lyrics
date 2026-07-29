@@ -223,6 +223,10 @@ export function renderBaseTextWithReadings(
     if (segments.length > 0) {
       element.classList.add("has-furigana");
       appendFuriganaText(element, text, segments);
+      packAdjacentFuriganaClusters(
+        Array.from(element.children)
+          .filter((child) => hasElementClass(child, "furigana-cluster")) as HTMLElement[],
+      );
       return true;
     }
   }

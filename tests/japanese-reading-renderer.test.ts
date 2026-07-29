@@ -234,6 +234,44 @@ test("only directly adjacent ruby clusters reserve reading width", () => {
   assert.equal(plainClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
 });
 
+test("full-line lyrics automatically pack split compounds without widening isolated ruby", () => {
+  $japaneseReadingMode.set("furigana");
+  const line = new FakeElement();
+  renderBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    {
+      Text: "一際輝く流星の尾",
+      JapaneseReading: {
+        sourceText: "一際輝く流星の尾",
+        furigana: [
+          { start: 0, end: 1, reading: "ひと" },
+          { start: 1, end: 2, reading: "きわ" },
+          { start: 2, end: 3, reading: "かがや" },
+          { start: 4, end: 5, reading: "りゅう" },
+          { start: 5, end: 6, reading: "せい" },
+          { start: 7, end: 8, reading: "お" },
+        ],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  const clusters = line.children.map((cluster) => ({
+    base: cluster.children.find((child) => child.className === "furigana-base")?.textContent,
+    packed: cluster.classList.values.has("furigana-cluster-packed"),
+  }));
+  assert.deepEqual(clusters, [
+    { base: "一", packed: true },
+    { base: "際", packed: true },
+    { base: "輝", packed: true },
+    { base: "く", packed: false },
+    { base: "流", packed: true },
+    { base: "星", packed: true },
+    { base: "の", packed: false },
+    { base: "尾", packed: false },
+  ]);
+});
+
 test("timed provider spans reserve every real ruby without widening plain spacers", () => {
   const left = new FakeElement();
   const right = new FakeElement();

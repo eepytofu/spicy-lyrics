@@ -82,6 +82,14 @@ test("exact consensus geometry splits an ordinary compound", () => {
     { start: 0, end: 1, reading: "うん" },
     { start: 1, end: 2, reading: "めい" },
   ]);
+  assert.deepEqual(lookupJitendexFuriganaGeometry("一際", "ヒトキワ"), [
+    { start: 0, end: 1, reading: "ひと" },
+    { start: 1, end: 2, reading: "きわ" },
+  ]);
+  assert.deepEqual(lookupJitendexFuriganaGeometry("流星", "リュウセイ"), [
+    { start: 0, end: 1, reading: "りゅう" },
+    { start: 1, end: 2, reading: "せい" },
+  ]);
 });
 
 test("special, disputed, and unreachable readings abstain", () => {
