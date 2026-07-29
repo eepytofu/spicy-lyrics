@@ -1,1 +1,3 @@
-export const SPICY_LYRICS_BUILD_MARKER = "kr-mode-refactor-20260709-1";
+declare const __SPICY_LYRICS_BUILD_MARKER__: string;
+
+export const SPICY_LYRICS_BUILD_MARKER = __SPICY_LYRICS_BUILD_MARKER__;
