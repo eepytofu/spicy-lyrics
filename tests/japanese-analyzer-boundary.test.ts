@@ -186,7 +186,7 @@ test("IPADIC pronoun shapes activate the guarded lyric readings", async () => {
       return tokens;
     },
   };
-  const romanized = await prepareJapaneseLineAnalysis(text, undefined, undefined, {
+  const romanized = await prepareJapaneseLineAnalysis(text, {
     analyzer,
     kanaRomanizer: (kana) =>
       ({
@@ -220,7 +220,7 @@ test("Kuromoji adapter recovers punctuated unknown Katakana for local romaji", a
       return [adapterToken];
     },
   };
-  const prepared = await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+  const prepared = await prepareJapaneseLineAnalysis(surface, {
     analyzer,
     kanaRomanizer(kana) {
       assert.equal(kana, "あれぐろ・あじてえと");
@@ -247,7 +247,7 @@ test("an injected analyzer and kana romanizer own the complete reading pass", as
     },
   };
 
-  const prepared = await prepareJapaneseLineAnalysis("私", undefined, undefined, {
+  const prepared = await prepareJapaneseLineAnalysis("私", {
     analyzer,
     kanaRomanizer(kana) {
       romanizerCalls += 1;
@@ -274,7 +274,7 @@ test("experimental analyzer failures do not silently fall back to Kuromoji", asy
   };
 
   await assert.rejects(
-    prepareJapaneseLineAnalysis("私", undefined, undefined, { analyzer }),
+    prepareJapaneseLineAnalysis("私", { analyzer }),
     /experimental analyzer failed/u
   );
 });
@@ -303,11 +303,11 @@ test("Kuromoji compatibility overrides do not leak into another analyzer", async
     },
   };
 
-  const experimentReading = await prepareJapaneseLineAnalysis("君", undefined, undefined, {
+  const experimentReading = await prepareJapaneseLineAnalysis("君", {
     analyzer: experiment,
     kanaRomanizer,
   });
-  const productionReading = await prepareJapaneseLineAnalysis("君", undefined, undefined, {
+  const productionReading = await prepareJapaneseLineAnalysis("君", {
     analyzer: kuromojiProfile,
     kanaRomanizer,
   });
@@ -326,7 +326,7 @@ test("canonical particle behavior remains shared without raw analyzer POS labels
       ];
     },
   };
-  const reading = await prepareJapaneseLineAnalysis("私は", undefined, undefined, {
+  const reading = await prepareJapaneseLineAnalysis("私は", {
     analyzer,
     kanaRomanizer: (kana) => (kana === "わたし" ? "watashi" : "ha"),
   });
@@ -343,7 +343,7 @@ test("analyzer tokens must match their declared source ranges", async () => {
   };
 
   await assert.rejects(
-    prepareJapaneseLineAnalysis("私", undefined, undefined, { analyzer }),
+    prepareJapaneseLineAnalysis("私", { analyzer }),
     /does not match its source range/u
   );
 });

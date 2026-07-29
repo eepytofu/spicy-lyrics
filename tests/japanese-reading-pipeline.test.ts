@@ -193,8 +193,6 @@ test("Japanese accuracy harness records every reading-policy stage", async () =>
 
     const analysis = await prepareJapaneseLineAnalysis(
       fixture.text,
-      undefined,
-      undefined,
       {
         analyzer: analyzerFor(fixture, tokens),
         kanaRomanizer: kanaToRomaji,

@@ -31,7 +31,6 @@ export {
   detectScript,
   hasCJK,
   hasIndicScript,
-  hasUnromanizedKanji,
   isCyrillic,
   isCyrillicLanguage,
   CYRILLIC_LANGUAGES,
@@ -43,8 +42,6 @@ export {
 export {
   romanizeCantonese,
   romanizeCyrillic,
-  buildRomajiFromTokens,
-  romanizeJapaneseWithFallback,
 } from "./Romanization.ts";
 
 // Translation (Google Translate integration)

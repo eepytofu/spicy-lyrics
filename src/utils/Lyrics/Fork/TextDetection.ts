@@ -95,14 +95,6 @@ export function hasIndicScript(text: string): boolean {
 }
 
 /**
- * Check if kuroshiro output still contains un-romanized kanji.
- * Used as a fallback trigger for buildRomajiFromTokens.
- */
-export function hasUnromanizedKanji(text: string): boolean {
-  return CJKIdeographTest.test(text);
-}
-
-/**
  * Check if text is primarily Cyrillic script.
  */
 export function isCyrillic(text: string): boolean {

@@ -41,7 +41,7 @@ function fixtureAnalyzer(surface: string, readingKana: string): JapaneseAnalyzer
 
 async function projectedFurigana(surface: string, readingKana: string) {
   return (
-    await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+    await prepareJapaneseLineAnalysis(surface, {
       analyzer: fixtureAnalyzer(surface, readingKana),
       kanaRomanizer: (kana) => kana,
     })
@@ -65,7 +65,7 @@ function characterSpans(text: string): ParsedLine {
 }
 
 async function projectedTimedGroups(surface: string, readingKana: string) {
-  const analysis = await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+  const analysis = await prepareJapaneseLineAnalysis(surface, {
     analyzer: fixtureAnalyzer(surface, readingKana),
     kanaRomanizer: (kana) => kana,
   });

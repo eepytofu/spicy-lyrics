@@ -5,19 +5,16 @@
  * Extends upstream's basic romanization with:
  * - Cantonese Jyutping support
  * - Improved Cyrillic BGN/PCGN transliteration
- * - Fallback romaji builder for Japanese
  * 
  * @fork-feature Extended romanization support
  */
 
-import type Kuroshiro from "kuroshiro";
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
 import { G2p } from "korean-pronunciation";
 import CompletePinyinDict from "@pinyin-pro/data/complete";
 import { addDict, OutputFormat, pinyin, segment } from "pinyin-pro";
-import { hasUnromanizedKanji, ChineseTextTest } from "./TextDetection.ts";
-import { analyzeJapaneseLine, JapaneseSourceTextTest } from "../Reading/JapaneseReading.ts";
+import { ChineseTextTest } from "./TextDetection.ts";
 
 const JYUTPING_PHRASES: Record<string, string> = {
   上堂: "soeng5 tong4",
@@ -70,7 +67,6 @@ const JYUTPING_PHRASES: Record<string, string> = {
 };
 
 const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.length - a.length);
-const LatinTextTest = /[A-Za-z]/;
 
 // The default pinyin-pro dictionary is intentionally compact and misses some
 // ordinary lexical readings (for example, 诗行 is shī háng). Register the full
@@ -1085,44 +1081,4 @@ export function romanizeKoreanSyllableLineForDisplay(
   mode: KoreanDisplayMode = "rrStandard"
 ): KoreanRomanizeResult {
   return romanizeKoreanForDisplay(buildKoreanLineTextFromSyllables(syllables), mode);
-}
-
-// ─── Japanese Romaji Fallback ─────────────────────────────────────────────────
-
-/**
- * Build complete romaji from Kuromoji token context.
- * This is the robust fallback when kuroshiro fails to convert certain kanji.
- * 
- * @param text - Japanese text to romanize
- * @returns Spaced romaji string, or null if tokenization fails
- */
-export async function buildRomajiFromTokens(text: string): Promise<string | null> {
-  return (await analyzeJapaneseLine(text))?.romaji || null;
-}
-
-/**
- * Try kuroshiro conversion first, fall back to token-based if kanji remain.
- * 
- * @param text - Japanese text to romanize
- * @param romajiConverter - Initialized Kuroshiro instance
- * @returns Spaced romaji string
- */
-export async function romanizeJapaneseWithFallback(
-  text: string,
-  romajiConverter: Kuroshiro
-): Promise<string> {
-  let result = await romajiConverter.convert(text, {
-    to: "romaji",
-    mode: "spaced",
-  });
-
-  // Fallback: rebuild when Kuroshiro leaves kanji or romanizes Latin inside Japanese lines.
-  if (hasUnromanizedKanji(result) || (JapaneseSourceTextTest.test(text) && LatinTextTest.test(text))) {
-    const rebuilt = await buildRomajiFromTokens(text);
-    if (rebuilt) {
-      result = rebuilt;
-    }
-  }
-
-  return result;
 }

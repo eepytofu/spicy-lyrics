@@ -32,14 +32,12 @@ export function alignJapaneseReadingUnitTexts(texts: string[], display: string):
 
 export async function annotateJapaneseLine(
   canonical: CanonicalLine,
-  fullRomaji?: string,
-  romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {},
   prepared?: PreparedJapaneseLineAnalysis
 ): Promise<ReadingAnnotation | undefined> {
   const analysis = (prepared?.reading.displayText || prepared?.reading.sourceText) === canonical.text
     ? prepared
-    : await prepareJapaneseLineAnalysis(canonical.text, fullRomaji, romajiPromise, options);
+    : await prepareJapaneseLineAnalysis(canonical.text, options);
   const reading = analysis?.reading;
   if (!reading?.romaji) return undefined;
   const temp: JapaneseReadable[] = canonical.spanMappings.map((mapping) => ({
@@ -54,9 +52,7 @@ export async function annotateJapaneseLine(
   }));
   await applyJapaneseReadingToSyllables(
     canonical.text,
-    reading.romaji,
     temp,
-    romajiPromise,
     spans,
     options,
     analysis,

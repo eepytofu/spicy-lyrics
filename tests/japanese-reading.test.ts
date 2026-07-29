@@ -40,7 +40,7 @@ function fixtureAnalyzer(surface: string, readingKana: string): JapaneseAnalyzer
 
 async function projectedFurigana(surface: string, readingKana: string) {
   return (
-    await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+    await prepareJapaneseLineAnalysis(surface, {
       analyzer: fixtureAnalyzer(surface, readingKana),
       kanaRomanizer: (kana) => kana,
     })
@@ -76,7 +76,7 @@ test("unknown Katakana tokens fall back to their written kana", () => {
 });
 
 test("repeated Kana anchors distribute readings across every Kanji run", async () => {
-  const analysis = await prepareJapaneseLineAnalysis("離れ離れ", undefined, undefined, {
+  const analysis = await prepareJapaneseLineAnalysis("離れ離れ", {
     analyzer: fixtureAnalyzer("離れ離れ", "はなればなれ"),
     kanaRomanizer: (kana) => kana,
   });

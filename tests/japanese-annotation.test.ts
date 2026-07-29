@@ -41,6 +41,41 @@ function singleTokenAnalyzer(surface: string, readingKana: string): JapaneseAnal
   };
 }
 
+function tokenAnalyzer(
+  source: string,
+  specs: Array<{
+    surface: string;
+    readingKana: string;
+    partOfSpeech?: JapaneseAnalyzerToken["partOfSpeech"];
+  }>,
+): JapaneseAnalyzer {
+  let start = 0;
+  const tokens = specs.map((spec) => {
+    const token: JapaneseAnalyzerToken = {
+      surface: spec.surface,
+      start,
+      end: start + spec.surface.length,
+      readingKana: spec.readingKana,
+      pronunciationKana: spec.readingKana,
+      partOfSpeech: spec.partOfSpeech || "other",
+      morphologyFeatures: [],
+      baseForm: spec.surface,
+      conjugationType: "",
+      conjugationForm: "",
+      provenance: { analyzerId: "annotation-fixture", rangeSource: "native" },
+    };
+    start = token.end;
+    return token;
+  });
+  return {
+    id: "annotation-fixture",
+    async analyze(text) {
+      assert.equal(text, source);
+      return tokens;
+    },
+  };
+}
+
 async function timedJapaneseAnnotation(
   surface: string,
   readingKana: string,
@@ -63,8 +98,6 @@ async function timedJapaneseAnnotation(
   const canonical = buildCanonicalLine(line);
   const annotation = await annotateJapaneseLine(
     canonical,
-    undefined,
-    undefined,
     {
       analyzer: singleTokenAnalyzer(surface, readingKana),
       kanaRomanizer: (kana) => romaji[kana] ?? kana,
@@ -79,7 +112,10 @@ test("Japanese annotation keeps split spans as unique timing owners", async () =
     spans: ["だん", "だん", "剥", "がれて", "く"].map((text, index) => ({ id: String(index), rawText: text,
       cleanText: text, startMs: index * 100, endMs: (index + 1) * 100, providerPartOfWord: true })) };
   const canonical = buildCanonicalLine(line);
-  const annotation = await annotateJapaneseLine(canonical, "dandan hagareteku");
+  const annotation = await annotateJapaneseLine(canonical, {
+    analyzer: singleTokenAnalyzer("だんだん剥がれてく", "だんだんはがれてく"),
+    kanaRomanizer: () => "dandan hagareteku",
+  });
   assert.ok(annotation);
   const plan = buildRenderPlan(line, canonical, [annotation!]);
   assert.equal(plan.timedReadingUnits.length, 5);
@@ -149,8 +185,6 @@ test("Japanese annotation preserves exact reading ranges across partial timing s
   const canonical = buildCanonicalLine(line);
   const annotation = await annotateJapaneseLine(
     canonical,
-    undefined,
-    undefined,
     {
       analyzer,
       kanaRomanizer: (kana) =>
@@ -241,7 +275,10 @@ test("Japanese mixed title analysis follows authored cross-script and parentheti
   assert.equal(map.lineText, "Shout It Out Loud!!! - 暁Records (akatsuki records)");
 
   const expected = "Shout It Out Loud!!! - akatsukiRecords (akatsuki records)";
-  const reading = (await prepareJapaneseLineAnalysis(map.lineText, expected))?.reading;
+  const reading = (await prepareJapaneseLineAnalysis(map.lineText, {
+    analyzer: singleTokenAnalyzer(map.lineText, "あかつき"),
+    kanaRomanizer: () => expected,
+  }))?.reading;
   assert.equal(reading?.romaji, expected);
 });
 
@@ -250,7 +287,7 @@ test("Japanese furigana ranges are exported as code-point coordinates", async ()
     spans: [{ id: "0", rawText: "😀", cleanText: "😀", startMs: 0, endMs: 100, providerPartOfWord: true },
       { id: "1", rawText: "今日", cleanText: "今日", startMs: 100, endMs: 200, providerPartOfWord: false }] };
   const canonical = buildCanonicalLine(line);
-  const annotation = await annotateJapaneseLine(canonical, "😀 kyou");
+  const annotation = await annotateJapaneseLine(canonical);
   for (const segment of (annotation?.furigana || []) as any[]) {
     assert.ok(segment.canonicalRange.startCp >= 1);
     assert.ok(segment.canonicalRange.endCp <= 3);
@@ -260,7 +297,23 @@ test("Japanese furigana ranges are exported as code-point coordinates", async ()
 test("provider-authored reading keeps source evidence and emits explicit furigana", async () => {
   const reading = (await prepareJapaneseLineAnalysis(
     "今宵も天(そら)は明るく",
-    "koyoi mo sora wa akaruku",
+    {
+      analyzer: tokenAnalyzer("今宵も天は明るく", [
+        { surface: "今宵", readingKana: "こよい" },
+        { surface: "も", readingKana: "も", partOfSpeech: "particle" },
+        { surface: "天", readingKana: "てん" },
+        { surface: "は", readingKana: "は", partOfSpeech: "particle" },
+        { surface: "明るく", readingKana: "あかるく" },
+      ]),
+      kanaRomanizer: (kana) =>
+        ({
+          こよい: "koyoi",
+          も: "mo",
+          そら: "sora",
+          は: "ha",
+          あかるく: "akaruku",
+        })[kana] || kana,
+    },
   ))?.reading;
   assert.ok(reading);
   assert.equal(reading!.sourceText, "今宵も天(そら)は明るく");
@@ -274,8 +327,6 @@ test("provider-authored reading keeps source evidence and emits explicit furigan
 test("Chinese-provider Japanese repair is display-only and keeps source evidence", async () => {
   const reading = (await prepareJapaneseLineAnalysis(
     "梦见ては 覚めて见る",
-    undefined,
-    undefined,
     { normalizeChineseProviderKanji: true },
   ))?.reading;
   assert.ok(reading);
@@ -369,8 +420,6 @@ test("opaque and context-sensitive readings keep one text unit but sweep the who
 test("Chinese-provider Japanese repair preserves Japanese 占", async () => {
   const reading = (await prepareJapaneseLineAnalysis(
     "ひとり占めできるまで",
-    undefined,
-    undefined,
     { normalizeChineseProviderKanji: true },
   ))?.reading;
   assert.ok(reading);
@@ -384,15 +433,11 @@ test("Chinese-provider Japanese repair reaches every timed display span", async 
   const options = { normalizeChineseProviderKanji: true };
   const prepared = await prepareJapaneseLineAnalysis(
     map.lineText,
-    undefined,
-    undefined,
     options,
   );
   await applyJapaneseReadingToSyllables(
     map.lineText,
-    undefined,
     syllables,
-    undefined,
     map.spans,
     options,
     prepared,

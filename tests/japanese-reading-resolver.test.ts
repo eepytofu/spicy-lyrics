@@ -90,8 +90,6 @@ test("bounded resolver corrects 一人きり reading and keeps jukujikun ruby wh
   };
   const analysis = await prepareJapaneseLineAnalysis(
     "一人きり",
-    undefined,
-    undefined,
     options,
   );
 
@@ -147,8 +145,6 @@ test("bounded resolver corrects 一人きり reading and keeps jukujikun ruby wh
 
   const annotation = await annotateJapaneseLine(
     canonical,
-    analysis?.reading.romaji,
-    undefined,
     options,
     analysis,
   );
@@ -168,7 +164,7 @@ test("bounded resolver corrects 一人きり reading and keeps jukujikun ruby wh
 });
 
 test("bounded resolver corrects 二人 and explicit lyric readings still win", async () => {
-  const ordinary = await prepareJapaneseLineAnalysis("二人とも", undefined, undefined, {
+  const ordinary = await prepareJapaneseLineAnalysis("二人とも", {
     analyzer: analyzerFor("二人とも", [
       ni(),
       personCounter(),
@@ -178,7 +174,7 @@ test("bounded resolver corrects 二人 and explicit lyric readings still win", a
   });
   assert.equal(ordinary?.reading.romaji, "futari tomo");
 
-  const explicit = await prepareJapaneseLineAnalysis("一人(かずと)だけ", undefined, undefined, {
+  const explicit = await prepareJapaneseLineAnalysis("一人(かずと)だけ", {
     analyzer: analyzerFor("一人だけ", [
       ichi(),
       personCounter(),
@@ -379,8 +375,6 @@ test("verified lexical resolver corrects only audited Kuromoji token shapes", as
 
     const analysis = await prepareJapaneseLineAnalysis(
       fixture.text,
-      undefined,
-      undefined,
       {
         analyzer: analyzerFor(fixture.text, fixture.specs),
         kanaRomanizer: (kana) => romanized.get(kana) || kana,
@@ -485,8 +479,6 @@ test("verified lexical projection is atomic when another reading layer already c
 test("provider-authored readings override verified lexical defaults", async () => {
   const analysis = await prepareJapaneseLineAnalysis(
     "目蓋(めぶた)だけ",
-    undefined,
-    undefined,
     {
       analyzer: analyzerFor("目蓋だけ", [
         { surface: "目", reading: "メ" },

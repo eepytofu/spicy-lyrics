@@ -403,7 +403,6 @@ const postProcessSyllableRomanization = async (
             syllables,
             japaneseMap.spans,
             syllables,
-            undefined,
             { normalizeChineseProviderKanji: repairJapaneseDisplay }
           );
           for (const syllable of syllables) {
@@ -527,7 +526,7 @@ const romanizeEntry = async (
     targetScripts.includes("Japanese") &&
     ItemJapaneseTest.test(target.Text || "")
   ) {
-    const packageRomaji = await processJapanesePackageTextTarget(target, undefined, {
+    const packageRomaji = await processJapanesePackageTextTarget(target, {
       normalizeChineseProviderKanji: repairJapaneseDisplay,
     });
     if (

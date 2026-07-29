@@ -47,7 +47,6 @@ export async function processJapanesePackageLine(
   syllables: JapaneseReadable[],
   spans: JapaneseTimedTextSpan[],
   times: Array<{ StartTime?: number; EndTime?: number }>,
-  romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {}
 ): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[]; displayText: string }> {
   const projection = projectProviderAuthoredJapaneseReadings(displayText, spans);
@@ -62,12 +61,10 @@ export async function processJapanesePackageLine(
     };
   });
   const analysisOptions = { ...options, authoredReadingProjection: projection };
-  const analysis = await prepareJapaneseLineAnalysis(displayText, undefined, romajiPromise, analysisOptions);
+  const analysis = await prepareJapaneseLineAnalysis(displayText, analysisOptions);
   const reading = await applyJapaneseReadingToSyllables(
     displayText,
-    undefined,
     syllables,
-    romajiPromise,
     projectedSpans,
     analysisOptions,
     analysis,
@@ -82,7 +79,7 @@ export async function processJapanesePackageLine(
 
   const parsed = buildJapanesePackageParsedLine(finalDisplayText, displaySpans, times);
   const canonical = buildCanonicalLine(parsed);
-  const annotation = await annotateJapaneseLine(canonical, romaji, romajiPromise, analysisOptions, analysis);
+  const annotation = await annotateJapaneseLine(canonical, analysisOptions, analysis);
   if (!annotation) throw new Error("Japanese fallback annotation failed");
   const plan = buildRenderPlan(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
@@ -92,10 +89,9 @@ export async function processJapanesePackageLine(
 
 export async function processJapanesePackageTextTarget(
   target: JapaneseReadable & { Text?: string },
-  romajiPromise?: Promise<void>,
   options: JapaneseAnalysisOptions = {}
 ): Promise<string | undefined> {
-  const reading = await annotateJapaneseTextTarget(target, undefined, romajiPromise, options);
+  const reading = await annotateJapaneseTextTarget(target, options);
   if (!reading?.romaji) return undefined;
   target.RomanizedText = reading.romaji;
   target.TransliteratedText = reading.romaji;
