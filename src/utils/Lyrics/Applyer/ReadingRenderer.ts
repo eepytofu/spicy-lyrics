@@ -129,6 +129,41 @@ function appendPlainText(parent: HTMLElement, text: string): void {
   }
 }
 
+/**
+ * Keep the real reading as an in-flow grid child and let CSS draw only the
+ * bright karaoke layer through generated content. This avoids putting a
+ * background on ruby nested inside a background-clip:text lyric word, which
+ * Chromium can suppress together with the annotated base text.
+ */
+export function populateFuriganaReading(
+  element: HTMLElement,
+  reading: string,
+  sourceStart = 0,
+  sourceEnd = 1,
+  sourceLength = 1,
+): void {
+  const safeLength = Math.max(sourceLength, 1);
+  const safeStart = clamp(sourceStart, 0, safeLength);
+  const safeEnd = clamp(Math.max(sourceEnd, safeStart + 1), safeStart, safeLength);
+  const sourceSpan = Math.max(safeEnd - safeStart, 1);
+
+  element.textContent = "";
+  element.dataset.furigana = reading;
+  element.style.setProperty(
+    "--furigana-source-start",
+    `${(safeStart / safeLength) * 100}%`,
+  );
+  element.style.setProperty(
+    "--furigana-source-scale",
+    String(safeLength / sourceSpan),
+  );
+
+  const textLayer = document.createElement("span");
+  textLayer.className = "furigana-reading-text";
+  textLayer.textContent = reading;
+  element.appendChild(textLayer);
+}
+
 export function appendFuriganaText(parent: HTMLElement, text: string, rawSegments: FuriganaSegment[]): void {
   parent.textContent = "";
 
@@ -157,7 +192,13 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     const reading = document.createElement("span");
     reading.className = "furigana-reading";
     if (segment.provenance === "providerExplicit") reading.classList.add("reading-origin-provider-explicit");
-    reading.textContent = segment.reading;
+    populateFuriganaReading(
+      reading,
+      segment.reading,
+      segment.start,
+      segment.end,
+      text.length,
+    );
 
     const base = document.createElement("span");
     base.className = "furigana-base";

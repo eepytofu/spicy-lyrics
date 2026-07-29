@@ -23,9 +23,26 @@ class FakeElement {
   classList = new FakeClassList();
   children: FakeElement[] = [];
   dataset: Record<string, string> = {};
-  style = { marginLeft: "" };
-  textContent = "";
+  style = {
+    marginLeft: "",
+    values: new Map<string, string>(),
+    setProperty(name: string, value: string): void {
+      this.values.set(name, value);
+    },
+  };
+  private ownTextContent = "";
   lang = "";
+
+  get textContent(): string {
+    return this.children.length > 0
+      ? this.children.map((child) => child.textContent).join("")
+      : this.ownTextContent;
+  }
+
+  set textContent(value: string) {
+    this.ownTextContent = value;
+    this.children = [];
+  }
 
   get childElementCount(): number {
     return this.children.length;
@@ -251,8 +268,49 @@ test("timed-group suppression removes only the selected line segment", () => {
 
   const renderedReadings = line.children
     .flatMap((cluster) => cluster.children)
-    .filter((child) => child.className.includes("furigana-reading") && child.textContent === "せい");
+    .filter((child) =>
+      child.className.includes("furigana-reading") &&
+      child.dataset.furigana === "せい"
+    );
   assert.equal(renderedReadings.length, 1);
+});
+
+test("furigana carries its source range into a non-positioned karaoke paint layer", () => {
+  const line = new FakeElement();
+  appendFuriganaText(line as unknown as HTMLElement, "今も私の中", [
+    { start: 2, end: 3, reading: "わたし" },
+    { start: 4, end: 5, reading: "なか" },
+  ]);
+
+  const readings = line.children
+    .flatMap((cluster) => cluster.children)
+    .filter((child) => child.dataset.furigana !== undefined);
+  assert.equal(readings.length, 2);
+  assert.deepEqual(
+    readings.map((reading) => ({
+      label: reading.dataset.furigana,
+      start: reading.style.values.get("--furigana-source-start"),
+      scale: reading.style.values.get("--furigana-source-scale"),
+      layer: reading.children[0]?.className,
+      text: reading.children[0]?.textContent,
+    })),
+    [
+      {
+        label: "わたし",
+        start: `${(2 / 5) * 100}%`,
+        scale: "5",
+        layer: "furigana-reading-text",
+        text: "わたし",
+      },
+      {
+        label: "なか",
+        start: `${(4 / 5) * 100}%`,
+        scale: "5",
+        layer: "furigana-reading-text",
+        text: "なか",
+      },
+    ],
+  );
 });
 
 test("Chinese-provider repair renders projected kanji without mutating source text", () => {

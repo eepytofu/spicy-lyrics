@@ -72,9 +72,21 @@ const TimedGroupLiftHold = 0.9;
  * anchor displacement caused by the host word scaling about its own center,
  * which would otherwise sway long compounds.
  */
-const applyTimedRubyAnchorState = (word: SyllableLead, hostWordScale: number): void => {
+const applyTimedRubyAnchorState = (
+  word: SyllableLead,
+  hostWordScale: number,
+  gradientPosition?: number,
+): void => {
   const anchor = word.TimedRubyAnchorElement;
   if (!anchor || typeof word.TimedRubyAnchorOffsetEm !== "number") return;
+  if (typeof gradientPosition === "number") {
+    setStyleIfChanged(
+      anchor,
+      "--timed-furigana-gradient-position",
+      `${gradientPosition}%`,
+      0.5,
+    );
+  }
   // Simple lyrics mode stubs word motion; the ruby stays static there too.
   if ($simpleLyricsMode.get()) return;
 
@@ -415,12 +427,16 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
         `translate3d(0, calc(var(--DefaultLyricsSize) * ${YOffsetSpline.at(0)}), 0)`,
         0
       );
-      applyTimedRubyAnchorState(word, ScaleSpline.at(0));
       word.HTMLElement.style.setProperty("--gradient-position", restingGradient);
     } else {
       word.HTMLElement.style.animation = "none";
       word.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
     }
+    applyTimedRubyAnchorState(
+      word,
+      ScaleSpline.at(0),
+      simpleMode ? -50 : -20,
+    );
     word.RomajiElement?.style.setProperty("--extra-gradient-position", restingExtraGradient);
     setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
     setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
@@ -499,8 +515,8 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
         0,
       );
       word.HTMLElement.style.setProperty("--gradient-position", "100%");
-      applyTimedRubyAnchorState(word, ScaleSpline.at(1));
     }
+    applyTimedRubyAnchorState(word, ScaleSpline.at(1), 100);
     word.RomajiElement?.style.setProperty(
       "--extra-gradient-position",
       `${ExtraGradientSungPosition}%`,
@@ -819,7 +835,18 @@ export function Animate(position: number): void {
                 `${targetExtraGradientPos}%`
               );
             }
-            applyTimedRubyAnchorState(word, currentScale);
+            applyTimedRubyAnchorState(
+              word,
+              currentScale,
+              word.TimedGroupTimes
+                ? gradientTargetsAt(
+                    ProcessedPosition,
+                    word.TimedGroupTimes.start,
+                    word.TimedGroupTimes.end,
+                    $simpleLyricsMode.get(),
+                  ).base
+                : undefined,
+            );
 
             setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
             // Use translate3d to ensure GPU-accelerated transforms
@@ -1318,7 +1345,7 @@ export function Animate(position: number): void {
                 0.001
               );
               setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
-              applyTimedRubyAnchorState(word, currentScale);
+              applyTimedRubyAnchorState(word, currentScale, 100);
               if (word.RomajiElement) {
                 word.RomajiElement.style.setProperty(
                   "--extra-gradient-position",

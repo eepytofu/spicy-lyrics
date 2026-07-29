@@ -83,7 +83,7 @@ test("timed romaji and line sidecars follow paint-only extra gradient state", ()
   assert.match(mainCss, /var\(--extra-gradient-position, -40%\)/u);
 });
 
-test("the extra sweep is wider without changing base lyric or ruby constants", () => {
+test("the extra sweep is wider without changing the base lyric range", () => {
   assert.equal(ExtraGradientUnsungPosition, -40);
   assert.equal(ExtraGradientSungPosition, 100);
   assert.equal(extraGradientPositionAt(-1), -40);
@@ -91,23 +91,37 @@ test("the extra sweep is wider without changing base lyric or ruby constants", (
   assert.equal(extraGradientPositionAt(0.5), 30);
   assert.equal(extraGradientPositionAt(1), 100);
   assert.equal(extraGradientPositionAt(2), 100);
-  assert.match(
-    mainCss,
-    /--ruby-on: clamp\(0%, calc\(\(var\(--gradient-position, -20%\)/u,
-  );
 });
 
-test("simple syllable mode keeps furigana on its owning word paint state", () => {
+test("synced furigana follows its owning lyric through a non-background text mask", () => {
   assert.match(
     mainCss,
-    /#SpicyLyricsPage\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.line\s+\.furigana-reading\s*\{[^}]*--ruby-on:/u,
+    /--furigana-local-gradient-position:\s*var\(\s*--timed-furigana-gradient-position/u,
   );
   assert.match(
     mainCss,
-    /#SpicyLyricsPage\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.line\s+\.furigana-reading\.reading-origin-provider-explicit\s*\{/u,
+    /-webkit-mask-image:\s*linear-gradient/u,
   );
+  assert.match(
+    mainCss,
+    /content:\s*attr\(data-furigana\)/u,
+  );
+  assert.match(
+    animatorSource,
+    /"--timed-furigana-gradient-position"/u,
+  );
+  const furigana = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading",
+  );
+  assert.match(furigana, /background:\s*none\s*!important/u);
   assert.doesNotMatch(
     mainCss,
-    /#SpicyLyricsPage:not\(\.SimpleLyricsMode\)\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]/u,
+    /\.furigana-reading\s*\{[^}]*background-clip:\s*text/u,
+  );
+  assert.match(
+    ruleBody(
+      "#SpicyLyricsPage .LyricsContainer .LyricsContent .timed-furigana-reading",
+    ),
+    /display:\s*inline-grid/u,
   );
 });

@@ -22,6 +22,7 @@ import {
   appendSyllableRomanizedBelow,
   isJapaneseEntry,
   packAdjacentFuriganaClusters,
+  populateFuriganaReading,
   renderBaseTextWithReadings,
   shouldRenderFurigana,
 } from "../ReadingRenderer.ts";
@@ -217,7 +218,7 @@ const createTimedFuriganaGroup = (
     reading.classList.add("reading-origin-provider-explicit");
     reading.dataset.readingOrigin = "provider-explicit";
   }
-  reading.textContent = group.reading;
+  populateFuriganaReading(reading, group.reading);
   anchor.appendChild(reading);
   return { root, anchor };
 };

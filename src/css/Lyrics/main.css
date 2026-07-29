@@ -170,7 +170,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   min-width: 0;
   max-width: none;
   justify-self: center;
-  display: inline-flex;
+  display: inline-grid;
   justify-content: center;
 }
 
@@ -182,7 +182,10 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading {
+  --furigana-fill-bright: rgba(255, 255, 255, var(--gradient-alpha, 0.85));
+  --furigana-fill-dim: rgba(255, 255, 255, var(--gradient-alpha-end, 0.5));
   grid-row: 1;
+  grid-template-areas: "reading";
   width: max-content;
   max-width: 4.5em;
   overflow: visible;
@@ -194,10 +197,16 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   pointer-events: none;
   background: none !important;
   background-image: none !important;
-  -webkit-text-fill-color: rgba(255, 255, 255, var(--gradient-alpha, 0.85));
-  color: rgba(255, 255, 255, var(--gradient-alpha, 0.85));
+  -webkit-text-fill-color: var(--furigana-fill-bright);
+  color: var(--furigana-fill-bright);
   text-shadow: var(--DerivedTextGlowDef);
   filter: blur(var(--ExtraLineBlurAmount, 0px));
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading > .furigana-reading-text,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading::after {
+  grid-area: reading;
+  justify-self: center;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading.furigana-placeholder {
@@ -244,6 +253,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .timed-furigana-reading {
+  display: inline-grid;
   position: absolute;
   bottom: 0;
   left: 0;
@@ -251,44 +261,55 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   max-width: none;
 }
 
-/* Ruby follows its line's state instead of running its own karaoke: dimmed
-   with the rest of an unsung line, normal ruby white once the line is
-   active or sung. Applies identically to compound and regular furigana.
-   (A ruby cannot paint its own background inside a background-clip: text
-   word, so state color is used; see the paint notes in project memory.) */
-#SpicyLyricsPage:not(.SimpleLyricsMode)
-  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
-  .line
-  .furigana-reading {
-  transition: color 0.25s, -webkit-text-fill-color 0.25s;
-}
-
-#SpicyLyricsPage:not(.SimpleLyricsMode)
-  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
-  .line.NotSung
-  .furigana-reading {
-  color: rgba(255, 255, 255, var(--gradient-alpha-end, 0.5));
-  -webkit-text-fill-color: rgba(255, 255, 255, var(--gradient-alpha-end, 0.5));
-}
-
-/* Time-synced lyrics: each ruby follows its own word's karaoke state via
-   the word's animated position. The steep ramp makes it a quick pop as the
-   word starts, not a gradual intra-ruby sweep; a ruby over a not-yet-sung
-   word stays dim like that word instead of outshining it. */
+/* Synced ruby uses two overlapping text layers. The real in-flow layer stays
+   dim; generated content reveals the bright layer through a text mask driven
+   by the same gradient position as the annotated lyric. Unlike the historical
+   background-clip attempt, neither layer paints a descendant background, so
+   base lyric and split-ruby geometry remain intact. Static lyrics stay flat. */
 #SpicyLyricsPage
-  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
-  .line
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
   .furigana-reading {
-  --ruby-on: clamp(0%, calc((var(--gradient-position, -20%) + 20%) * 4), 100%);
-  color: color-mix(
-    in srgb,
-    rgba(255, 255, 255, var(--gradient-alpha, 0.85)) var(--ruby-on),
-    rgba(255, 255, 255, var(--gradient-alpha-end, 0.5))
+  --furigana-local-gradient-position: var(
+    --timed-furigana-gradient-position,
+    calc(
+      (var(--gradient-position, -20%) - var(--furigana-source-start, 0%)) *
+        var(--furigana-source-scale, 1)
+    )
   );
-  -webkit-text-fill-color: color-mix(
-    in srgb,
-    rgba(255, 255, 255, var(--gradient-alpha, 0.85)) var(--ruby-on),
-    rgba(255, 255, 255, var(--gradient-alpha-end, 0.5))
+  --furigana-local-gradient-width: calc(
+    (20% + var(--gradient-offset, 0%)) * var(--furigana-source-scale, 1)
+  );
+  color: var(--furigana-fill-dim);
+  -webkit-text-fill-color: var(--furigana-fill-dim);
+}
+
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .furigana-reading::after {
+  content: attr(data-furigana);
+  color: var(--furigana-fill-bright);
+  -webkit-text-fill-color: var(--furigana-fill-bright);
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 var(--furigana-local-gradient-position),
+    transparent
+      calc(
+        var(--furigana-local-gradient-position) +
+          var(--furigana-local-gradient-width)
+      ),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    #000 0%,
+    #000 var(--furigana-local-gradient-position),
+    transparent
+      calc(
+        var(--furigana-local-gradient-position) +
+          var(--furigana-local-gradient-width)
+      ),
+    transparent 100%
   );
 }
 
@@ -297,28 +318,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    base word keeps its ordinary styling and timing. */
 #SpicyLyricsPage .LyricsContainer .LyricsContent
   .furigana-reading.reading-origin-provider-explicit {
-  color: rgba(255, 207, 128, 0.78);
-  -webkit-text-fill-color: rgba(255, 207, 128, 0.78);
-}
-
-#SpicyLyricsPage:not(.SimpleLyricsMode)
-  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
-  .line.NotSung
-  .furigana-reading.reading-origin-provider-explicit {
-  color: rgba(255, 207, 128, 0.44);
-  -webkit-text-fill-color: rgba(255, 207, 128, 0.44);
-}
-
-#SpicyLyricsPage
-  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
-  .line
-  .furigana-reading.reading-origin-provider-explicit {
-  color: color-mix(in srgb, rgba(255, 207, 128, 0.9) var(--ruby-on), rgba(255, 207, 128, 0.48));
-  -webkit-text-fill-color: color-mix(
-    in srgb,
-    rgba(255, 207, 128, 0.9) var(--ruby-on),
-    rgba(255, 207, 128, 0.48)
-  );
+  --furigana-fill-bright: rgba(255, 207, 128, 0.9);
+  --furigana-fill-dim: rgba(255, 207, 128, 0.48);
 }
 
 /* Japanese semantic groups preserve readings, not visible source-text spaces. */
