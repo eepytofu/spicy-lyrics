@@ -1558,12 +1558,6 @@ export function Animate(position: number): void {
 
           // Apply styles using spring value for glow, keep direct calculation for gradient
           if (!$simpleLyricsMode.get()) {
-            setStyleIfChanged(
-              line.HTMLElement,
-              "--line-furigana-brightness",
-              `${Math.max(0, Math.min(finiteAnimationValue(currentGlow, 0), 1))}`,
-              0.005,
-            );
             line.HTMLElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
             line.HTMLElement.style.setProperty(
               "--extra-gradient-position",
@@ -1580,7 +1574,6 @@ export function Animate(position: number): void {
         }
       } else if (lineState === "NotSung") {
         line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(0), true);
-        setStyleIfChanged(line.HTMLElement, "--line-furigana-brightness", "0", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
         line.HTMLElement.style.setProperty(
@@ -1589,7 +1582,6 @@ export function Animate(position: number): void {
         );
       } else if (lineState === "Sung") {
         line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(1), true);
-        setStyleIfChanged(line.HTMLElement, "--line-furigana-brightness", "0", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
         line.HTMLElement.style.setProperty(

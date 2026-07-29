@@ -120,7 +120,10 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.HasExtras {
-  --ExtraLineBlurAmount: clamp(0px, calc(var(--BlurAmount, 0px) * 0.14), 1.25px);
+  /* Reading rows are roughly 46% of the main lyric size. Scale the line's
+     unfocused blur by the same ratio so furigana, romaji, and translations
+     share its depth without becoming less legible than the larger glyphs. */
+  --ExtraLineBlurAmount: clamp(0px, calc(var(--BlurAmount, 0px) * 0.46), 3.25px);
   display: block;
 }
 
@@ -181,8 +184,28 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading {
-  --furigana-fill-bright: rgba(255, 255, 255, var(--gradient-alpha, 0.85));
-  --furigana-fill-dim: rgba(255, 255, 255, var(--gradient-alpha-end, 0.5));
+  --furigana-color-rgb: 255, 255, 255;
+  --furigana-bright-alpha: var(--gradient-alpha, 0.85);
+  --furigana-dim-alpha: var(--gradient-alpha-end, 0.5);
+  --furigana-overlay-alpha: calc(
+    (var(--furigana-bright-alpha) - var(--furigana-dim-alpha)) /
+      (1 - var(--furigana-dim-alpha))
+  );
+  --furigana-fill-bright: rgba(
+    var(--furigana-color-rgb),
+    var(--furigana-bright-alpha)
+  );
+  --furigana-fill-dim: rgba(
+    var(--furigana-color-rgb),
+    var(--furigana-dim-alpha)
+  );
+  /* The bright syllable layer is composited over the real dim layer. Use only
+     the incremental alpha required to reach the same endpoint as the main
+     lyric instead of painting the full bright alpha twice. */
+  --furigana-fill-overlay: rgba(
+    var(--furigana-color-rgb),
+    var(--furigana-overlay-alpha)
+  );
   grid-row: 1;
   grid-template-areas: "reading";
   width: max-content;
@@ -287,8 +310,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
   .furigana-reading::after {
   content: attr(data-furigana);
-  color: var(--furigana-fill-bright);
-  -webkit-text-fill-color: var(--furigana-fill-bright);
+  color: var(--furigana-fill-overlay);
+  -webkit-text-fill-color: var(--furigana-fill-overlay);
   -webkit-mask-image: linear-gradient(
     90deg,
     #000 0%,
@@ -317,25 +340,24 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-shadow: none;
 }
 
-/* Line timing describes one breathing phrase, not per-word karaoke. Blend the
-   single real ruby layer uniformly from resting to active paint using the same
-   line-glow spring. This also gives seek frames one paint owner instead of a
-   stale generated white layer racing the base lyric. */
+/* Line timing describes one breathing phrase, not per-word karaoke. Keep the
+   real ruby at the same bright endpoint as its active/sung main line and let
+   the inherited glyph shadow provide the breathing motion. A not-yet-sung
+   line rests at its matching dim endpoint. Fill is deliberately state-based,
+   not spring-based, so first playback and replay after a seek are identical. */
 #SpicyLyricsPage:not(.SimpleLyricsMode)
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .furigana-reading {
-  color: color-mix(
-    in srgb,
-    var(--furigana-fill-bright)
-      calc(var(--line-furigana-brightness, 0) * 100%),
-    var(--furigana-fill-dim)
-  );
-  -webkit-text-fill-color: color-mix(
-    in srgb,
-    var(--furigana-fill-bright)
-      calc(var(--line-furigana-brightness, 0) * 100%),
-    var(--furigana-fill-dim)
-  );
+  color: var(--furigana-fill-dim);
+  -webkit-text-fill-color: var(--furigana-fill-dim);
+}
+
+#SpicyLyricsPage:not(.SimpleLyricsMode)
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .line:is(.Active, .Sung)
+  .furigana-reading {
+  color: var(--furigana-fill-bright);
+  -webkit-text-fill-color: var(--furigana-fill-bright);
 }
 
 /* Simple line mode already renders the complete main line rather than running
@@ -352,8 +374,9 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    base word keeps its ordinary styling and timing. */
 #SpicyLyricsPage .LyricsContainer .LyricsContent
   .furigana-reading.reading-origin-provider-explicit {
-  --furigana-fill-bright: rgba(255, 207, 128, 0.9);
-  --furigana-fill-dim: rgba(255, 207, 128, 0.48);
+  --furigana-color-rgb: 255, 207, 128;
+  --furigana-bright-alpha: 0.9;
+  --furigana-dim-alpha: 0.48;
 }
 
 /* Japanese semantic groups preserve readings, not visible source-text spaces. */
@@ -396,8 +419,21 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
   .line.Active
   :is(.furigana-reading, .romanized-below, .romanized-syllable) {
-  text-shadow: 0 0 var(--text-shadow-blur-radius, 4px)
-    rgba(255, 255, 255, var(--text-shadow-opacity, 0%));
+  /* Main-lyric glow reaches 12px/50% in line mode and 6px/35% in ordinary
+     syllable mode. Reusing it unchanged on half-size readings muddies their
+     counters, so keep the same timing owner with a bounded smaller footprint. */
+  --derived-text-shadow-blur-radius: clamp(
+    2px,
+    calc(var(--text-shadow-blur-radius, 4px) * 0.5),
+    6px
+  );
+  --derived-text-shadow-opacity: clamp(
+    0%,
+    calc(var(--text-shadow-opacity, 0%) * 0.55),
+    28%
+  );
+  text-shadow: 0 0 var(--derived-text-shadow-blur-radius)
+    rgba(255, 255, 255, var(--derived-text-shadow-opacity));
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below.romanization-placeholder {
@@ -426,7 +462,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   --gradient-degrees: 90deg;
   --gradient-alpha-end: 0.35;
   text-shadow: inherit;
-  filter: blur(var(--ExtraLineBlurAmount, 0px));
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below

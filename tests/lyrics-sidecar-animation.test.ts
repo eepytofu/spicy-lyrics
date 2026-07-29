@@ -11,6 +11,10 @@ const mainCss = readFileSync(
   new URL("../src/css/Lyrics/main.css", import.meta.url),
   "utf8",
 );
+const mixedCss = readFileSync(
+  new URL("../src/css/Lyrics/Mixed.css", import.meta.url),
+  "utf8",
+);
 const animatorSource = readFileSync(
   new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
   "utf8",
@@ -55,8 +59,9 @@ test("derived lyric roles keep explicit weight and readable resting paint", () =
   assert.match(furigana, /font-weight:\s*700/u);
   assert.match(
     furigana,
-    /rgba\(255,\s*255,\s*255,\s*var\(--gradient-alpha,\s*0\.85\)\)/u,
+    /--furigana-bright-alpha:\s*var\(--gradient-alpha,\s*0\.85\)/u,
   );
+  assert.match(furigana, /--furigana-fill-bright:\s*rgba\(/u);
   assert.match(furigana, /text-shadow:\s*none/u);
 
   for (const selector of [
@@ -74,10 +79,47 @@ test("derived lyric roles keep explicit weight and readable resting paint", () =
   assert.match(translation, /font-style:\s*normal/u);
 });
 
+test("every derived row follows the line's unfocused blur once", () => {
+  assert.match(
+    mainCss,
+    /--ExtraLineBlurAmount:\s*clamp\(\s*0px,\s*calc\(var\(--BlurAmount,\s*0px\)\s*\*\s*0\.46\),\s*3\.25px\s*\)/u,
+  );
+  assert.match(
+    mixedCss,
+    /\.line\.NotSung[\s\S]*?text-shadow:\s*0 0 var\(--BlurAmount,\s*0\)/u,
+  );
+  assert.match(
+    mixedCss,
+    /\.line\.Sung[\s\S]*?text-shadow:\s*0 0 var\(--BlurAmount,\s*0\)/u,
+  );
+  assert.match(
+    mixedCss,
+    /\.line\.Active\s*\{[\s\S]*?--BlurAmount:\s*0px\s*!important/u,
+  );
+
+  for (const selector of [
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading",
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below",
+  ]) {
+    assert.match(
+      ruleBody(selector),
+      /filter:\s*blur\(var\(--ExtraLineBlurAmount,\s*0px\)\)/u,
+    );
+  }
+
+  assert.doesNotMatch(
+    ruleBody(
+      "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below .romanized-syllable",
+    ),
+    /filter:\s*blur/u,
+  );
+});
+
 test("synced furigana and romaji glow only with their active lyric owner", () => {
   assert.match(
     mainCss,
-    /\.line\.Active[\s\S]*?:is\(\.furigana-reading,\s*\.romanized-below,\s*\.romanized-syllable\)\s*\{[\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)[\s\S]*?var\(--text-shadow-opacity,\s*0%\)/u,
+    /\.line\.Active[\s\S]*?:is\(\.furigana-reading,\s*\.romanized-below,\s*\.romanized-syllable\)\s*\{[\s\S]*?--derived-text-shadow-blur-radius:\s*clamp\([\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)\s*\*\s*0\.5[\s\S]*?--derived-text-shadow-opacity:\s*clamp\([\s\S]*?var\(--text-shadow-opacity,\s*0%\)\s*\*\s*0\.55[\s\S]*?28%/u,
   );
   assert.match(
     animatorSource,
@@ -126,6 +168,14 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
     /\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.furigana-reading::after\s*\{[\s\S]*?text-shadow:\s*none/u,
   );
   assert.match(
+    mainCss,
+    /--furigana-overlay-alpha:\s*calc\([\s\S]*?var\(--furigana-bright-alpha\)[\s\S]*?var\(--furigana-dim-alpha\)[\s\S]*?1 - var\(--furigana-dim-alpha\)/u,
+  );
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.furigana-reading::after\s*\{[\s\S]*?var\(--furigana-fill-overlay\)/u,
+  );
+  assert.match(
     animatorSource,
     /"--timed-furigana-gradient-position"/u,
   );
@@ -145,10 +195,14 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
   );
 });
 
-test("line furigana follows one uniform breathing owner instead of a karaoke mask", () => {
+test("line furigana uses deterministic state fill and inherits breathing glow", () => {
   assert.match(
     mainCss,
-    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?--line-furigana-brightness/u,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-dim\)/u,
+  );
+  assert.match(
+    mainCss,
+    /\.line:is\(\.Active,\s*\.Sung\)\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-bright\)/u,
   );
   assert.doesNotMatch(
     mainCss,
@@ -156,8 +210,10 @@ test("line furigana follows one uniform breathing owner instead of a karaoke mas
   );
   assert.match(
     animatorSource,
-    /"--line-furigana-brightness"[\s\S]*?finiteAnimationValue\(currentGlow,\s*0\)/u,
+    /setStyleIfChanged\(line\.HTMLElement,\s*"--text-shadow-opacity",\s*`\$\{currentGlow \* 50\}%`/u,
   );
+  assert.doesNotMatch(mainCss, /--line-furigana-brightness/u);
+  assert.doesNotMatch(animatorSource, /--line-furigana-brightness/u);
   assert.match(
     animatorSource,
     /animationTimelineJumped\([\s\S]*?SetGoal\(targetGlow,\s*timelineJumped\)/u,
