@@ -1,12 +1,26 @@
 /* as of right now, this is super simple as i made this in a rush. might evolve, might not */
 
 function onMarketplaceUserCssDetected(userCssText: string | null) {
-    if (userCssText?.includes(`*:not([style*="lyric" i] *, [class*="lyric" i], .main-entityHeader-title)`)) {
-        document.body.classList.add("sltm__ThemeMatch__textdt");
-        return;
-    }
+  document.body.classList.toggle("sltm__ThemeMatch__textdt", matchesTextDarkTheme(userCssText));
+}
 
-    document.body.classList.remove("sltm__ThemeMatch__textdt")
+export function matchesTextDarkTheme(userCssText: string | null): boolean {
+  return Boolean(
+    userCssText?.includes(
+      `*:not([style*="lyric" i] *, [class*="lyric" i], .main-entityHeader-title)`,
+    ) ||
+      userCssText?.includes(
+        `---------------
+PLAYBACK BAR
+---------------
+*/
+/* playback progress bar moves smoothly */
+.x-progressBar-fillColor`,
+      ) ||
+      userCssText?.includes(
+        "/* check out a cool project: https://github.com/Rigellute/spotify-tui",
+      ),
+  );
 }
 
 export function watchMarketplaceUserCss(): () => void {

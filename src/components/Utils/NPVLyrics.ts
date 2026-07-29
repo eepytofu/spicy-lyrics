@@ -11,7 +11,10 @@ import { Icons } from "../Styling/Icons.ts";
 import { Maid } from "../../modules/Maid.ts";
 import Whentil from "../../modules/Whentil.ts";
 import { $npvLyricsExpanded, $npvLyricsOpen } from "../../utils/uiState.ts";
+import { $currentLyricsData, $hideNpvLyricsWhenUnavailable } from "../../utils/stores.ts";
 import Logger from "../../utils/Logger.ts";
+import { SpotifyPlayer } from "../Global/SpotifyPlayer.ts";
+import { shouldHideNpvForMissingLyrics } from "./NPVAvailability.ts";
 
 const cardLogger = new Logger("NPV Lyrics");
 
@@ -58,6 +61,14 @@ function desiredState(): CardState {
     Fullscreen.CinemaViewOpen ||
     Spicetify.Platform.History.location.pathname === "/SpicyLyrics";
   if (pageBusyElsewhere) return "DORMANT";
+  if (
+    shouldHideNpvForMissingLyrics(
+      $hideNpvLyricsWhenUnavailable.get(),
+      SpotifyPlayer.GetUri(),
+      $currentLyricsData.get(),
+    )
+  )
+    return "DORMANT";
   return $npvLyricsOpen.get() ? "ACTIVE" : "SHELL";
 }
 
@@ -358,6 +369,7 @@ export function initNPVLyrics(): void {
     "fullscreen:open",
     "fullscreen:exit",
     "platform:history",
+    "playback:songchange",
   ]) {
     const id = Global.Event.listen(name, () => scheduleEvaluate());
     watcherMaid.Give(() => {
@@ -367,6 +379,8 @@ export function initNPVLyrics(): void {
 
   watcherMaid.Give($npvLyricsOpen.listen(() => scheduleEvaluate()));
   watcherMaid.Give($npvLyricsExpanded.listen(() => scheduleEvaluate()));
+  watcherMaid.Give($currentLyricsData.listen(() => scheduleEvaluate()));
+  watcherMaid.Give($hideNpvLyricsWhenUnavailable.listen(() => scheduleEvaluate()));
 
   Whentil.When(
     () =>

@@ -1,6 +1,7 @@
 import { useStore } from "@nanostores/react";
 import {
   $fixHanGlyphVariants,
+  $hideNpvLyricsWhenUnavailable,
   $lockedMediaBox,
   $popupLyricsAllowed,
   $showNpvDynamicBg,
@@ -24,6 +25,7 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
   const staticBackground = useStore($staticBackgroundMode);
   const staticBackgroundBlur = useStore($staticBackgroundBlur);
   const dynamicNpv = useStore($showNpvDynamicBg);
+  const hideNpvWhenUnavailable = useStore($hideNpvLyricsWhenUnavailable);
   const forceDark = useStore($forceDarkBackground);
   const systemFont = useStore($skipSpicyFont);
   const fontStack = useStore($systemFontStack);
@@ -80,6 +82,11 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
       "Place the timeline in the NowBar header."
     ),
     flat: matches(query, "Flat Controls", "Use flat controls instead of liquid-glass buttons."),
+    hideNpv: matches(
+      query,
+      "Hide NPV Lyrics When Unavailable",
+      "Remove the lyrics card from Now Playing View when the current track has no lyrics.",
+    ),
   };
   if (
     ![...Object.values(background), ...Object.values(typography), ...Object.values(layout)].some(
@@ -225,6 +232,17 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
           description="Use flat lyrics controls instead of liquid-glass buttons."
         >
           <Toggle checked={flatControls} onChange={(value) => $flatViewControls.set(value)} />
+        </Row>
+      )}
+      {layout.hideNpv && (
+        <Row
+          label="Hide NPV Lyrics When Unavailable"
+          description="Remove the lyrics card from Now Playing View when the current track has no lyrics."
+        >
+          <Toggle
+            checked={hideNpvWhenUnavailable}
+            onChange={(value) => $hideNpvLyricsWhenUnavailable.set(value)}
+          />
         </Row>
       )}
     </>

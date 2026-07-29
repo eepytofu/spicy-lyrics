@@ -1,5 +1,10 @@
 import { $playbackOffset } from "../stores.ts";
 import { SpotifyPlayer } from "./../../components/Global/SpotifyPlayer.ts";
+import {
+  initialLocalPositionSyncState,
+  resolveLocalPositionSample,
+  type LocalPositionSyncState,
+} from "./ProgressSyncState.ts";
 
 interface SyncedPosition {
   StartedSyncAt: number;
@@ -14,6 +19,7 @@ interface PredictedProgress {
 
 let syncedPosition: SyncedPosition | null = null;
 let predictedProgress: PredictedProgress | null = null;
+let localPositionSyncState: LocalPositionSyncState = initialLocalPositionSyncState();
 const syncTimings = [0.05, 0.1, 0.15, 0.75];
 let canSyncNonLocalTimestamp = SpotifyPlayer?.IsPlaying ? syncTimings.length : 0;
 // Forward lead (ms) added to every position to compensate for audio-output
@@ -75,6 +81,9 @@ function normalizeProgress(position: number, isPlaying: boolean): number {
   } else {
     // Jitter — nudge toward the measured value with a frame-rate-independent
     // low-pass (see JITTER_TIME_CONSTANT).
+    //
+    // This assumes the measured clock also advances. The local-position
+    // anchor below preserves that contract when Spotify repeats a stale sample.
     const alpha = 1 - Math.exp(-elapsed / JITTER_TIME_CONSTANT);
     predicted += error * alpha;
   }
@@ -94,14 +103,22 @@ export const requestPositionSync = () => {
     const getLocalPosition = () => {
       return SpotifyPlatform.PlayerAPI._contextPlayer
         .getPositionState({})
-        .then(({ position }: { position: number }) => ({
+        .then(({ position }: { position: number }) => {
           // getPositionState is async: the resolved position is current somewhere
           // between the request and now. Use the NTP-style round-trip midpoint as
           // the best jitter-free estimate of when the sample was taken (anchoring
           // to startedAt would over-extrapolate by the full, variable IPC latency).
-          StartedSyncAt: startedAt + (Date.now() - startedAt) / 2,
-          Position: Number(position),
-        }));
+          const sampledAt = startedAt + (Date.now() - startedAt) / 2;
+          const resolved = resolveLocalPositionSample(localPositionSyncState, {
+            sampledPosition: Number(position),
+            sampledAt,
+            trackUri: SpotifyPlayer.GetUri() ?? null,
+            isPlaying: Spicetify.Player.isPlaying(),
+            playerState: SpotifyPlatform.PlayerAPI._state,
+          });
+          localPositionSyncState = resolved.state;
+          return resolved.position;
+        });
     };
 
     const getNonLocalPosition = () => {
@@ -132,6 +149,9 @@ export const requestPositionSync = () => {
       .then((position: SyncedPosition) => {
         syncedPosition = position;
       })
+      .catch((error: unknown) => {
+        console.error("Sync Position: Poll failed, More Details:", error);
+      })
       .then(() => {
         const delay = isLocallyPlaying
           ? 1 / 60
@@ -143,6 +163,7 @@ export const requestPositionSync = () => {
       });
   } catch (error) {
     console.error("Sync Position: Fail, More Details:", error);
+    setTimeout(requestPositionSync, 1000);
   }
 };
 
