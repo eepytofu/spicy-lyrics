@@ -161,6 +161,20 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   overflow: visible;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .lyric-base-plain {
+  display: inline;
+}
+
+/* A syllable without its own ruby may still share a line with ruby-bearing
+   words. Reserve that row on the word itself instead of manufacturing an
+   invisible reading and NBSP for every plain-text chunk. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .word.furigana-row-reserved {
+  display: inline-block;
+  padding-top: calc(var(--furigana-rt-size) + var(--furigana-rt-gap));
+  line-height: 1;
+  vertical-align: bottom;
+}
+
 /* Readings wider than their base overhang the neighbors like typeset ruby
    instead of widening the cluster and pushing the lyric text apart. The
    reading must stay an in-flow, non-positioned grid item: a positioned
@@ -229,10 +243,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading::after {
   grid-area: reading;
   justify-self: center;
-}
-
-#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading.furigana-placeholder {
-  visibility: hidden;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-base {

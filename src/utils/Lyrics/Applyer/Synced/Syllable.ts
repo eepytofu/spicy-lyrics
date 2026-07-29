@@ -471,7 +471,7 @@ export function ApplySyllableLyrics(
           currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
         }
     });
-    packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".furigana-cluster"));
+    packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".lyric-base-run"));
 
     const leadRomanizedText = line.Lead.RomanizedText || line.Lead.TransliteratedText;
     const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
@@ -574,7 +574,7 @@ export function ApplySyllableLyrics(
             currentBGWordGroup = appendGroupedWord(lineE, word, bw, bA[bI - 1], currentBGWordGroup);
           }
         });
-        packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".furigana-cluster"));
+        packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".lyric-base-run"));
 
         const bgRomanizedText = bg.RomanizedText || bg.TransliteratedText;
         const allEntries =

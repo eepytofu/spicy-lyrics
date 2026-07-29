@@ -109,23 +109,22 @@ export function shouldRenderRomanization(entry: JapaneseReadable | undefined, op
   return !isJapanese || $japaneseReadingMode.get() !== "furigana";
 }
 
-function appendPlainText(parent: HTMLElement, text: string): void {
+function appendPlainText(
+  parent: HTMLElement,
+  text: string,
+  sourceStart = 0,
+): void {
   if (!text) return;
 
+  let cursor = sourceStart;
   for (const chunk of plainTextWrapChunks(text)) {
-    const cluster = document.createElement("span");
-    cluster.className = "furigana-cluster furigana-plain-cluster";
-
-    const reading = document.createElement("span");
-    reading.className = "furigana-reading furigana-placeholder";
-    reading.textContent = "\u00a0";
-
-    const base = document.createElement("span");
-    base.className = "furigana-base";
-    base.textContent = chunk;
-
-    cluster.append(reading, base);
-    parent.appendChild(cluster);
+    const run = document.createElement("span");
+    run.className = "lyric-base-run lyric-base-plain";
+    run.dataset.sourceStart = String(cursor);
+    cursor += chunk.length;
+    run.dataset.sourceEnd = String(cursor);
+    run.textContent = chunk;
+    parent.appendChild(run);
   }
 }
 
@@ -180,10 +179,12 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
   let cursor = 0;
   for (const segment of segments) {
     if (segment.start < cursor) continue;
-    appendPlainText(parent, text.slice(cursor, segment.start));
+    appendPlainText(parent, text.slice(cursor, segment.start), cursor);
 
     const cluster = document.createElement("span");
-    cluster.className = "furigana-cluster";
+    cluster.className = "lyric-base-run furigana-cluster";
+    cluster.dataset.sourceStart = String(segment.start);
+    cluster.dataset.sourceEnd = String(segment.end);
     if (segment.provenance === "providerExplicit") {
       cluster.classList.add("reading-origin-provider-explicit");
       cluster.dataset.readingOrigin = "provider-explicit";
@@ -209,7 +210,7 @@ export function appendFuriganaText(parent: HTMLElement, text: string, rawSegment
     cursor = segment.end;
   }
 
-  appendPlainText(parent, text.slice(cursor));
+  appendPlainText(parent, text.slice(cursor), cursor);
 }
 
 const hasElementClass = (element: Element, className: string): boolean =>
@@ -220,29 +221,27 @@ const directClusterChild = (cluster: HTMLElement, className: string): HTMLElemen
 
 /**
  * A timed provider can split adjacent kanji into separate DOM words even when
- * each word owns a local ruby. Pack those neighboring ruby clusters exactly
- * like adjacent segments rendered inside one word so their overhangs cannot
- * collide. Authored whitespace remains a source boundary but does not provide
- * enough visual width for long readings, so only visible non-whitespace text
- * resets ruby adjacency.
+ * each word owns a local ruby. Walk every base run, not only ruby clusters, so
+ * visible intervening text resets adjacency while authored whitespace can stay
+ * inside a packed lexical group.
  */
-export function packAdjacentFuriganaClusters(clusters: Iterable<HTMLElement>): void {
+export function packAdjacentFuriganaClusters(runs: Iterable<HTMLElement>): void {
   let previousRuby: HTMLElement | null = null;
 
-  for (const cluster of clusters) {
-    const base = directClusterChild(cluster, "furigana-base");
-    const reading = directClusterChild(cluster, "furigana-reading");
-    const hasRuby = !!reading &&
-      !hasElementClass(reading, "furigana-placeholder") &&
-      !!reading.textContent;
+  for (const run of runs) {
+    const base = directClusterChild(run, "furigana-base");
+    const reading = directClusterChild(run, "furigana-reading");
+    const hasRuby =
+      hasElementClass(run, "furigana-cluster") &&
+      !!reading?.textContent;
 
     if (hasRuby) {
       if (previousRuby) {
         previousRuby.classList.add("furigana-cluster-packed");
-        cluster.classList.add("furigana-cluster-packed");
+        run.classList.add("furigana-cluster-packed");
       }
-      previousRuby = cluster;
-    } else if (base?.textContent?.trim()) {
+      previousRuby = run;
+    } else if ((base?.textContent ?? run.textContent)?.trim()) {
       previousRuby = null;
     }
   }
@@ -274,7 +273,7 @@ export function renderBaseTextWithReadings(
       appendFuriganaText(element, text, segments);
       packAdjacentFuriganaClusters(
         Array.from(element.children)
-          .filter((child) => hasElementClass(child, "furigana-cluster")) as HTMLElement[],
+          .filter((child) => hasElementClass(child, "lyric-base-run")) as HTMLElement[],
       );
       return true;
     }
@@ -286,7 +285,7 @@ export function renderBaseTextWithReadings(
     options.reserveFurigana &&
     isJapaneseEntry(entry, options.isJapaneseLyrics)
   ) {
-    element.classList.add("has-furigana");
+    element.classList.add("has-furigana", "furigana-row-reserved");
     appendPlainText(element, text);
     return true;
   }
@@ -300,7 +299,8 @@ export function renderBaseTextWithReadings(
     element.classList.add("furigana-pending");
   }
 
-  element.textContent = text;
+  element.textContent = "";
+  appendPlainText(element, text);
   return false;
 }
 

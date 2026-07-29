@@ -350,14 +350,14 @@ test("only directly adjacent ruby clusters reserve reading width", () => {
     { start: 2, end: 3, reading: "ほし" },
   ]);
   packAdjacentFuriganaClusters(isolated.children as unknown as HTMLElement[]);
-  const rubyClusters = isolated.children.filter((cluster) =>
-    !cluster.className.includes("furigana-plain-cluster")
+  const rubyClusters = isolated.children.filter((run) =>
+    run.className.includes("furigana-cluster")
   );
-  const plainClusters = isolated.children.filter((cluster) =>
-    cluster.className.includes("furigana-plain-cluster")
+  const plainRuns = isolated.children.filter((run) =>
+    run.className.includes("lyric-base-plain")
   );
   assert.equal(rubyClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
-  assert.equal(plainClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
+  assert.equal(plainRuns.every((run) => !run.classList.values.has("furigana-cluster-packed")), true);
 });
 
 test("full-line lyrics automatically pack split compounds without widening isolated ruby", () => {
@@ -383,7 +383,9 @@ test("full-line lyrics automatically pack split compounds without widening isola
   );
 
   const clusters = line.children.map((cluster) => ({
-    base: cluster.children.find((child) => child.className === "furigana-base")?.textContent,
+    base: cluster.className.includes("lyric-base-plain")
+      ? cluster.textContent
+      : cluster.children.find((child) => child.className === "furigana-base")?.textContent,
     packed: cluster.classList.values.has("furigana-cluster-packed"),
   }));
   assert.deepEqual(clusters, [
@@ -465,17 +467,66 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
     ]);
 
     const renderedBase = line.children
-      .map((cluster) => cluster.children.find((child) => child.className === "furigana-base")?.textContent || "")
+      .map((run) =>
+        run.className.includes("lyric-base-plain")
+          ? run.textContent
+          : run.children.find((child) => child.className === "furigana-base")?.textContent || ""
+      )
       .join("");
     const plainBase = line.children
-      .filter((cluster) => cluster.className.includes("furigana-plain-cluster"))
-      .map((cluster) => cluster.children.find((child) => child.className === "furigana-base")?.textContent || "");
+      .filter((run) => run.className.includes("lyric-base-plain"))
+      .map((run) => run.textContent);
 
     assert.equal(renderedBase, fixture.text);
     assert.equal(plainBase.join(""), fixture.text.slice(fixture.rubyEnd));
     assert.ok(plainBase.length > 1);
     assert.equal(plainBase.includes("("), false);
     assert.equal(plainBase.includes(")"), false);
+  }
+});
+
+test("reading modes preserve one exact base-text run contract", () => {
+  const source = "Shout It Out Loud!!! - 暁 Records (akatsuki records)";
+  const entry = {
+    Text: source,
+    JapaneseReading: {
+      sourceText: source,
+      romaji: "Shout It Out Loud!!! - akatsuki Records (akatsuki records)",
+      furigana: [{ start: 23, end: 24, reading: "あかつき" }],
+    },
+  };
+
+  const renderedBaseText = (line: FakeElement): string =>
+    line.children
+      .map((run) =>
+        run.className.includes("lyric-base-plain")
+          ? run.textContent
+          : run.children.find((child) => child.className === "furigana-base")?.textContent || ""
+      )
+      .join("");
+
+  for (const mode of ["romaji", "furigana", "both"] as const) {
+    $japaneseReadingMode.set(mode);
+    const line = new FakeElement();
+    renderBaseTextWithReadings(
+      line as unknown as HTMLElement,
+      entry,
+      { useRomanized: true, isJapaneseLyrics: true },
+    );
+
+    assert.equal(renderedBaseText(line), source, mode);
+    assert.equal(
+      line.children
+        .filter((run) => run.className.includes("lyric-base-plain"))
+        .some((run) => run.textContent.includes("\u00a0")),
+      false,
+      mode,
+    );
+    assert.equal(
+      line.children.some((run) => run.className.includes("furigana-placeholder")),
+      false,
+      mode,
+    );
   }
 });
 
