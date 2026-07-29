@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
+import { ConverterFactory } from "opencc-js/core";
+import JapaneseShinjitaiCharacters from "opencc-js/dict/JPShinjitaiCharactersRev";
+import SimplifiedToTraditionalCharacters from "opencc-js/dict/STCharacters";
 import {
   convertChineseLyricsText,
   convertChineseText,
@@ -8,6 +12,15 @@ import {
   isChineseLyricsProvider,
   normalizeChineseProviderJapaneseText,
 } from "../src/utils/Lyrics/ChineseCharacterConversion.ts";
+import {
+  CHINESE_PROVIDER_CHARACTER_MAP_METADATA,
+  CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP,
+} from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderCharacterMap.generated.ts";
+
+const broadJapaneseConverter = ConverterFactory(
+  [SimplifiedToTraditionalCharacters],
+  [JapaneseShinjitaiCharacters],
+);
 
 test("converts between Simplified and Taiwan Traditional character forms", () => {
   assert.equal(convertChineseText("\u6f22\u8a9e", "simplified"), "\u6c49\u8bed");
@@ -48,6 +61,46 @@ test("keeps ambiguous Japanese lexical forms in safe source contexts", () => {
   assert.equal(
     normalizeChineseProviderJapaneseText("ひとり占めできるまで"),
     "ひとり占めできるまで"
+  );
+  assert.equal(
+    normalizeChineseProviderJapaneseText("岩 干 里"),
+    "岩 干 里"
+  );
+});
+
+test("conservative repair ablates broad OpenCC changes without losing proven fixtures", () => {
+  assert.equal(CHINESE_PROVIDER_CHARACTER_MAP_METADATA.broadChangedCodePoints, 3020);
+  assert.equal(
+    CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP.size,
+    CHINESE_PROVIDER_CHARACTER_MAP_METADATA.mappingCount,
+  );
+  assert.ok(
+    CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP.size <
+      CHINESE_PROVIDER_CHARACTER_MAP_METADATA.broadChangedCodePoints,
+  );
+  const entries = [...CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP];
+  assert.equal(
+    createHash("sha256")
+      .update(
+        `${entries.map(([source]) => source).join("")}\0${entries
+          .map(([, target]) => target)
+          .join("")}`,
+        "utf8",
+      )
+      .digest("hex")
+      .toUpperCase(),
+    CHINESE_PROVIDER_CHARACTER_MAP_METADATA.mappingSha256,
+  );
+  assert.equal(entries.every(([source, target]) => source.length === target.length), true);
+
+  for (const source of ["占", "岩", "干", "里"]) {
+    assert.notEqual(broadJapaneseConverter(source), source, source);
+    assert.equal(normalizeChineseProviderJapaneseText(source), source, source);
+  }
+
+  assert.equal(
+    normalizeChineseProviderJapaneseText("风吹き运ぶ 时の无常 梦见ては 词を叹く"),
+    "風吹き運ぶ 時の無常 夢見ては 詞を嘆く",
   );
 });
 

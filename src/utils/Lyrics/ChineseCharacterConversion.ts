@@ -1,9 +1,11 @@
-import { ConverterBuilder, ConverterFactory } from "opencc-js/core";
-import JapaneseShinjitaiCharacters from "opencc-js/dict/JPShinjitaiCharactersRev";
-import SimplifiedToTraditionalCharacters from "opencc-js/dict/STCharacters";
+import { ConverterBuilder } from "opencc-js/core";
 import * as CnToTraditionalPreset from "opencc-js/preset/cn2t";
 import * as TraditionalToCnPreset from "opencc-js/preset/t2cn";
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
+import {
+  CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP,
+  CHINESE_PROVIDER_JAPANESE_CHARACTER_PATTERN,
+} from "./Processing/Japanese/ChineseProviderCharacterMap.generated.ts";
 
 export type ChineseCharacterForm = "original" | "simplified" | "traditional";
 export type DetectedChineseCharacterForm = Exclude<ChineseCharacterForm, "original"> | "ambiguous";
@@ -12,7 +14,6 @@ type TimedTextUnit = { Text?: string; IsPartOfWord?: boolean };
 
 const toSimplified = ConverterBuilder(TraditionalToCnPreset)({ from: "t", to: "cn" });
 const toTraditional = ConverterBuilder(CnToTraditionalPreset)({ from: "cn", to: "tw" });
-let toJapanese: ((text: string) => string) | undefined;
 
 const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease", "soda"]);
 
@@ -20,9 +21,9 @@ function replaceCharacterAt(text: string, index: number, replacement: string): s
   return `${text.slice(0, index)}${replacement}${text.slice(index + 1)}`;
 }
 
-function restoreJapaneseLexicalForms(source: string, normalized: string): string {
+function applyContextualJapaneseRepairs(source: string, normalized: string): string {
   let result = normalized;
-  const restoreMatches = (
+  const repairMatches = (
     pattern: RegExp,
     sourceCharacterOffset: number,
     replacement: string,
@@ -33,21 +34,12 @@ function restoreJapaneseLexicalForms(source: string, normalized: string): string
     }
   };
 
-  // Chinese character conversion cannot distinguish 後 (after/behind) from
-  // 后 (empress). Restore only source contexts whose Japanese spelling is
-  // unambiguous; 後宮 deliberately remains 後宮.
-  restoreMatches(/后妃/gu, 0, "后");
-  restoreMatches(/(?:皇|太)后/gu, 1, "后");
-
-  // 葉 and 叶 collapse to 叶 in Simplified Chinese. These inflections belong
-  // to 叶う/叶える, while ordinary 葉 words such as 葉っぱ stay untouched.
-  restoreMatches(/叶(?=[わいうえお])/gu, 0, "叶");
-  restoreMatches(/叶っ(?=[たて])/gu, 0, "叶");
-
-  // OpenCC's Simplified-to-Traditional character pass expands Japanese 占 to
-  // the Traditional Chinese variant 佔, which its Shinjitai table does not
-  // map back. Japanese uses 占, so preserve that source character.
-  restoreMatches(/占/gu, 0, "占");
+  // These source forms are valid Japanese characters in other contexts, so
+  // the generated character map deliberately abstains. Repair only lexical
+  // contexts whose Japanese spelling is unambiguous.
+  repairMatches(/后宫/gu, 0, "後");
+  repairMatches(/叶っぱ/gu, 0, "葉");
+  repairMatches(/无常/gu, 0, "無");
   return result;
 }
 
@@ -84,13 +76,11 @@ export function isChineseLyricsProvider(lyrics: { fetchProvider?: unknown; sourc
  */
 export function normalizeChineseProviderJapaneseText(text: string): string {
   if (!text) return text;
-  toJapanese ??= ConverterFactory(
-    [SimplifiedToTraditionalCharacters],
-    [JapaneseShinjitaiCharacters]
+  const normalized = text.replace(
+    CHINESE_PROVIDER_JAPANESE_CHARACTER_PATTERN,
+    (character) => CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP.get(character) ?? character,
   );
-  const normalized = toJapanese(text);
-  if (normalized.length !== text.length) return text;
-  return restoreJapaneseLexicalForms(text, normalized);
+  return applyContextualJapaneseRepairs(text, normalized);
 }
 
 export function detectChineseCharacterForm(text: string): DetectedChineseCharacterForm {
