@@ -47,6 +47,7 @@ import {
   $lyricsContainerExists,
   $minimalLyricsMode,
   $simpleLyricsMode,
+  $simpleLyricsModeRenderingType,
   $skipSpicyFont,
   $systemFontStack,
   $ttmlMakerMode,
@@ -652,24 +653,9 @@ function AppendViewControls(ReAppend: boolean = false) {
             content: isRomanized ? `Disable Romanization` : `Enable Romanization`,
           });
         }
-        romanizationToggle.addEventListener("click", async () => {
-          const songUri = SpotifyPlayer.GetUri();
-          if (!songUri) return;
-          PageContainer?.querySelector(
-            ".LyricsContainer .LyricsContent"
-          )?.classList.add("HiddenTransitioned");
-          const lyrics = await fetchLyrics(songUri);
-
+        romanizationToggle.addEventListener("click", () => {
           setRomanizedStatus(!isRomanized);
-
-          ApplyLyrics(lyrics);
-
-          setTimeout(() => {
-            AppendViewControls();
-            PageContainer?.querySelector(
-              ".LyricsContainer .LyricsContent"
-            )?.classList.remove("HiddenTransitioned");
-          }, 45);
+          queueDisplaySettingsRefresh();
         });
       } catch (err) {
         controlsLogger.warn("Failed to setup Romanization tooltip", err);
@@ -854,22 +840,88 @@ function AppendViewControls(ReAppend: boolean = false) {
   }
 }
 
+let displaySettingsRevision = 0;
+let appliedDisplaySettingsRevision = 0;
+let displaySettingsRefreshRunning = false;
+
+async function rerenderCurrentLyrics(targetRevision: number): Promise<void> {
+  if (!PageContainer || !PageView.IsOpened) return;
+  const uri = SpotifyPlayer.GetUri();
+  if (!uri) return;
+
+  let lyrics: [object | string, number] | null = null;
+  const raw = $currentLyricsData.get();
+  if (raw && !raw.startsWith("NO_LYRICS:")) {
+    try {
+      const cachedLyrics = JSON.parse(raw);
+      if (cachedLyrics?.uri === uri) {
+        lyrics = [cachedLyrics, 200];
+      }
+    } catch (error) {
+      pageLogger.warn("Failed to rerender cached lyrics", error);
+    }
+  }
+
+  if (!lyrics) {
+    lyrics = await fetchLyrics(uri);
+  }
+
+  if (
+    targetRevision !== displaySettingsRevision
+    || SpotifyPlayer.GetUri() !== uri
+    || !PageContainer
+    || !PageView.IsOpened
+  ) {
+    return;
+  }
+
+  await ApplyLyrics(lyrics);
+  AppendViewControls(true);
+  setTimeout(() => {
+    if (targetRevision !== displaySettingsRevision || SpotifyPlayer.GetUri() !== uri) return;
+    triggerRemeasureLV();
+  }, 60);
+}
+
+async function runQueuedDisplaySettingsRefresh(): Promise<void> {
+  if (displaySettingsRefreshRunning) return;
+  displaySettingsRefreshRunning = true;
+  try {
+    while (appliedDisplaySettingsRevision < displaySettingsRevision) {
+      const targetRevision = displaySettingsRevision;
+      await rerenderCurrentLyrics(targetRevision);
+      appliedDisplaySettingsRevision = targetRevision;
+    }
+  } finally {
+    displaySettingsRefreshRunning = false;
+    if (appliedDisplaySettingsRevision < displaySettingsRevision) {
+      void runQueuedDisplaySettingsRefresh();
+    }
+  }
+}
+
+function queueDisplaySettingsRefresh(): void {
+  displaySettingsRevision++;
+  void runQueuedDisplaySettingsRefresh();
+}
+
 // --- Reactive setting subscriptions ---
 
 $simpleLyricsMode.listen((v) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("SimpleLyricsMode", v);
-  const uri = SpotifyPlayer.GetUri();
-  $currentLyricsData.set("");
-  if (uri) fetchLyrics(uri).then(ApplyLyrics);
+  queueDisplaySettingsRefresh();
+});
+
+$simpleLyricsModeRenderingType.listen(() => {
+  if (!PageContainer || !$simpleLyricsMode.get()) return;
+  queueDisplaySettingsRefresh();
 });
 
 $minimalLyricsMode.listen((v) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("MinimalLyricsMode", v);
-  const uri = SpotifyPlayer.GetUri();
-  $currentLyricsData.set("");
-  if (uri) fetchLyrics(uri).then(ApplyLyrics);
+  queueDisplaySettingsRefresh();
 });
 
 $skipSpicyFont.listen((v) => {
@@ -884,7 +936,7 @@ $fixHanGlyphVariants.listen((value) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("FixHanGlyphVariants", value);
   applySystemFontStack();
-  rerenderCurrentLyrics();
+  queueDisplaySettingsRefresh();
 });
 
 $viewControlsPosition.listen((v) => {
@@ -909,25 +961,6 @@ $showBuiltInTranslationButton.listen(() => {
   AppendViewControls(true);
 });
 
-const rerenderCurrentLyrics = async () => {
-  if (!PageContainer) return;
-  const raw = $currentLyricsData.get();
-  if (raw && !raw.startsWith("NO_LYRICS:")) {
-    try {
-      await ApplyLyrics([JSON.parse(raw), 200]);
-      setTimeout(() => triggerRemeasureLV(), 60);
-      return;
-    } catch (error) {
-      pageLogger.warn("Failed to rerender cached lyrics", error);
-    }
-  }
-
-  const uri = SpotifyPlayer.GetUri();
-  if (uri) fetchLyrics(uri).then(async (lyrics) => {
-    await ApplyLyrics(lyrics);
-    setTimeout(() => triggerRemeasureLV(), 60);
-  });
-};
 const reprocessCurrentLyricsFromSource = async () => {
   if (!PageContainer || !PageView.IsOpened) return;
   const uri = SpotifyPlayer.GetUri();
@@ -990,7 +1023,7 @@ $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
 $translationEnabled.listen(queueProcessingSettingsRefresh);
 $providerTranslationsEnabled.listen(() => {
-  rerenderCurrentLyrics();
+  queueDisplaySettingsRefresh();
 });
 $translationTargetLang.listen(() => {
   if ($translationEnabled.get()) queueProcessingSettingsRefresh();
@@ -998,7 +1031,7 @@ $translationTargetLang.listen(() => {
 
 
 $japaneseReadingMode.listen(() => {
-  rerenderCurrentLyrics();
+  queueDisplaySettingsRefresh();
 });
 
 window.addEventListener("spicy-lyrics:processing-ready", ((event: CustomEvent) => {
