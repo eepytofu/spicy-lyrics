@@ -6,6 +6,9 @@ import type {
   JapaneseTokenEntry,
 } from "./JapaneseReadingModel.ts";
 
+const romanizeJapanesePunctuation = (text: string): string =>
+  text.replaceAll("、", ",");
+
 export function entryRomaji(
   entry: JapaneseTokenEntry,
   token: JapaneseAnalyzerToken,
@@ -16,7 +19,7 @@ export function entryRomaji(
     if (entry.surface === "へ") return "e";
     if (entry.surface === "を") return "wo";
   }
-  if (!entry.readingKana) return entry.surface;
+  if (!entry.readingKana) return romanizeJapanesePunctuation(entry.surface);
   const romaji = kanaToRomaji(entry.readingKana);
   return romaji || entry.surface;
 }

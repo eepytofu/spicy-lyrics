@@ -285,6 +285,25 @@ test("Japanese mixed title analysis follows authored cross-script and parentheti
   assert.equal(reading?.romaji, expected);
 });
 
+test("Japanese romaji uses a Latin comma without changing source punctuation", async () => {
+  const source = "きっと、きれい";
+  const reading = (await prepareJapaneseLineAnalysis(source, {
+    analyzer: tokenAnalyzer(source, [
+      { surface: "きっと", readingKana: "きっと" },
+      { surface: "、", readingKana: "" },
+      { surface: "きれい", readingKana: "きれい" },
+    ]),
+    kanaRomanizer: (kana) =>
+      ({
+        きっと: "kitto",
+        きれい: "kirei",
+      })[kana] || kana,
+  }))?.reading;
+
+  assert.equal(reading?.sourceText, source);
+  assert.equal(reading?.romaji, "kitto, kirei");
+});
+
 test("Japanese furigana ranges are exported as code-point coordinates", async () => {
   const line = { id: "astral-jp", displayText: "😀今日", paragraphProvenance: "lineBoundary" as const,
     spans: [{ id: "0", rawText: "😀", cleanText: "😀", startMs: 0, endMs: 100, providerPartOfWord: true },
