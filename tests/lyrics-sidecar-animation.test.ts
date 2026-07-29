@@ -43,7 +43,7 @@ test("lyric sidecars remain stable geometry rather than animated blocks", () => 
   assert.doesNotMatch(animatorSource, /TranslationElement/u);
 });
 
-test("derived lyric roles use explicit weight, brightness, and stable glow", () => {
+test("derived lyric roles keep explicit weight and readable resting paint", () => {
   assert.doesNotMatch(
     mainCss,
     /LyricsContent:not\(:has\(\.LyricsNotice\)\)\s*\*\s*\{/u,
@@ -57,7 +57,7 @@ test("derived lyric roles use explicit weight, brightness, and stable glow", () 
     furigana,
     /rgba\(255,\s*255,\s*255,\s*var\(--gradient-alpha,\s*0\.85\)\)/u,
   );
-  assert.match(furigana, /text-shadow:\s*var\(--DerivedTextGlowDef\)/u);
+  assert.match(furigana, /text-shadow:\s*none/u);
 
   for (const selector of [
     "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
@@ -65,13 +65,28 @@ test("derived lyric roles use explicit weight, brightness, and stable glow", () 
   ]) {
     const body = ruleBody(selector);
     assert.match(body, /font-weight:\s*700/u);
-    assert.match(body, /text-shadow:\s*var\(--DerivedTextGlowDef\)/u);
+    assert.match(body, /text-shadow:\s*none/u);
   }
 
   const translation = ruleBody(
     "#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below",
   );
   assert.match(translation, /font-style:\s*normal/u);
+});
+
+test("synced furigana and romaji glow only with their active lyric owner", () => {
+  assert.match(
+    mainCss,
+    /\.line\.Active[\s\S]*?:is\(\.furigana-reading,\s*\.romanized-below,\s*\.romanized-syllable\)\s*\{[\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)[\s\S]*?var\(--text-shadow-opacity,\s*0%\)/u,
+  );
+  assert.match(
+    animatorSource,
+    /function applyWordGlowState[\s\S]*?word\.HTMLElement[\s\S]*?word\.RomajiElement[\s\S]*?"--text-shadow-blur-radius"[\s\S]*?"--text-shadow-opacity"/u,
+  );
+  assert.match(
+    animatorSource,
+    /applyWordGlowState\(word,\s*currentGlow\)/u,
+  );
 });
 
 test("timed romaji and line sidecars follow paint-only extra gradient state", () => {

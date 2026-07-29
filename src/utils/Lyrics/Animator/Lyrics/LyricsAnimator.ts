@@ -278,6 +278,18 @@ function setStyleIfChanged(el: HTMLElement, prop: string, value: string, epsilon
   map.set(prop, value);
 }
 
+function applyWordGlowState(word: SyllableLead, glow: unknown): void {
+  const safeGlow = finiteAnimationValue(glow, 0);
+  const blurRadius = `${4 + 2 * safeGlow}px`;
+  const opacity = `${Math.min(safeGlow * 35, 100)}%`;
+
+  setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", blurRadius, 0.5);
+  setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", opacity, 1);
+  if (!word.RomajiElement) return;
+  setStyleIfChanged(word.RomajiElement, "--text-shadow-blur-radius", blurRadius, 0.5);
+  setStyleIfChanged(word.RomajiElement, "--text-shadow-opacity", opacity, 1);
+}
+
 function flushStyleBatch(): void {
   if (_styleQueue.size === 0) return;
   for (const [el, props] of _styleQueue) {
@@ -438,8 +450,7 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
       simpleMode ? -50 : -20,
     );
     word.RomajiElement?.style.setProperty("--extra-gradient-position", restingExtraGradient);
-    setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
-    setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
+    applyWordGlowState(word, 0);
     word.SLMAnimated = false;
     word.PreSLMAnimated = false;
 
@@ -521,8 +532,7 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
       "--extra-gradient-position",
       `${ExtraGradientSungPosition}%`,
     );
-    setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
-    setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
+    applyWordGlowState(word, 0);
     word.SLMAnimated = false;
     word.PreSLMAnimated = false;
 
@@ -828,6 +838,7 @@ export function Animate(position: number): void {
             const currentScale = word.AnimatorStore.Scale.Step(deltaTime);
             const currentYOffset = word.AnimatorStore.YOffset.Step(deltaTime);
             const currentGlow = word.AnimatorStore.Glow.Step(deltaTime);
+            applyWordGlowState(word, currentGlow);
 
             if (word.RomajiElement) {
               word.RomajiElement.style.setProperty(
@@ -941,19 +952,6 @@ export function Animate(position: number): void {
                   );
                 }
               }
-              // Reduce redundant writes using thresholds for smoother performance
-              setStyleIfChanged(
-                word.HTMLElement,
-                "--text-shadow-blur-radius",
-                `${4 + 2 * currentGlow * 1}px`,
-                0.5
-              );
-              setStyleIfChanged(
-                word.HTMLElement,
-                "--text-shadow-opacity",
-                `${Math.min(currentGlow * 35, 100)}%`,
-                1
-              );
             }
           } else if (isDot && !isLetterGroup) {
             if (!word.AnimatorStore) {
@@ -1338,6 +1336,7 @@ export function Animate(position: number): void {
               const currentScale = word.AnimatorStore.Scale.Step(deltaTime);
               const currentYOffset = word.AnimatorStore.YOffset.Step(deltaTime);
               const currentGlow = word.AnimatorStore.Glow.Step(deltaTime);
+              applyWordGlowState(word, currentGlow);
               setStyleIfChanged(
                 word.HTMLElement,
                 "transform",
@@ -1365,18 +1364,6 @@ export function Animate(position: number): void {
                     );
                   }
                 }
-                setStyleIfChanged(
-                  word.HTMLElement,
-                  "--text-shadow-blur-radius",
-                  `${4 + 2 * currentGlow * 1}px`,
-                  0.5
-                );
-                setStyleIfChanged(
-                  word.HTMLElement,
-                  "--text-shadow-opacity",
-                  `${Math.min(currentGlow * 35, 100)}%`,
-                  1
-                );
               }
             } else if (word.AnimatorStore && word.Dot && !word.LetterGroup) {
               word.AnimatorStore.Scale.SetGoal(DotScaleSpline.at(1));

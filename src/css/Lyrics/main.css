@@ -24,7 +24,6 @@
   --ActiveTextGlowDef: rgba(255, 255, 255, 0.4) 0px 0px 14px;
   --StrongTextGlowDef: rgba(255, 255, 255, 0.68) 0px 0px 16.4px;
   --StrongerTextGlowDef: rgba(255, 255, 255, 0.74) 0px 0px 16px;
-  --DerivedTextGlowDef: 0 0 0.22em rgba(255, 255, 255, 0.18);
   --DefaultLyricsSize: clamp(1.85rem, calc(1cqw * 7), 3.5rem);
   --japanese-ruby-ratio: 0.46em;
   --japanese-ruby-gap: 0.12em;
@@ -199,7 +198,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   background-image: none !important;
   -webkit-text-fill-color: var(--furigana-fill-bright);
   color: var(--furigana-fill-bright);
-  text-shadow: var(--DerivedTextGlowDef);
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
 }
 
@@ -353,11 +352,17 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   line-height: 1.2;
   color: rgba(255, 255, 255, 0.55);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.55);
-  /* Derived text keeps a stable role-specific glow instead of inheriting the
-     base lyric's karaoke Active -> Sung shadow transition. */
-  text-shadow: var(--DerivedTextGlowDef);
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
   background: none;
+}
+
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .line.Active
+  :is(.furigana-reading, .romanized-below, .romanized-syllable) {
+  text-shadow: 0 0 var(--text-shadow-blur-radius, 4px)
+    rgba(255, 255, 255, var(--text-shadow-opacity, 0%));
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below.romanization-placeholder {
@@ -414,7 +419,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   color: rgba(255, 255, 255, 0.45);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.45);
   font-style: normal;
-  text-shadow: var(--DerivedTextGlowDef);
+  text-shadow: none;
   filter: blur(var(--ExtraLineBlurAmount, 0px));
   background: none;
 }
