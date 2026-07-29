@@ -36,14 +36,21 @@ export type LyricsApplyContext = {
   lineElements: HTMLElement[];
 };
 
+export function resetLyricsApplyState(): void {
+  EmitNotApplyed();
+  DestroyAllLyricsContainers();
+  ClearLyricsContentArrays();
+  ClearScrollSimplebar();
+  ClearLyricsPageContainer();
+}
+
 export function beginLyricsApply(
   lyricsType: LyricsType,
   hasDuetLines: boolean,
   hasRtlLines: boolean,
   missingContainerMessage: string = "LyricsContainer not found",
 ): LyricsApplyContext | undefined {
-  EmitNotApplyed();
-  DestroyAllLyricsContainers();
+  resetLyricsApplyState();
 
   const lyricsContainerParent = PageContainer?.querySelector<HTMLElement>(
     ".LyricsContainer .LyricsContent",
@@ -58,10 +65,6 @@ export function beginLyricsApply(
   lyricsContainer.classList.toggle("HasDuetLines", hasDuetLines);
   lyricsContainer.classList.toggle("HasRtlLines", hasRtlLines);
   lyricsContainer.setAttribute("data-lyrics-type", lyricsType);
-
-  ClearLyricsContentArrays();
-  ClearScrollSimplebar();
-  ClearLyricsPageContainer();
 
   const virtualContainer = document.createElement("div");
   virtualContainer.classList.add("VirtualLyricsContainer");

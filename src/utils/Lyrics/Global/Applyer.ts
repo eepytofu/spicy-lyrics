@@ -1,21 +1,19 @@
 // deno-lint-ignore-file no-explicit-any
 
 import { $currentLyricsData, $currentLyricsType } from "../../stores.ts";
-import { ClearScrollSimplebar } from "../../Scrolling/Simplebar/ScrollSimplebar.ts";
 import { setBlurringLastLine } from "../Animator/Lyrics/LyricsAnimator.ts";
-import { DestroyAllLyricsContainers } from "../Applyer/CreateLyricsContainer.ts";
-import { EmitApply, EmitNotApplyed } from "../Applyer/OnApply.ts";
+import { EmitApply } from "../Applyer/OnApply.ts";
 import { ApplyStaticLyrics, type StaticLyricsData } from "../Applyer/Static.ts";
 import { ApplyLineLyrics } from "../Applyer/Synced/Line.ts";
 import { ApplySyllableLyrics } from "../Applyer/Synced/Syllable.ts";
-import { ClearLyricsPageContainer, ShowQueueLoader } from "../fetchLyrics.ts";
-import { ClearLyricsContentArrays, isRomanized } from "../lyrics.ts";
+import { ShowQueueLoader } from "../fetchLyrics.ts";
+import { isRomanized } from "../lyrics.ts";
 import { PageContainer } from "../../../components/Pages/PageView.ts";
-import { CleanUpIsByCommunity } from "../Applyer/Credits/ApplyIsByCommunity.tsx";
 import { IsCompactMode } from "../../../components/Utils/CompactMode.ts";
 import Fullscreen from "../../../components/Utils/Fullscreen.ts";
 import { SpotifyPlayer } from "../../../components/Global/SpotifyPlayer.ts";
 import { $providerTranslationsEnabled } from "../../uiState.ts";
+import { resetLyricsApplyState } from "../Applyer/ApplyLifecycle.ts";
 
 /**
  * Union type for all lyrics data types
@@ -46,16 +44,6 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
 
   cleanupApplyLyricsAbortController()
 
-  EmitNotApplyed();
-
-  DestroyAllLyricsContainers();
-
-  ClearLyricsContentArrays();
-  ClearScrollSimplebar();
-  ClearLyricsPageContainer();
-
-  CleanUpIsByCommunity();
-
   const [descriptor, _status] = lyricsContent;
 
   let noticeContent: string | null = null;
@@ -65,6 +53,7 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
       // HTTP 503: the lyrics server has queued our request. Keep the loader and
       // queue message visible (LyricsQueueRetry drives the backoff retry loop)
       // and render nothing else — the loop re-applies once it resolves.
+      resetLyricsApplyState();
       ShowQueueLoader();
       return;
     }
@@ -113,6 +102,7 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
   }
 
   if (noticeContent) {
+    resetLyricsApplyState();
     $currentLyricsType.set("None");
 
     if (descriptor === "lyrics-not-found") {
@@ -170,5 +160,7 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
   } else if (lyrics.Type === "Static") {
     // Type assertion to StaticLyricsData since we've verified the Type is "Static"
     ApplyStaticLyrics(lyrics as StaticLyricsData, romanize, showProviderTranslations);
+  } else {
+    resetLyricsApplyState();
   }
 }

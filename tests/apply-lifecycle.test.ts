@@ -24,18 +24,36 @@ test("all lyric applyers share one container, credits, scrolling, styling, and e
 
 test("the shared lifecycle keeps the apply order and virtualizer inputs explicit", () => {
   const source = readSource("../src/utils/Lyrics/Applyer/ApplyLifecycle.ts");
-  const orderedCalls = [
+  const resetCalls = [
     "EmitNotApplyed()",
     "DestroyAllLyricsContainers()",
-    "CreateLyricsContainer()",
     "ClearLyricsContentArrays()",
     "ClearScrollSimplebar()",
     "ClearLyricsPageContainer()",
   ];
-  const offsets = orderedCalls.map((call) => source.indexOf(call));
+  const offsets = resetCalls.map((call) => source.indexOf(call));
   assert.equal(offsets.every((offset) => offset >= 0), true);
   assert.deepEqual(offsets, [...offsets].sort((left, right) => left - right));
+  assert.ok(source.indexOf("resetLyricsApplyState()") < source.indexOf("CreateLyricsContainer()"));
   assert.match(source, /initLyricsVirtualizer\(scrollElement, virtualContainer, lineElements\)/u);
   assert.match(source, /EmitApply\(data\.Type, content\)/u);
   assert.match(source, /setRomanizedStatus\(useRomanized\)/u);
+});
+
+test("the global dispatcher delegates valid lyric teardown to the shared lifecycle", () => {
+  const source = readSource("../src/utils/Lyrics/Global/Applyer.ts");
+  assert.doesNotMatch(source, /EmitNotApplyed/u);
+  assert.doesNotMatch(source, /DestroyAllLyricsContainers/u);
+  assert.doesNotMatch(source, /ClearLyricsContentArrays/u);
+  assert.doesNotMatch(source, /ClearScrollSimplebar/u);
+  assert.doesNotMatch(source, /ClearLyricsPageContainer/u);
+  assert.match(source, /resetLyricsApplyState\(\);\s*ShowQueueLoader\(\)/u);
+  assert.match(source, /if \(noticeContent\) \{\s*resetLyricsApplyState\(\)/u);
+});
+
+test("background processing has one renderer listener", () => {
+  const appSource = readSource("../src/app.tsx");
+  const pageSource = readSource("../src/components/Pages/PageView.ts");
+  assert.doesNotMatch(appSource, /addEventListener\("spicy-lyrics:processing-ready"/u);
+  assert.match(pageSource, /addEventListener\("spicy-lyrics:processing-ready"/u);
 });
