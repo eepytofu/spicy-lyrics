@@ -40,7 +40,7 @@ import {
   TRANSLATION_SIDECAR_SCHEMA_VERSION,
   translateLyrics,
 } from "./Fork/Translation.ts";
-import { $chineseCharacterForm, $japaneseReadingMode } from "../uiState.ts";
+import { $chineseCharacterForm } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { fetchLyricsFromProviders } from "./ExternalSources.ts";
 import {
@@ -115,7 +115,6 @@ function currentProcessingContextKey(): string {
     koreanDisplayMode,
     cyrillicRomanizationMode,
     cyrillicKeepSigns,
-    japaneseReadingMode: $japaneseReadingMode.get(),
   });
 }
 

@@ -15,7 +15,6 @@ const baseContext: ProcessingContext = {
   koreanDisplayMode: "rrStandard",
   cyrillicRomanizationMode: "Russian",
   cyrillicKeepSigns: false,
-  japaneseReadingMode: "romaji",
 };
 
 test("processing context key is stable for same inputs", () => {
@@ -44,7 +43,6 @@ test("processing context key changes when processing modes change", () => {
     { ...baseContext, koreanDisplayMode: "vnPronunciation" },
     { ...baseContext, cyrillicRomanizationMode: "Ukrainian" },
     { ...baseContext, cyrillicKeepSigns: true },
-    { ...baseContext, japaneseReadingMode: "furigana" },
   ];
 
   const baseKey = buildProcessingContextKey(baseContext);
@@ -72,6 +70,13 @@ test("provider translation visibility is render-only", () => {
   assert.equal(
     buildProcessingContextKey({ ...baseContext, providerTranslationsEnabled: true } as ProcessingContext),
     buildProcessingContextKey({ ...baseContext, providerTranslationsEnabled: false } as ProcessingContext)
+  );
+});
+
+test("Japanese reading visibility is render-only", () => {
+  assert.equal(
+    buildProcessingContextKey({ ...baseContext, japaneseReadingMode: "romaji" } as ProcessingContext),
+    buildProcessingContextKey({ ...baseContext, japaneseReadingMode: "furigana" } as ProcessingContext)
   );
 });
 
