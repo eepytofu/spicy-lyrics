@@ -260,13 +260,14 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   max-width: none;
 }
 
-/* Synced ruby uses two overlapping text layers. The real in-flow layer stays
-   dim; generated content reveals the bright layer through a text mask driven
-   by the same gradient position as the annotated lyric. Unlike the historical
-   background-clip attempt, neither layer paints a descendant background, so
-   base lyric and split-ruby geometry remain intact. Static lyrics stay flat. */
+/* Syllable-synced ruby uses two overlapping text layers. The real in-flow
+   layer stays dim; generated content reveals the bright layer through a text
+   mask driven by the same gradient position as the annotated lyric. Line-
+   synced ruby deliberately does not use this spatial sweep: its timing has no
+   word boundary, so it follows the line's uniform breathing state below.
+   Static lyrics stay flat. */
 #SpicyLyricsPage
-  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
   .furigana-reading {
   --furigana-local-gradient-position: var(
     --timed-furigana-gradient-position,
@@ -283,7 +284,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage
-  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
   .furigana-reading::after {
   content: attr(data-furigana);
   color: var(--furigana-fill-bright);
@@ -310,6 +311,40 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
       ),
     transparent 100%
   );
+  /* A shadow on the masked duplicate is clipped at the mask boundary and
+     becomes a visible rectangle in Chromium. The real text layer inherits the
+     lyric owner's glyph-shaped glow instead. */
+  text-shadow: none;
+}
+
+/* Line timing describes one breathing phrase, not per-word karaoke. Blend the
+   single real ruby layer uniformly from resting to active paint using the same
+   line-glow spring. This also gives seek frames one paint owner instead of a
+   stale generated white layer racing the base lyric. */
+#SpicyLyricsPage:not(.SimpleLyricsMode)
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .furigana-reading {
+  color: color-mix(
+    in srgb,
+    var(--furigana-fill-bright)
+      calc(var(--line-furigana-brightness, 0) * 100%),
+    var(--furigana-fill-dim)
+  );
+  -webkit-text-fill-color: color-mix(
+    in srgb,
+    var(--furigana-fill-bright)
+      calc(var(--line-furigana-brightness, 0) * 100%),
+    var(--furigana-fill-dim)
+  );
+}
+
+/* Simple line mode already renders the complete main line rather than running
+   its glow spring, so its ruby uses the same completed fill. */
+#SpicyLyricsPage.SimpleLyricsMode
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .furigana-reading {
+  color: var(--furigana-fill-bright);
+  -webkit-text-fill-color: var(--furigana-fill-bright);
 }
 
 /* A source-authored reading such as 天(そら) is pronunciation evidence, not

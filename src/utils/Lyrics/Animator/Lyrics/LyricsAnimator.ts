@@ -20,6 +20,7 @@ import {
 } from "../ExtraGradient.ts";
 import {
   applyLineState,
+  animationTimelineJumped,
   finiteAnimationValue,
   gradientTargetsAt,
   getElementState,
@@ -599,6 +600,7 @@ const createLineSprings = () => {
 
 export let Blurring_LastLine: number | null = null;
 let lastFrameTime = performance.now();
+let lastAnimationPosition: number | null = null;
 const syllableLinePaintStates = new WeakMap<HTMLElement, "NotSung" | "Active" | "Sung">();
 
 // When the virtualizer mounts a previously off-screen element, reset
@@ -676,8 +678,15 @@ export function Animate(position: number): void {
 
   const now = performance.now();
 
-  const deltaTime = (now - lastFrameTime) / 1000;
+  const elapsedMs = now - lastFrameTime;
+  const timelineJumped = animationTimelineJumped(
+    lastAnimationPosition,
+    position,
+    elapsedMs,
+  );
+  const deltaTime = elapsedMs / 1000;
   lastFrameTime = now;
+  lastAnimationPosition = position;
 
   const CurrentLyricsType = $currentLyricsType.get();
 
@@ -831,9 +840,9 @@ export function Animate(position: number): void {
               );
             }
 
-            word.AnimatorStore.Scale.SetGoal(targetScale);
-            word.AnimatorStore.YOffset.SetGoal(targetYOffset);
-            word.AnimatorStore.Glow.SetGoal(targetGlow);
+            word.AnimatorStore.Scale.SetGoal(targetScale, timelineJumped);
+            word.AnimatorStore.YOffset.SetGoal(targetYOffset, timelineJumped);
+            word.AnimatorStore.Glow.SetGoal(targetGlow, timelineJumped);
 
             const currentScale = word.AnimatorStore.Scale.Step(deltaTime);
             const currentYOffset = word.AnimatorStore.YOffset.Step(deltaTime);
@@ -1151,9 +1160,9 @@ export function Animate(position: number): void {
                 }
 
                 // Set spring goals (smooth animation)
-                letter.AnimatorStore.Scale.SetGoal(targetScale);
-                letter.AnimatorStore.YOffset.SetGoal(targetYOffset);
-                letter.AnimatorStore.Glow.SetGoal(targetGlow);
+                letter.AnimatorStore.Scale.SetGoal(targetScale, timelineJumped);
+                letter.AnimatorStore.YOffset.SetGoal(targetYOffset, timelineJumped);
+                letter.AnimatorStore.Glow.SetGoal(targetGlow, timelineJumped);
 
                 // Step springs
                 const currentScale = letter.AnimatorStore.Scale.Step(deltaTime);
@@ -1544,11 +1553,17 @@ export function Animate(position: number): void {
           const targetGradientPos = percentage * 100;
           const targetExtraGradientPos = extraGradientPositionAt(percentage);
 
-          line.AnimatorStore.Glow.SetGoal(targetGlow);
+          line.AnimatorStore.Glow.SetGoal(targetGlow, timelineJumped);
           const currentGlow = line.AnimatorStore.Glow.Step(deltaTime);
 
           // Apply styles using spring value for glow, keep direct calculation for gradient
           if (!$simpleLyricsMode.get()) {
+            setStyleIfChanged(
+              line.HTMLElement,
+              "--line-furigana-brightness",
+              `${Math.max(0, Math.min(finiteAnimationValue(currentGlow, 0), 1))}`,
+              0.005,
+            );
             line.HTMLElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
             line.HTMLElement.style.setProperty(
               "--extra-gradient-position",
@@ -1564,11 +1579,19 @@ export function Animate(position: number): void {
           }
         }
       } else if (lineState === "NotSung") {
+        line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(0), true);
+        setStyleIfChanged(line.HTMLElement, "--line-furigana-brightness", "0", 0);
+        setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+        setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
         line.HTMLElement.style.setProperty(
           "--extra-gradient-position",
           `${ExtraGradientUnsungPosition}%`
         );
       } else if (lineState === "Sung") {
+        line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(1), true);
+        setStyleIfChanged(line.HTMLElement, "--line-furigana-brightness", "0", 0);
+        setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+        setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
         line.HTMLElement.style.setProperty(
           "--extra-gradient-position",
           `${ExtraGradientSungPosition}%`

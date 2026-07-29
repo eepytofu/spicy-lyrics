@@ -57,6 +57,31 @@ export function finiteAnimationValue(value: unknown, fallback: number): number {
   return Number.isFinite(fallback) ? fallback : 0;
 }
 
+/**
+ * Compare lyric-clock movement with wall-clock movement. Ordinary playback
+ * advances both together, while seeking jumps the lyric clock independently.
+ * The animator uses this signal to snap stale springs before the seek frame is
+ * painted.
+ */
+export function animationTimelineJumped(
+  previousPosition: number | null,
+  currentPosition: number,
+  elapsedMs: number,
+  thresholdMs = 250,
+): boolean {
+  if (
+    previousPosition === null ||
+    !Number.isFinite(previousPosition) ||
+    !Number.isFinite(currentPosition)
+  ) {
+    return false;
+  }
+  const safeElapsed = Math.max(finiteAnimationValue(elapsedMs, 0), 0);
+  const actualAdvance = currentPosition - previousPosition;
+  if (Math.abs(actualAdvance) <= Math.max(thresholdMs, 0)) return false;
+  return Math.abs(actualAdvance - safeElapsed) > Math.max(thresholdMs, 0);
+}
+
 export function wordGradientTargets(
   state: LyricAnimationState,
   progress: number,

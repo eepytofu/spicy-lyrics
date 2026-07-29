@@ -108,10 +108,10 @@ test("the extra sweep is wider without changing the base lyric range", () => {
   assert.equal(extraGradientPositionAt(2), 100);
 });
 
-test("synced furigana follows its owning lyric through a non-background text mask", () => {
+test("syllable furigana follows its timing owner without a masked rectangular glow", () => {
   assert.match(
     mainCss,
-    /--furigana-local-gradient-position:\s*var\(\s*--timed-furigana-gradient-position/u,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.furigana-reading\s*\{[\s\S]*?--furigana-local-gradient-position:\s*var\(\s*--timed-furigana-gradient-position/u,
   );
   assert.match(
     mainCss,
@@ -120,6 +120,10 @@ test("synced furigana follows its owning lyric through a non-background text mas
   assert.match(
     mainCss,
     /content:\s*attr\(data-furigana\)/u,
+  );
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Syllable"\]\s+\.furigana-reading::after\s*\{[\s\S]*?text-shadow:\s*none/u,
   );
   assert.match(
     animatorSource,
@@ -138,5 +142,24 @@ test("synced furigana follows its owning lyric through a non-background text mas
       "#SpicyLyricsPage .LyricsContainer .LyricsContent .timed-furigana-reading",
     ),
     /display:\s*inline-grid/u,
+  );
+});
+
+test("line furigana follows one uniform breathing owner instead of a karaoke mask", () => {
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?--line-furigana-brightness/u,
+  );
+  assert.doesNotMatch(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading::after/u,
+  );
+  assert.match(
+    animatorSource,
+    /"--line-furigana-brightness"[\s\S]*?finiteAnimationValue\(currentGlow,\s*0\)/u,
+  );
+  assert.match(
+    animatorSource,
+    /animationTimelineJumped\([\s\S]*?SetGoal\(targetGlow,\s*timelineJumped\)/u,
   );
 });

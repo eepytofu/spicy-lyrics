@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   applyLineState,
+  animationTimelineJumped,
   finiteAnimationValue,
   gradientTargetsAt,
   getElementState,
@@ -52,6 +53,16 @@ test("forward, pause, backward, and rapid seeks resolve deterministically", () =
     positions.map((position) => getElementState(position, 100, 200)),
     ["NotSung", "Active", "Active", "Active", "Sung", "Active", "NotSung", "Active"]
   );
+});
+
+test("timeline discontinuities distinguish seeks from ordinary playback and stalls", () => {
+  assert.equal(animationTimelineJumped(null, 1000, 16), false);
+  assert.equal(animationTimelineJumped(1000, 1016, 16), false);
+  assert.equal(animationTimelineJumped(1000, 1000, 16), false);
+  assert.equal(animationTimelineJumped(1000, 1000, 1000), false);
+  assert.equal(animationTimelineJumped(1000, 2000, 1000), false);
+  assert.equal(animationTimelineJumped(1000, 5000, 16), true);
+  assert.equal(animationTimelineJumped(5000, 1000, 16), true);
 });
 
 test("syllable paint state settles lines skipped by a seek", () => {
