@@ -110,7 +110,7 @@ export function normalizeJapaneseKana(text: string): string {
 
 function kanaReading(surface: string, candidate: string): string {
   const reading =
-    candidate && candidate !== "*" ? candidate : /^[ぁ-んァ-ンー]+$/u.test(surface) ? surface : "";
+    candidate && candidate !== "*" ? candidate : /^[ぁ-んァ-ンー・]+$/u.test(surface) ? surface : "";
   return normalizeJapaneseKana(reading);
 }
 

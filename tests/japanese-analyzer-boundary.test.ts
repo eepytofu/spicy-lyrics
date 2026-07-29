@@ -116,6 +116,35 @@ test("Kuromoji adapter normalizes numeric, counter, and name morphology", () => 
   assert.equal(tokens[2].provenance.rawPartOfSpeechDetail2, "人名");
 });
 
+test("Kuromoji adapter recovers punctuated unknown Katakana for local romaji", async () => {
+  const surface = "アレグロ・アジテート";
+  const [adapterToken] = normalizeKuromojiTokens(surface, [{
+    surface_form: surface,
+    pos: "名詞",
+    pos_detail_1: "固有名詞",
+    pos_detail_2: "組織",
+    basic_form: "*",
+    verbose: { word_id: 250, word_type: "UNKNOWN", word_position: 1 },
+  }]);
+  assert.equal(adapterToken.readingKana, "あれぐろ・あじてえと");
+
+  const analyzer: JapaneseAnalyzer = {
+    id: kuromojiJapaneseAnalyzer.id,
+    async analyze(text) {
+      assert.equal(text, surface);
+      return [adapterToken];
+    },
+  };
+  const prepared = await prepareJapaneseLineAnalysis(surface, undefined, undefined, {
+    analyzer,
+    kanaRomanizer(kana) {
+      assert.equal(kana, "あれぐろ・あじてえと");
+      return "areguro･ajiteeto";
+    },
+  });
+  assert.equal(prepared?.reading.romaji, "areguro･ajiteeto");
+});
+
 test("an injected analyzer and kana romanizer own the complete reading pass", async () => {
   let analyzerCalls = 0;
   let romanizerCalls = 0;

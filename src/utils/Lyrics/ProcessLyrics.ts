@@ -69,8 +69,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v49: freeze exact provider source evidence before display/reading projection.
-export const LYRICS_PROCESSING_VERSION = 49;
+// v50: romanize unknown Katakana tokens containing a Japanese middle dot.
+export const LYRICS_PROCESSING_VERSION = 50;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 

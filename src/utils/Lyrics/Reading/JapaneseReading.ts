@@ -131,7 +131,7 @@ export const KanjiTextTest = /[一-鿿々]/;
 const KanjiLikeCharTest = /[一-鿿々]/;
 const KanjiLikeSequenceTest = /^[一-鿿々]+$/;
 const KanaCharTest = /[ぁ-んァ-ンー]/;
-const KanaOnlySequenceTest = /^[ぁ-んァ-ンー]+$/u;
+const KanaOnlySequenceTest = /^[ぁ-んァ-ンー・]+$/u;
 const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
 type TokenFuriganaReading = {

@@ -64,6 +64,10 @@ test("okurigana anchoring keeps maximal kanji reading prefix", () => {
 test("unknown Katakana tokens fall back to their written kana", () => {
   assert.equal(resolveJapaneseTokenKanaReading("タマモクロス", ""), "たまもくろす");
   assert.equal(
+    resolveJapaneseTokenKanaReading("アレグロ・アジテート", ""),
+    "あれぐろ・あじてえと",
+  );
+  assert.equal(
     resolveJapaneseTokenKanaReading("ウインタードリームトロフィー", "*"),
     "ういんたあどりいむとろふぃい",
   );
