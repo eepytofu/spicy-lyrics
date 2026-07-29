@@ -4,10 +4,10 @@ import { IdleEmphasisLyricsScale } from "../../Animator/Shared.ts";
 import { ConvertTime } from "../../ConvertTime.ts";
 import { CurrentLineLyricsObject, LyricsObject } from "../../lyrics.ts";
 
-const Substractions = {
-  StartTime: $simpleLyricsMode.get() ? -21 : 0,
-  EndTime: $simpleLyricsMode.get() ? -40 : 250,
-};
+const emphasisTimingOffsets = () => ({
+  startTime: $simpleLyricsMode.get() ? -21 : 0,
+  endTime: $simpleLyricsMode.get() ? -40 : 250,
+});
 
 interface LetterData {
   HTMLElement: HTMLElement;
@@ -24,8 +24,9 @@ export default function Emphasize(
   lead: any,
   isBgWord: boolean = false
 ) {
-  const StartTime = ConvertTime(lead.StartTime) - Substractions.StartTime;
-  const EndTime = ConvertTime(lead.EndTime) - Substractions.EndTime;
+  const timingOffsets = emphasisTimingOffsets();
+  const StartTime = ConvertTime(lead.StartTime) - timingOffsets.startTime;
+  const EndTime = ConvertTime(lead.EndTime) - timingOffsets.endTime;
   const totalDuration = EndTime - StartTime;
   const letterDuration = totalDuration / letters.length; // Duration per letter
   const word = applyTo;
