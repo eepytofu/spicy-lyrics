@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { allowsChineseProviderJapaneseRepair } from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderRepairPolicy.ts";
+import { allowsChineseProviderJapaneseRepair } from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderJapaneseRepair.ts";
 
 test("label-shaped provider rows preserve exact glyphs without a job-title list", () => {
   for (const text of [

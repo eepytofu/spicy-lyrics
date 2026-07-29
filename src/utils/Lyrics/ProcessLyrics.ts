@@ -2,7 +2,7 @@ import { franc } from "franc-all";
 import langs from "langs";
 import { RetrievePackage } from "../ImportPackage.ts";
 import Logger from "../Logger.ts";
-import { convertChineseLyricsText, isChineseLyricsProvider } from "./ChineseCharacterConversion.ts";
+import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
 import {
   chineseTones,
@@ -57,7 +57,11 @@ import {
   buildCjkReadingContextText,
   romanizeChineseDominantCjkText,
 } from "./Processing/CjkLanguageRouting.ts";
-import { allowsChineseProviderJapaneseRepair } from "./Processing/Japanese/ChineseProviderRepairPolicy.ts";
+import {
+  allowsChineseProviderJapaneseRepair,
+  ChineseProviderJapaneseTextProjection,
+  isChineseProviderJapaneseRepairSource,
+} from "./Processing/Japanese/ChineseProviderJapaneseRepair.ts";
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
 import {
   preserveProviderReading,
@@ -334,7 +338,7 @@ const postProcessSyllableRomanization = async (
   docContext: ScriptBranchDocContext,
   packages: RomanizationPackages,
   language: string,
-  normalizeChineseProviderKanji: boolean
+  allowChineseProviderJapaneseRepair: boolean
 ) => {
   if (lyrics.Type !== "Syllable") return;
 
@@ -364,7 +368,7 @@ const postProcessSyllableRomanization = async (
         isJapaneseLine && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
       const effectiveLineText = japaneseMap?.lineText ?? lineText;
       const repairJapaneseDisplay =
-        normalizeChineseProviderKanji &&
+        allowChineseProviderJapaneseRepair &&
         allowsChineseProviderJapaneseRepair(effectiveLineText);
       if (groupHasKorean) {
         const parsed: ParsedLine = {
@@ -403,7 +407,11 @@ const postProcessSyllableRomanization = async (
             syllables,
             japaneseMap.spans,
             syllables,
-            { normalizeChineseProviderKanji: repairJapaneseDisplay }
+            {
+              textProjection: repairJapaneseDisplay
+                ? ChineseProviderJapaneseTextProjection
+                : undefined,
+            }
           );
           for (const syllable of syllables) {
             delete syllable.RomanizedText;
@@ -487,7 +495,7 @@ const romanizeEntry = async (
   packages: RomanizationPackages,
   primaryLanguage: string,
   annotateJapanese: boolean = true,
-  normalizeChineseProviderKanji: boolean = false
+  allowChineseProviderJapaneseRepair: boolean = false
 ): Promise<boolean> => {
   const { target, line } = entry;
 
@@ -509,7 +517,7 @@ const romanizeEntry = async (
   );
   const providerReading = preserveProviderReading(target);
   const repairJapaneseDisplay =
-    normalizeChineseProviderKanji &&
+    allowChineseProviderJapaneseRepair &&
     allowsChineseProviderJapaneseRepair(entry.lineText || target.Text || "");
 
   if (providerReading && !useConfiguredLocalReading) {
@@ -527,7 +535,9 @@ const romanizeEntry = async (
     ItemJapaneseTest.test(target.Text || "")
   ) {
     const packageRomaji = await processJapanesePackageTextTarget(target, {
-      normalizeChineseProviderKanji: repairJapaneseDisplay,
+      textProjection: repairJapaneseDisplay
+        ? ChineseProviderJapaneseTextProjection
+        : undefined,
     });
     if (
       packageRomaji &&
@@ -651,7 +661,8 @@ export const ProcessLyrics = async (
     iso2Language: languageISO2,
     cjkDominantBranch,
   };
-  const normalizeChineseProviderKanji = isChineseLyricsProvider(lyrics);
+  const allowChineseProviderJapaneseRepair =
+    isChineseProviderJapaneseRepairSource(lyrics);
   const chineseCharacterForm = $chineseCharacterForm.get();
   lyrics.ChineseCharacterForm = chineseCharacterForm;
   if (
@@ -703,7 +714,7 @@ export const ProcessLyrics = async (
           packages,
           language,
           lyrics.Type !== "Syllable",
-          normalizeChineseProviderKanji
+          allowChineseProviderJapaneseRepair
         )
       )
     );
@@ -717,7 +728,7 @@ export const ProcessLyrics = async (
       docContext,
       packages,
       language,
-      normalizeChineseProviderKanji
+      allowChineseProviderJapaneseRepair
     );
     if (lyrics.Type !== "Syllable") {
       entries.forEach((entry, index) => {

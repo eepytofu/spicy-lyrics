@@ -9,13 +9,15 @@ import {
   convertChineseText,
   convertChineseTimedTextUnits,
   detectChineseCharacterForm,
-  isChineseLyricsProvider,
-  normalizeChineseProviderJapaneseText,
 } from "../src/utils/Lyrics/ChineseCharacterConversion.ts";
 import {
   CHINESE_PROVIDER_CHARACTER_MAP_METADATA,
   CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP,
 } from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderCharacterMap.generated.ts";
+import {
+  isChineseProviderJapaneseRepairSource,
+  repairChineseProviderJapaneseText,
+} from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderJapaneseRepair.ts";
 
 const broadJapaneseConverter = ConverterFactory(
   [SimplifiedToTraditionalCharacters],
@@ -36,34 +38,34 @@ test("detects form only when the text provides useful evidence", () => {
 
 test("normalizes Chinese-provider variants to Japanese forms for analysis", () => {
   assert.equal(
-    normalizeChineseProviderJapaneseText("\u79d1\u6238\u306e\u98ce\u5439\u304d\u8fd0\u3076\u82b1\u306e\u9999"),
+    repairChineseProviderJapaneseText("\u79d1\u6238\u306e\u98ce\u5439\u304d\u8fd0\u3076\u82b1\u306e\u9999"),
     "\u79d1\u6238\u306e\u98a8\u5439\u304d\u904b\u3076\u82b1\u306e\u9999"
   );
   assert.equal(
-    normalizeChineseProviderJapaneseText("\u8fc2\u308a\u3086\u304f\u65f6\u4ee3\u306e\u65e0\u5e38\u3092\u53f9\u304f"),
+    repairChineseProviderJapaneseText("\u8fc2\u308a\u3086\u304f\u65f6\u4ee3\u306e\u65e0\u5e38\u3092\u53f9\u304f"),
     "\u8fc2\u308a\u3086\u304f\u6642\u4ee3\u306e\u7121\u5e38\u3092\u5606\u304f"
   );
   assert.equal(
-    normalizeChineseProviderJapaneseText("梦见ては 覚めて见る"),
+    repairChineseProviderJapaneseText("梦见ては 覚めて见る"),
     "夢見ては 覚めて見る"
   );
 });
 
 test("keeps ambiguous Japanese lexical forms in safe source contexts", () => {
   assert.equal(
-    normalizeChineseProviderJapaneseText("叶う 叶える 叶わない 叶った 叶っぱ"),
+    repairChineseProviderJapaneseText("叶う 叶える 叶わない 叶った 叶っぱ"),
     "叶う 叶える 叶わない 叶った 葉っぱ"
   );
   assert.equal(
-    normalizeChineseProviderJapaneseText("后妃 皇后 太后 后宫"),
+    repairChineseProviderJapaneseText("后妃 皇后 太后 后宫"),
     "后妃 皇后 太后 後宮"
   );
   assert.equal(
-    normalizeChineseProviderJapaneseText("ひとり占めできるまで"),
+    repairChineseProviderJapaneseText("ひとり占めできるまで"),
     "ひとり占めできるまで"
   );
   assert.equal(
-    normalizeChineseProviderJapaneseText("岩 干 里"),
+    repairChineseProviderJapaneseText("岩 干 里"),
     "岩 干 里"
   );
 });
@@ -95,22 +97,22 @@ test("conservative repair ablates broad OpenCC changes without losing proven fix
 
   for (const source of ["占", "岩", "干", "里"]) {
     assert.notEqual(broadJapaneseConverter(source), source, source);
-    assert.equal(normalizeChineseProviderJapaneseText(source), source, source);
+    assert.equal(repairChineseProviderJapaneseText(source), source, source);
   }
 
   assert.equal(
-    normalizeChineseProviderJapaneseText("风吹き运ぶ 时の无常 梦见ては 词を叹く"),
+    repairChineseProviderJapaneseText("风吹き运ぶ 时の无常 梦见ては 词を叹く"),
     "風吹き運ぶ 時の無常 夢見ては 詞を嘆く",
   );
 });
 
 test("limits Japanese kanji repair to built-in Chinese lyric providers", () => {
   for (const provider of ["qq", "kugou", "netease", "soda"]) {
-    assert.equal(isChineseLyricsProvider({ fetchProvider: provider }), true, provider);
+    assert.equal(isChineseProviderJapaneseRepairSource({ fetchProvider: provider }), true, provider);
   }
-  assert.equal(isChineseLyricsProvider({ source: "NETEASE" }), true);
-  assert.equal(isChineseLyricsProvider({ fetchProvider: "apple", source: "aml" }), false);
-  assert.equal(isChineseLyricsProvider({ fetchProvider: "custom:mine" }), false);
+  assert.equal(isChineseProviderJapaneseRepairSource({ source: "NETEASE" }), true);
+  assert.equal(isChineseProviderJapaneseRepairSource({ fetchProvider: "apple", source: "aml" }), false);
+  assert.equal(isChineseProviderJapaneseRepairSource({ fetchProvider: "custom:mine" }), false);
 });
 
 test("converts a complete timed line so phrases can cross timing units", () => {

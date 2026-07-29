@@ -11,7 +11,6 @@ import {
   applyPhoneticMerges,
   buildJapaneseBoundaryPlan,
 } from "../Fork/JukujikunMerge.ts";
-import { normalizeChineseProviderJapaneseText } from "../ChineseCharacterConversion.ts";
 import {
   projectProviderAuthoredJapaneseReadings,
   type ProviderAuthoredReadingHint,
@@ -74,6 +73,19 @@ export {
 } from "./JapaneseFurigana.ts";
 export { buildJapaneseLineTextMap } from "./JapaneseSourceMapping.ts";
 
+function projectJapaneseText(
+  text: string,
+  options: JapaneseAnalysisOptions,
+): string {
+  const projected = options.textProjection?.project(text) ?? text;
+  if (projected.length !== text.length) {
+    throw new Error(
+      `Japanese text projection ${options.textProjection?.kind ?? "unknown"} changed UTF-16 length`,
+    );
+  }
+  return projected;
+}
+
 function applyExplicitReadingOverrides(
   lineText: string,
   entries: JapaneseTokenEntry[],
@@ -123,9 +135,7 @@ async function buildJapaneseTokenContext(
   options: JapaneseAnalysisOptions = {},
   explicitHints: readonly ProviderAuthoredReadingHint[] = [],
 ): Promise<JapaneseTokenContext> {
-  const analysisText = options.normalizeChineseProviderKanji
-    ? normalizeChineseProviderJapaneseText(lineText)
-    : lineText;
+  const analysisText = projectJapaneseText(lineText, options);
   const analyzer = options.analyzer || kuromojiJapaneseAnalyzer;
   const tokens = [...(await analyzer.analyze(analysisText))];
   assertJapaneseAnalyzerTokens(analysisText, tokens);
@@ -201,9 +211,7 @@ export async function prepareJapaneseLineAnalysis(
     options.authoredReadingProjection?.sourceText === sourceText
       ? options.authoredReadingProjection
       : projectProviderAuthoredJapaneseReadings(sourceText);
-  const displayText = options.normalizeChineseProviderKanji
-    ? normalizeChineseProviderJapaneseText(projection.displayText)
-    : projection.displayText;
+  const displayText = projectJapaneseText(projection.displayText, options);
 
   const context = await buildJapaneseTokenContext(
     displayText,
@@ -273,9 +281,7 @@ export async function applyJapaneseReadingToSyllables(
     options.authoredReadingProjection?.sourceText === normalizedLineText
       ? options.authoredReadingProjection.displayText
       : projectProviderAuthoredJapaneseReadings(normalizedLineText).displayText;
-  const expectedDisplayText = options.normalizeChineseProviderKanji
-    ? normalizeChineseProviderJapaneseText(authoredDisplayText)
-    : authoredDisplayText;
+  const expectedDisplayText = projectJapaneseText(authoredDisplayText, options);
   const analysis =
     (prepared?.reading.displayText || prepared?.reading.sourceText) ===
     expectedDisplayText

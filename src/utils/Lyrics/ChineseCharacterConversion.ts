@@ -2,10 +2,6 @@ import { ConverterBuilder } from "opencc-js/core";
 import * as CnToTraditionalPreset from "opencc-js/preset/cn2t";
 import * as TraditionalToCnPreset from "opencc-js/preset/t2cn";
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
-import {
-  CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP,
-  CHINESE_PROVIDER_JAPANESE_CHARACTER_PATTERN,
-} from "./Processing/Japanese/ChineseProviderCharacterMap.generated.ts";
 
 export type ChineseCharacterForm = "original" | "simplified" | "traditional";
 export type DetectedChineseCharacterForm = Exclude<ChineseCharacterForm, "original"> | "ambiguous";
@@ -14,34 +10,6 @@ type TimedTextUnit = { Text?: string; IsPartOfWord?: boolean };
 
 const toSimplified = ConverterBuilder(TraditionalToCnPreset)({ from: "t", to: "cn" });
 const toTraditional = ConverterBuilder(CnToTraditionalPreset)({ from: "cn", to: "tw" });
-
-const CHINESE_LYRICS_PROVIDERS = new Set(["qq", "kugou", "netease", "soda"]);
-
-function replaceCharacterAt(text: string, index: number, replacement: string): string {
-  return `${text.slice(0, index)}${replacement}${text.slice(index + 1)}`;
-}
-
-function applyContextualJapaneseRepairs(source: string, normalized: string): string {
-  let result = normalized;
-  const repairMatches = (
-    pattern: RegExp,
-    sourceCharacterOffset: number,
-    replacement: string,
-  ) => {
-    for (const match of source.matchAll(pattern)) {
-      if (match.index === undefined) continue;
-      result = replaceCharacterAt(result, match.index + sourceCharacterOffset, replacement);
-    }
-  };
-
-  // These source forms are valid Japanese characters in other contexts, so
-  // the generated character map deliberately abstains. Repair only lexical
-  // contexts whose Japanese spelling is unambiguous.
-  repairMatches(/后宫/gu, 0, "後");
-  repairMatches(/叶っぱ/gu, 0, "葉");
-  repairMatches(/无常/gu, 0, "無");
-  return result;
-}
 
 function codePoints(value: string): string[] {
   return Array.from(value);
@@ -61,26 +29,6 @@ function differenceCount(left: string, right: string): number {
 export function convertChineseText(text: string, form: ChineseCharacterForm): string {
   if (!text || form === "original") return text;
   return form === "simplified" ? toSimplified(text) : toTraditional(text);
-}
-
-export function isChineseLyricsProvider(lyrics: { fetchProvider?: unknown; source?: unknown } | null | undefined): boolean {
-  return [lyrics?.fetchProvider, lyrics?.source].some((value) =>
-    typeof value === "string" && CHINESE_LYRICS_PROVIDERS.has(value.toLowerCase())
-  );
-}
-
-/**
- * Repair Chinese-provider character conversion for Japanese analysis and its
- * display-only projection. Unequal-length conversions are rejected so UTF-16
- * furigana and timing ranges continue to align with immutable provider text.
- */
-export function normalizeChineseProviderJapaneseText(text: string): string {
-  if (!text) return text;
-  const normalized = text.replace(
-    CHINESE_PROVIDER_JAPANESE_CHARACTER_PATTERN,
-    (character) => CHINESE_PROVIDER_JAPANESE_CHARACTER_MAP.get(character) ?? character,
-  );
-  return applyContextualJapaneseRepairs(text, normalized);
 }
 
 export function detectChineseCharacterForm(text: string): DetectedChineseCharacterForm {

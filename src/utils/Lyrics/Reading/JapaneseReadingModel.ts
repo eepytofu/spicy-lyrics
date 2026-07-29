@@ -59,8 +59,17 @@ export type JapaneseReadable = {
   ReadingPrimaryScript?: "Japanese" | "Chinese";
 };
 
+export type JapaneseTextProjection = {
+  readonly kind: string;
+  project(text: string): string;
+};
+
 export type JapaneseAnalysisOptions = {
-  normalizeChineseProviderKanji?: boolean;
+  /**
+   * Explicit pre-analysis and display projection. The reading pipeline does
+   * not infer provider identity or mutate immutable source evidence.
+   */
+  textProjection?: JapaneseTextProjection;
   authoredReadingProjection?: ProviderAuthoredReadingProjection;
   /** Explicit analyzer seam for tests and isolated experiments. */
   analyzer?: JapaneseAnalyzer;

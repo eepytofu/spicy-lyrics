@@ -12,6 +12,9 @@ import {
   buildJapaneseLineTextMap,
   prepareJapaneseLineAnalysis,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
+import {
+  ChineseProviderJapaneseTextProjection,
+} from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderJapaneseRepair.ts";
 import { timedFuriganaGroups } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
 import type {
   JapaneseAnalyzer,
@@ -327,11 +330,23 @@ test("provider-authored reading keeps source evidence and emits explicit furigan
 test("Chinese-provider Japanese repair is display-only and keeps source evidence", async () => {
   const reading = (await prepareJapaneseLineAnalysis(
     "梦见ては 覚めて见る",
-    { normalizeChineseProviderKanji: true },
+    { textProjection: ChineseProviderJapaneseTextProjection },
   ))?.reading;
   assert.ok(reading);
   assert.equal(reading!.sourceText, "梦见ては 覚めて见る");
   assert.equal(reading!.displayText, "夢見ては 覚めて見る");
+});
+
+test("Japanese text projections fail closed when source ranges would shift", async () => {
+  await assert.rejects(
+    prepareJapaneseLineAnalysis("夢を見る", {
+      textProjection: {
+        kind: "invalid-test-projection",
+        project: (text) => `${text}!`,
+      },
+    }),
+    /changed UTF-16 length/u,
+  );
 });
 
 test("proven compound geometry distributes romaji across its real timing spans", async () => {
@@ -420,7 +435,7 @@ test("opaque and context-sensitive readings keep one text unit but sweep the who
 test("Chinese-provider Japanese repair preserves Japanese 占", async () => {
   const reading = (await prepareJapaneseLineAnalysis(
     "ひとり占めできるまで",
-    { normalizeChineseProviderKanji: true },
+    { textProjection: ChineseProviderJapaneseTextProjection },
   ))?.reading;
   assert.ok(reading);
   assert.equal(reading!.sourceText, "ひとり占めできるまで");
@@ -430,7 +445,7 @@ test("Chinese-provider Japanese repair preserves Japanese 占", async () => {
 test("Chinese-provider Japanese repair reaches every timed display span", async () => {
   const syllables = ["梦", "见", "て", "は"].map((Text) => ({ Text }));
   const map = buildJapaneseLineTextMap(syllables);
-  const options = { normalizeChineseProviderKanji: true };
+  const options = { textProjection: ChineseProviderJapaneseTextProjection };
   const prepared = await prepareJapaneseLineAnalysis(
     map.lineText,
     options,
