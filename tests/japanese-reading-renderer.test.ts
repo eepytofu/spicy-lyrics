@@ -111,6 +111,58 @@ test("plan romaji follows Japanese reading display mode", () => {
   }
 });
 
+test("opaque Japanese readings bind their sidecar to the full compound window", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  const animatorEntries: Array<{
+    StartTime: number;
+    EndTime: number;
+    RomajiElement?: HTMLElement;
+    RomajiStartTime?: number;
+    RomajiEndTime?: number;
+  }> = [
+    { StartTime: 100, EndTime: 200 },
+    { StartTime: 200, EndTime: 350 },
+  ];
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [
+      { Text: "一", JapaneseReading: { sourceText: "一", romaji: "hitori", furigana: [] } },
+      { Text: "人" },
+    ],
+    "一人",
+    "hitori",
+    undefined,
+    undefined,
+    animatorEntries,
+    {
+      ...plan,
+      joinedDisplayText: "hitori",
+      timedReadingUnits: [
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 1 },
+          text: "hitori",
+          logicalGroupId: "jp-token-0",
+          animationTimingRefs: ["0", "1"],
+        },
+        {
+          spanId: "1",
+          canonicalRange: { startCp: 1, endCp: 2 },
+          text: "",
+          logicalGroupId: "jp-token-0",
+        },
+      ],
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  assert.equal(animatorEntries[0].RomajiStartTime, 100);
+  assert.equal(animatorEntries[0].RomajiEndTime, 350);
+  assert.equal(animatorEntries[1].RomajiStartTime, undefined);
+  assert.equal(animatorEntries[1].RomajiEndTime, undefined);
+});
+
 test("timed-group suppression removes only the selected line segment", () => {
   $japaneseReadingMode.set("furigana");
   const line = new FakeElement();

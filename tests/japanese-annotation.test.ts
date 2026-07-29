@@ -13,6 +13,66 @@ import {
   prepareJapaneseLineAnalysis,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 import { timedFuriganaGroups } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
+import type {
+  JapaneseAnalyzer,
+  JapaneseAnalyzerToken,
+} from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
+
+function singleTokenAnalyzer(surface: string, readingKana: string): JapaneseAnalyzer {
+  const token: JapaneseAnalyzerToken = {
+    surface,
+    start: 0,
+    end: surface.length,
+    readingKana,
+    pronunciationKana: readingKana,
+    partOfSpeech: "other",
+    morphologyFeatures: [],
+    baseForm: surface,
+    conjugationType: "",
+    conjugationForm: "",
+    provenance: { analyzerId: "timing-fixture", rangeSource: "native" },
+  };
+  return {
+    id: "timing-fixture",
+    async analyze(text) {
+      assert.equal(text, surface);
+      return [token];
+    },
+  };
+}
+
+async function timedJapaneseAnnotation(
+  surface: string,
+  readingKana: string,
+  romaji: Readonly<Record<string, string>>,
+) {
+  const spanTexts = Array.from(surface);
+  const line = {
+    id: `jp-${surface}`,
+    displayText: surface,
+    paragraphProvenance: "lineBoundary" as const,
+    spans: spanTexts.map((text, index) => ({
+      id: String(index),
+      rawText: text,
+      cleanText: text,
+      startMs: index * 100,
+      endMs: (index + 1) * 100,
+      providerPartOfWord: true,
+    })),
+  };
+  const canonical = buildCanonicalLine(line);
+  const annotation = await annotateJapaneseLine(
+    canonical,
+    undefined,
+    undefined,
+    {
+      analyzer: singleTokenAnalyzer(surface, readingKana),
+      kanaRomanizer: (kana) => romaji[kana] ?? kana,
+    },
+  );
+  assert.ok(annotation);
+  return buildRenderPlan(line, canonical, [annotation!]);
+}
 
 test("Japanese annotation keeps split spans as unique timing owners", async () => {
   const line = { id: "jp", displayText: "だんだん剥がれてく", paragraphProvenance: "lineBoundary" as const,
@@ -124,6 +184,89 @@ test("Chinese-provider Japanese repair is display-only and keeps source evidence
   assert.ok(reading);
   assert.equal(reading!.sourceText, "梦见ては 覚めて见る");
   assert.equal(reading!.displayText, "夢見ては 覚めて見る");
+});
+
+test("proven compound geometry distributes romaji across its real timing spans", async () => {
+  const plan = await timedJapaneseAnnotation("各駅", "かくえき", {
+    かくえき: "kakueki",
+    かく: "kaku",
+    えき: "eki",
+  });
+
+  assert.deepEqual(
+    plan.timedReadingUnits.map(({ spanId, text, logicalGroupId, animationTimingRefs }) => ({
+      spanId,
+      text,
+      logicalGroupId,
+      animationTimingRefs,
+    })),
+    [
+      {
+        spanId: "0",
+        text: "kaku",
+        logicalGroupId: "jp-token-0",
+        animationTimingRefs: undefined,
+      },
+      {
+        spanId: "1",
+        text: "eki",
+        logicalGroupId: "jp-token-0",
+        animationTimingRefs: undefined,
+      },
+    ],
+  );
+});
+
+test("mixed Kanji and Kana split only when every romaji piece recombines exactly", async () => {
+  const plan = await timedJapaneseAnnotation("乗り込ん", "のりこん", {
+    のりこん: "norikon",
+    の: "no",
+    り: "ri",
+    こ: "ko",
+    ん: "n",
+  });
+
+  assert.deepEqual(
+    plan.timedReadingUnits.map(({ text, logicalGroupId }) => [text, logicalGroupId]),
+    [
+      ["no", "jp-token-0"],
+      ["ri", "jp-token-0"],
+      ["ko", "jp-token-0"],
+      ["n", "jp-token-0"],
+    ],
+  );
+  assert.equal(plan.timedReadingUnits.some((unit) => unit.animationTimingRefs), false);
+});
+
+test("opaque and context-sensitive readings keep one text unit but sweep the whole group", async () => {
+  for (const fixture of [
+    {
+      surface: "一人",
+      readingKana: "ひとり",
+      romaji: { ひとり: "hitori" },
+    },
+    {
+      surface: "待って",
+      readingKana: "まって",
+      romaji: { まって: "matte", ま: "ma", っ: "tsu", て: "te" },
+    },
+  ]) {
+    const plan = await timedJapaneseAnnotation(
+      fixture.surface,
+      fixture.readingKana,
+      fixture.romaji,
+    );
+    assert.equal(plan.timedReadingUnits[0].text, fixture.romaji[fixture.readingKana]);
+    assert.deepEqual(
+      plan.timedReadingUnits[0].animationTimingRefs,
+      plan.timedReadingUnits.map((unit) => unit.spanId),
+    );
+    assert.equal(
+      new Set(plan.timedReadingUnits.map((unit) => unit.logicalGroupId)).size,
+      1,
+    );
+    assert.equal(plan.timedReadingUnits.slice(1).every((unit) => unit.text === ""), true);
+  }
 });
 
 test("Chinese-provider Japanese repair reaches every timed display span", async () => {

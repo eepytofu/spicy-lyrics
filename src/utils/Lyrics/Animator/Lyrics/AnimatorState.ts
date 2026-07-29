@@ -83,6 +83,19 @@ export function wordGradientTargets(
   };
 }
 
+export function gradientTargetsAt(
+  currentTime: number,
+  startTime: number,
+  endTime: number,
+  simpleMode: boolean
+): GradientTargets {
+  return wordGradientTargets(
+    getElementState(currentTime, startTime, endTime),
+    getProgressPercentage(currentTime, startTime, endTime),
+    simpleMode
+  );
+}
+
 /**
  * A line reached through ordinary playback may finish its spring tail after
  * its timing window. A seek can skip that Active phase entirely, so those

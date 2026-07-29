@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   applyLineState,
   finiteAnimationValue,
+  gradientTargetsAt,
   getElementState,
   getProgressPercentage,
   safeAnimationDelay,
@@ -113,6 +114,15 @@ test("simple and full word gradients keep their distinct paint ranges", () => {
     base: 100,
     extra: 100,
   });
+});
+
+test("a grouped reading sweep follows its derived window without changing ordinary spans", () => {
+  assert.deepEqual(
+    gradientTargetsAt(50, 0, 100, false),
+    wordGradientTargets("Active", 0.5, false),
+  );
+  assert.equal(gradientTargetsAt(150, 0, 100, false).extra, 100);
+  assert.equal(gradientTargetsAt(150, 0, 300, false).extra, 30);
 });
 
 test("timed group attack, hold, and release remain monotonic", () => {

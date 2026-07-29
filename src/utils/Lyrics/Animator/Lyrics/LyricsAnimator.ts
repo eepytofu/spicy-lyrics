@@ -21,6 +21,7 @@ import {
 import {
   applyLineState,
   finiteAnimationValue,
+  gradientTargetsAt,
   getElementState,
   getProgressPercentage,
   safeAnimationDelay,
@@ -767,7 +768,12 @@ export function Animate(position: number): void {
               $simpleLyricsMode.get()
             );
             const targetGradientPos = gradientTargets.base;
-            const targetExtraGradientPos = gradientTargets.extra;
+            const targetExtraGradientPos = gradientTargetsAt(
+              ProcessedPosition,
+              word.RomajiStartTime ?? word.StartTime,
+              word.RomajiEndTime ?? word.EndTime,
+              $simpleLyricsMode.get()
+            ).extra;
 
             if (wordState === "Active") {
               targetScale = ScaleSpline.at(percentage);

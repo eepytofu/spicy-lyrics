@@ -348,7 +348,13 @@ export function appendSyllableRomanizedBelow(
   groupRomanizedText: string | undefined,
   groupProviderTranslatedText: string | undefined,
   groupTranslatedText: string | undefined,
-  animatorEntries: Array<{ RomajiElement?: HTMLElement }> | undefined,
+  animatorEntries: Array<{
+    RomajiElement?: HTMLElement;
+    RomajiStartTime?: number;
+    RomajiEndTime?: number;
+    StartTime?: number;
+    EndTime?: number;
+  }> | undefined,
   readingPlan: RenderPlan | undefined,
   options: ReadingRenderOptions
 ): void {
@@ -370,9 +376,25 @@ export function appendSyllableRomanizedBelow(
 
   if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
     forceStackedLine(lineElem, options.oppositeAligned);
-    renderReadingPlan(lineElem, readingPlan, (spanId, element) => {
+    renderReadingPlan(lineElem, readingPlan, (spanId, element, unit) => {
       const index = Number(spanId);
-      if (Number.isInteger(index) && animatorEntries?.[index]) animatorEntries[index].RomajiElement = element;
+      const owner = Number.isInteger(index) ? animatorEntries?.[index] : undefined;
+      if (!owner) return;
+      owner.RomajiElement = element;
+      delete owner.RomajiStartTime;
+      delete owner.RomajiEndTime;
+
+      const animationEntries = (unit.animationTimingRefs || [])
+        .map((ref) => animatorEntries?.[Number(ref)])
+        .filter((entry) =>
+          entry &&
+          Number.isFinite(entry.StartTime) &&
+          Number.isFinite(entry.EndTime)
+        );
+      if (animationEntries.length > 1) {
+        owner.RomajiStartTime = Math.min(...animationEntries.map((entry) => entry!.StartTime!));
+        owner.RomajiEndTime = Math.max(...animationEntries.map((entry) => entry!.EndTime!));
+      }
     }, readabilityGapSpanIds);
   } else if (shouldRenderRomanization(groupEntry, options)) {
     const readableGroupRomanizedText = formatMixedScriptReadingForDisplay(

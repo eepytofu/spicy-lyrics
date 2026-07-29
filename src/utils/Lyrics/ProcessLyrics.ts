@@ -410,6 +410,7 @@ const postProcessSyllableRomanization = async (
             delete syllable.RomanizedText;
             delete syllable.TransliteratedText;
             delete syllable.RomajiSpaceBefore;
+            delete syllable.JapaneseRomajiTiming;
           }
           group.JapaneseReading = {
             sourceText: effectiveLineText,
@@ -425,6 +426,9 @@ const postProcessSyllableRomanization = async (
         } catch (error) {
           delete group.JapaneseReading;
           delete group.ReadingRenderPlan;
+          for (const syllable of syllables) {
+            delete syllable.JapaneseRomajiTiming;
+          }
           const restoredGroup = restoreProviderReading(group);
           const restoredSyllables = syllables.map(restoreProviderReading).some(Boolean);
           if (!restoredGroup && !restoredSyllables) throw error;

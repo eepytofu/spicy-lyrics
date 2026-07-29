@@ -1,6 +1,10 @@
-import type { RenderPlan } from "../Processing/Model.ts";
+import type { RenderPlan, TimedReadingUnit } from "../Processing/Model.ts";
 
-export type TimedReadingBinder = (spanId: string, element: HTMLElement) => void;
+export type TimedReadingBinder = (
+  spanId: string,
+  element: HTMLElement,
+  unit: TimedReadingUnit
+) => void;
 
 export function renderReadingPlan(
   parent: HTMLElement,
@@ -39,7 +43,7 @@ export function renderReadingPlan(
     }
     child.textContent = unit.text.trimStart();
     group!.appendChild(child);
-    bindTimedTarget(unit.spanId, child);
+    bindTimedTarget(unit.spanId, child, unit);
   }
   parent.appendChild(row);
   return row;

@@ -68,12 +68,19 @@ export async function annotateJapaneseLine(
   const units: ReadingUnit[] = canonical.spanMappings.map((mapping, index) => {
     if (index > 0 && aligned[index]) group += 1;
     const source = temp[index].Text || "";
+    const timingProjection = temp[index].JapaneseRomajiTiming;
+    const animationTimingRefs = timingProjection?.animationSpanIndexes
+      .map((spanIndex) => canonical.spanMappings[spanIndex]?.spanId)
+      .filter((spanId): spanId is string => typeof spanId === "string");
     return {
       canonicalRange: mapping.canonicalRange,
       text: aligned[index],
       kind: /[぀-ヿ一-鿿]/u.test(source) ? "transformed" : "passthrough",
-      logicalGroupId: `jp-${group}`,
+      logicalGroupId: timingProjection?.logicalGroupId || `jp-${group}`,
       timingRefs: [mapping.spanId],
+      ...(animationTimingRefs && animationTimingRefs.length > 1
+        ? { animationTimingRefs }
+        : {}),
       ...(temp[index].JapaneseReading?.romajiSegments?.some((segment) => segment.provenance === "providerExplicit")
         ? { provenance: "providerExplicit" as const }
         : {}),

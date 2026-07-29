@@ -58,6 +58,8 @@ export type ReadingUnit = {
   readonly kind: ReadingUnitKind;
   readonly logicalGroupId: string;
   readonly timingRefs: readonly string[];
+  /** Optional derived-reading sweep window; source timing owners stay distinct. */
+  readonly animationTimingRefs?: readonly string[];
   readonly provenance?: ReadingProvenance;
 };
 
@@ -87,6 +89,7 @@ export type TimedReadingUnit = {
   readonly canonicalRange: TextRange;
   readonly text: string;
   readonly logicalGroupId: string;
+  readonly animationTimingRefs?: readonly string[];
   readonly provenance?: ReadingProvenance;
 };
 

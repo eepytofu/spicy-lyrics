@@ -126,14 +126,28 @@ function normalizePartOfSpeech(raw: string): JapanesePartOfSpeech {
 
 function normalizeMorphologyFeatures(
   rawPartOfSpeech: string,
-  rawDetail: string
+  rawDetail1: string,
+  rawDetail2: string
 ): JapaneseMorphologyFeature[] {
   const features: JapaneseMorphologyFeature[] = [];
-  if (rawDetail === "接続助詞") features.push("conjunctiveParticle");
-  if (rawDetail === "非自立") features.push("nonIndependent");
-  if (rawPartOfSpeech === "接尾辞" || rawPartOfSpeech === "接尾" || rawDetail === "接尾") {
+  if (rawDetail1 === "接続助詞") features.push("conjunctiveParticle");
+  if (rawDetail1 === "非自立") features.push("nonIndependent");
+  if (
+    rawPartOfSpeech === "接尾辞" ||
+    rawPartOfSpeech === "接尾" ||
+    rawDetail1 === "接尾"
+  ) {
     features.push("suffix");
   }
+  if (rawPartOfSpeech === "名詞" && rawDetail1 === "数") features.push("numeric");
+  if (
+    rawPartOfSpeech === "名詞" &&
+    rawDetail1 === "接尾" &&
+    rawDetail2 === "助数詞"
+  ) {
+    features.push("counter");
+  }
+  if (rawDetail2 === "人名") features.push("properName");
   return features;
 }
 
@@ -156,7 +170,8 @@ export function normalizeKuromojiTokens(
       partOfSpeech: normalizePartOfSpeech(rawToken.pos || ""),
       morphologyFeatures: normalizeMorphologyFeatures(
         rawToken.pos || "",
-        rawToken.pos_detail_1 || ""
+        rawToken.pos_detail_1 || "",
+        rawToken.pos_detail_2 || ""
       ),
       baseForm: rawToken.basic_form || "",
       conjugationType: rawToken.conjugated_type || "",
@@ -177,6 +192,7 @@ export function normalizeKuromojiTokens(
           : { nativeWordPosition: rawToken.verbose.word_position }),
         ...(rawToken.pos ? { rawPartOfSpeech: rawToken.pos } : {}),
         ...(rawToken.pos_detail_1 ? { rawPartOfSpeechDetail1: rawToken.pos_detail_1 } : {}),
+        ...(rawToken.pos_detail_2 ? { rawPartOfSpeechDetail2: rawToken.pos_detail_2 } : {}),
       },
     };
     cursor = end;

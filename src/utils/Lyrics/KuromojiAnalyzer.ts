@@ -7,6 +7,7 @@ export type KuromojiToken = {
   pronunciation?: string;
   pos?: string;
   pos_detail_1?: string;
+  pos_detail_2?: string;
   basic_form?: string;
   conjugated_type?: string;
   conjugated_form?: string;

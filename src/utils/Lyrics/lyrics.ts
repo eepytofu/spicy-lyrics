@@ -70,6 +70,8 @@ export type TimedGroupWindow = {
 export interface SyllableLead {
   HTMLElement: HTMLElement;
   RomajiElement?: HTMLElement;
+  RomajiStartTime?: number;
+  RomajiEndTime?: number;
   TimedRubyAnchorElement?: HTMLElement;
   TimedRubyAnchorOffsetEm?: number;
   TimedGroupTimes?: TimedGroupWindow;

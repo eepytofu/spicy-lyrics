@@ -31,6 +31,7 @@ import {
   kuromojiJapaneseAnalyzer,
   normalizeJapaneseKana,
 } from "../Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
+import { applyProductivePersonCounterReadings } from "../Processing/Japanese/JapaneseReadingResolver.ts";
 import { lookupJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 
 export type FuriganaSegment = {
@@ -57,6 +58,13 @@ export type JapaneseReading = {
   furigana: FuriganaSegment[];
 };
 
+export type JapaneseRomajiTimingProjection = {
+  /** Stable lexical group used only by the derived reading row. */
+  logicalGroupId: string;
+  /** Span indexes whose combined window owns this reading unit's sweep. */
+  animationSpanIndexes: number[];
+};
+
 export type JapaneseReadable = {
   Text?: string;
   TransliteratedText?: string;
@@ -65,6 +73,7 @@ export type JapaneseReadable = {
   ProviderTranslationLanguage?: string;
   JapaneseReading?: JapaneseReading;
   RomajiSpaceBefore?: boolean;
+  JapaneseRomajiTiming?: JapaneseRomajiTimingProjection;
   ReadingRenderPlan?: RenderPlan;
   ReadingPrimaryScript?: "Japanese" | "Chinese";
 };
@@ -146,6 +155,7 @@ type JapaneseTokenContext = {
   entries: JapaneseTokenEntry[];
   noSpaceBefore: boolean[];
   explicitReadings: FuriganaSegment[];
+  kanaToRomaji: JapaneseKanaRomanizer;
 };
 
 /**
@@ -601,6 +611,7 @@ async function buildJapaneseTokenContext(
   }
 
   analyzer.applyReadingOverrides?.(entries, tokens);
+  applyProductivePersonCounterReadings(analysisText, tokens, entries);
   const explicitReadings = applyExplicitReadingOverrides(lineText, entries, explicitHints);
   for (let index = 0; index < entries.length; index += 1) {
     if (entries[index].consumed) continue;
@@ -622,6 +633,7 @@ async function buildJapaneseTokenContext(
     entries,
     noSpaceBefore: computeNoSpaceBefore(entries, tokens),
     explicitReadings,
+    kanaToRomaji,
   };
 }
 
@@ -849,12 +861,199 @@ export async function applyJapaneseReadingToSyllables(
       delete syllable.RomanizedText;
       delete syllable.TransliteratedText;
       delete syllable.RomajiSpaceBefore;
+      delete syllable.JapaneseRomajiTiming;
     }
     return undefined;
   }
 
   analysis.applyToSyllables(syllables, spans);
   return analysis.reading;
+}
+
+type ProjectedEntryPart = {
+  entryIndex: number;
+  logicalGroupIndex: number;
+  text: string;
+  animationSpanIndexes: number[];
+};
+
+function normalizedRomajiComparison(text: string): string {
+  return text.normalize("NFKC").replace(/\s+/gu, "").toLowerCase();
+}
+
+/**
+ * Projects a token reading onto provider timing spans only when its furigana
+ * geometry and literal Kana prove an exact split. The final romaji equality
+ * check rejects context-sensitive boundaries such as a standalone small っ.
+ */
+function projectEntryRomajiChunks(
+  reading: JapaneseReading,
+  context: JapaneseTokenContext,
+  entry: JapaneseTokenEntry,
+  overlappingSpans: readonly JapaneseTimedTextSpan[]
+): string[] | undefined {
+  if (
+    overlappingSpans.length < 2 ||
+    entry.surface.length !== entry.end - entry.start
+  ) {
+    return undefined;
+  }
+
+  type ReadingPiece = { start: number; end: number; text: string };
+  const pieces: ReadingPiece[] = [];
+  const furigana = reading.furigana
+    .filter((segment) => rangesOverlap(entry.start, entry.end, segment.start, segment.end))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+
+  let previousFuriganaEnd = entry.start;
+  for (const segment of furigana) {
+    if (
+      segment.start < entry.start ||
+      segment.end > entry.end ||
+      segment.start < previousFuriganaEnd
+    ) {
+      return undefined;
+    }
+    pieces.push({
+      start: segment.start,
+      end: segment.end,
+      text: kataToHira(segment.reading),
+    });
+    previousFuriganaEnd = segment.end;
+  }
+
+  let offset = 0;
+  for (const character of Array.from(entry.surface)) {
+    const start = entry.start + offset;
+    const end = start + character.length;
+    offset += character.length;
+    if (pieces.some((piece) => rangesOverlap(piece.start, piece.end, start, end))) continue;
+    if (KanjiLikeCharTest.test(character)) return undefined;
+    pieces.push({
+      start,
+      end,
+      text: KanaCharTest.test(character) ? kataToHira(character) : character,
+    });
+  }
+
+  pieces.sort((a, b) => a.start - b.start || a.end - b.end);
+  const kanaChunks = overlappingSpans.map(() => "");
+  for (const piece of pieces) {
+    const owners = overlappingSpans
+      .map((span, index) => ({ span, index }))
+      .filter(({ span }) => rangesOverlap(piece.start, piece.end, span.start, span.end));
+    if (owners.length !== 1) return undefined;
+    kanaChunks[owners[0].index] += piece.text;
+  }
+
+  const romajiChunks = kanaChunks.map((chunk) =>
+    chunk ? context.kanaToRomaji(chunk) : ""
+  );
+  if (
+    !romajiChunks.every((chunk) => typeof chunk === "string") ||
+    normalizedRomajiComparison(romajiChunks.join("")) !==
+      normalizedRomajiComparison(entry.romaji)
+  ) {
+    return undefined;
+  }
+  return romajiChunks;
+}
+
+function buildEntryRomajiProjection(
+  reading: JapaneseReading,
+  context: JapaneseTokenContext,
+  effectiveSpans: readonly JapaneseTimedTextSpan[]
+): Map<number, ProjectedEntryPart[]> {
+  type PendingEntryProjection = {
+    entryIndex: number;
+    logicalGroupIndex: number;
+    spans: JapaneseTimedTextSpan[];
+    split?: string[];
+    needsOpaqueFallback: boolean;
+  };
+
+  const bySpan = new Map<number, ProjectedEntryPart[]>();
+  const append = (spanIndex: number, part: ProjectedEntryPart) => {
+    const parts = bySpan.get(spanIndex) || [];
+    parts.push(part);
+    bySpan.set(spanIndex, parts);
+  };
+  const pending: PendingEntryProjection[] = [];
+  let previousActiveEntryIndex = -1;
+  let logicalGroupIndex = -1;
+
+  for (let entryIndex = 0; entryIndex < context.entries.length; entryIndex += 1) {
+    const entry = context.entries[entryIndex];
+    if (entry.consumed || !entry.romaji) continue;
+    if (
+      previousActiveEntryIndex < 0 ||
+      !context.noSpaceBefore[entryIndex]
+    ) {
+      logicalGroupIndex = entryIndex;
+    }
+    previousActiveEntryIndex = entryIndex;
+
+    const overlappingSpans = effectiveSpans
+      .filter((span) => rangesOverlap(entry.start, entry.end, span.start, span.end))
+      .sort((a, b) => a.start - b.start || a.index - b.index);
+    if (overlappingSpans.length === 0) continue;
+
+    const split =
+      overlappingSpans.length > 1
+        ? projectEntryRomajiChunks(reading, context, entry, overlappingSpans)
+        : [entry.romaji];
+    pending.push({
+      entryIndex,
+      logicalGroupIndex,
+      spans: overlappingSpans,
+      split,
+      needsOpaqueFallback: overlappingSpans.length > 1 && !split,
+    });
+  }
+
+  const grouped = new Map<number, PendingEntryProjection[]>();
+  for (const projection of pending) {
+    const group = grouped.get(projection.logicalGroupIndex) || [];
+    group.push(projection);
+    grouped.set(projection.logicalGroupIndex, group);
+  }
+
+  for (const [groupIndex, group] of grouped) {
+    if (group.some((projection) => projection.needsOpaqueFallback)) {
+      const groupSpans = [...new Map(
+        group
+          .flatMap((projection) => projection.spans)
+          .map((span) => [span.index, span]),
+      ).values()].sort((a, b) => a.start - b.start || a.index - b.index);
+      const groupText = group
+        .map((projection) => context.entries[projection.entryIndex].romaji)
+        .join("");
+      const groupSpanIndexes = groupSpans.map((span) => span.index);
+      for (let index = 0; index < groupSpans.length; index += 1) {
+        append(groupSpans[index].index, {
+          entryIndex: group[0].entryIndex,
+          logicalGroupIndex: groupIndex,
+          text: index === 0 ? groupText : "",
+          animationSpanIndexes:
+            index === 0 ? groupSpanIndexes : [groupSpans[index].index],
+        });
+      }
+      continue;
+    }
+
+    for (const projection of group) {
+      for (let index = 0; index < projection.spans.length; index += 1) {
+        append(projection.spans[index].index, {
+          entryIndex: projection.entryIndex,
+          logicalGroupIndex: groupIndex,
+          text: projection.split![index],
+          animationSpanIndexes: [projection.spans[index].index],
+        });
+      }
+    }
+  }
+
+  return bySpan;
 }
 
 function applyJapaneseReadingContextToSyllables(
@@ -877,7 +1076,7 @@ function applyJapaneseReadingContextToSyllables(
           syllPos = end;
           return { index, rawText: syllable.Text || "", normalizedText: text, start, end };
         });
-  const assignedEntryIndexes = new Set<number>();
+  const projectedEntries = buildEntryRomajiProjection(reading, context, effectiveSpans);
   const assignedFuriganaKeys = new Set<string>();
 
   for (let si = 0; si < syllables.length; si += 1) {
@@ -892,22 +1091,22 @@ function applyJapaneseReadingContextToSyllables(
     delete syllable.RomanizedText;
     delete syllable.TransliteratedText;
     delete syllable.RomajiSpaceBefore;
+    delete syllable.JapaneseRomajiTiming;
 
     const romajiParts: string[] = [];
     let firstIdx = -1;
     let lastIdx = -1;
+    const entryParts = (projectedEntries.get(si) || [])
+      .sort((a, b) => a.entryIndex - b.entryIndex);
 
-    for (let ei = 0; ei < context.entries.length; ei += 1) {
-      const entry = context.entries[ei];
-      if (entry.consumed) continue;
-      if (assignedEntryIndexes.has(ei)) continue;
-      if (rangesOverlap(entry.start, entry.end, syllStart, syllEnd)) {
-        if (romajiParts.length > 0 && !context.noSpaceBefore[ei]) romajiParts.push(" ");
-        romajiParts.push(entry.romaji);
-        if (firstIdx === -1) firstIdx = ei;
-        lastIdx = ei;
-        assignedEntryIndexes.add(ei);
+    for (const part of entryParts) {
+      if (!part.text) continue;
+      if (romajiParts.length > 0 && !context.noSpaceBefore[part.entryIndex]) {
+        romajiParts.push(" ");
       }
+      romajiParts.push(part.text);
+      if (firstIdx === -1) firstIdx = part.entryIndex;
+      lastIdx = part.entryIndex;
     }
 
     const hasSourceSpaceBefore = syllStart > 0 && /\s/.test(analysisText[syllStart - 1] || "");
@@ -922,18 +1121,36 @@ function applyJapaneseReadingContextToSyllables(
 
     const syllableRomaji = romajiParts.length > 0 ? romajiParts.join("") : undefined;
     const syllableRomajiSegments: JapaneseRomajiSegment[] = [];
-    for (let ei = firstIdx; ei >= 0 && ei <= lastIdx; ei += 1) {
-      const entry = context.entries[ei];
-      if (!entry || entry.consumed || !assignedEntryIndexes.has(ei) || !entry.romaji) continue;
-      const prefix = syllableRomajiSegments.length > 0 && !context.noSpaceBefore[ei] ? " " : "";
+    for (const part of entryParts) {
+      if (!part.text) continue;
+      const entry = context.entries[part.entryIndex];
+      const prefix =
+        syllableRomajiSegments.length > 0 && !context.noSpaceBefore[part.entryIndex]
+          ? " "
+          : "";
       syllableRomajiSegments.push({
-        text: `${prefix}${entry.romaji}`,
+        text: `${prefix}${part.text}`,
         ...(entry.readingProvenance ? { provenance: entry.readingProvenance } : {}),
       });
     }
     if (syllableRomaji) {
       syllable.RomanizedText = syllableRomaji;
       syllable.TransliteratedText = syllableRomaji;
+    }
+    if (entryParts.length > 0) {
+      const logicalGroupIndexes = [
+        ...new Set(entryParts.map((part) => part.logicalGroupIndex)),
+      ];
+      const animationSpanIndexes = [
+        ...new Set(entryParts.flatMap((part) => part.animationSpanIndexes)),
+      ];
+      syllable.JapaneseRomajiTiming = {
+        logicalGroupId:
+          logicalGroupIndexes.length === 1
+            ? `jp-token-${logicalGroupIndexes[0]}`
+            : `jp-span-${si}`,
+        animationSpanIndexes,
+      };
     }
 
     const localFurigana = reading.furigana

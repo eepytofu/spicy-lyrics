@@ -78,6 +78,44 @@ test("Kuromoji adapter exposes exact repeated-token ranges and typed provenance"
   assert.equal(tokens[2].provenance.nativeWordPosition, 3);
 });
 
+test("Kuromoji adapter normalizes numeric, counter, and name morphology", () => {
+  const tokens = normalizeKuromojiTokens("一人さん", [
+    {
+      surface_form: "一",
+      reading: "イチ",
+      pronunciation: "イチ",
+      pos: "名詞",
+      pos_detail_1: "数",
+      pos_detail_2: "*",
+      basic_form: "一",
+    },
+    {
+      surface_form: "人",
+      reading: "ニン",
+      pronunciation: "ニン",
+      pos: "名詞",
+      pos_detail_1: "接尾",
+      pos_detail_2: "助数詞",
+      basic_form: "人",
+    },
+    {
+      surface_form: "さん",
+      reading: "サン",
+      pronunciation: "サン",
+      pos: "名詞",
+      pos_detail_1: "接尾",
+      pos_detail_2: "人名",
+      basic_form: "さん",
+    },
+  ]);
+
+  assert.deepEqual(tokens[0].morphologyFeatures, ["numeric"]);
+  assert.deepEqual(tokens[1].morphologyFeatures, ["suffix", "counter"]);
+  assert.deepEqual(tokens[2].morphologyFeatures, ["suffix", "properName"]);
+  assert.equal(tokens[1].provenance.rawPartOfSpeechDetail2, "助数詞");
+  assert.equal(tokens[2].provenance.rawPartOfSpeechDetail2, "人名");
+});
+
 test("an injected analyzer and kana romanizer own the complete reading pass", async () => {
   let analyzerCalls = 0;
   let romanizerCalls = 0;

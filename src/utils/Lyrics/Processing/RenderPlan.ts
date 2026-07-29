@@ -20,6 +20,9 @@ export function buildRenderPlan(
       canonicalRange: unit.canonicalRange,
       text: unit.text,
       logicalGroupId: unit.logicalGroupId,
+      ...(unit.animationTimingRefs
+        ? { animationTimingRefs: unit.animationTimingRefs }
+        : {}),
       ...(unit.provenance ? { provenance: unit.provenance } : {}),
     }))
   );

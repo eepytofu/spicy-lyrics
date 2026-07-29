@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import { annotateKoreanLine } from "../src/utils/Lyrics/Processing/Korean/KoreanAnnotationProcessor.ts";
+import { buildTimedGenericPlan } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
 import { buildRenderPlan, validateRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 
@@ -26,4 +27,31 @@ test("render plan gives every provider span one unique timing owner", () => {
   assert.equal(plan.timedReadingUnits.length, line.spans.length);
   assert.equal(new Set(plan.timedReadingUnits.map((unit) => unit.spanId)).size, line.spans.length);
   assert.equal(validateRenderPlan(plan).valid, true);
+  assert.equal(plan.timedReadingUnits.some((unit) => unit.animationTimingRefs), false);
+});
+
+test("Chinese per-span readings do not inherit Japanese compound timing overrides", () => {
+  const plan = buildTimedGenericPlan(
+    {
+      StartTime: 0,
+      EndTime: 200,
+      Syllables: [
+        { Text: "诗", RomanizedText: "shī", StartTime: 0, EndTime: 100 },
+        { Text: "行", RomanizedText: "háng", StartTime: 100, EndTime: 200 },
+      ],
+    },
+    "shī háng",
+    "Chinese",
+  );
+  assert.ok(plan);
+  assert.deepEqual(
+    plan!.timedReadingUnits.map(({ text, animationTimingRefs }) => ({
+      text,
+      animationTimingRefs,
+    })),
+    [
+      { text: "shī", animationTimingRefs: undefined },
+      { text: " háng", animationTimingRefs: undefined },
+    ],
+  );
 });

@@ -7,7 +7,13 @@ export type JapanesePartOfSpeech =
   | "particle"
   | "suffix"
   | "other";
-export type JapaneseMorphologyFeature = "conjunctiveParticle" | "nonIndependent" | "suffix";
+export type JapaneseMorphologyFeature =
+  | "conjunctiveParticle"
+  | "nonIndependent"
+  | "suffix"
+  | "numeric"
+  | "counter"
+  | "properName";
 
 export type JapaneseAnalyzerTokenProvenance = {
   analyzerId: string;
@@ -19,6 +25,7 @@ export type JapaneseAnalyzerTokenProvenance = {
   nativeWordPosition?: number;
   rawPartOfSpeech?: string;
   rawPartOfSpeechDetail1?: string;
+  rawPartOfSpeechDetail2?: string;
 };
 
 /**
