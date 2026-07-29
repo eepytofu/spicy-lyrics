@@ -63,24 +63,62 @@ export function applyPhoneticMerges(
   }
 }
 
+export type JapaneseBoundaryReason =
+  | "start"
+  | "consumed"
+  | "phonetic"
+  | "linguistic"
+  | "punctuation"
+  | "sourceWhitespace"
+  | "sourceAdjacency"
+  | "mixedScript";
+
+export type JapaneseTokenBoundary = {
+  tokenIndex: number;
+  joinsPrevious: boolean;
+  reasons: readonly JapaneseBoundaryReason[];
+};
+
+export type JapaneseBoundaryPlan = readonly JapaneseTokenBoundary[];
+
 /**
- * Pass 2: Determine which tokens should merge (no space before).
- * Returns a boolean array where true means "merge with previous token".
+ * Determines the display-reading boundary before every analyzer token while
+ * retaining why that boundary exists. Source evidence, linguistic grouping,
+ * phonetic joining, punctuation, and mixed-script policy therefore remain
+ * distinguishable to downstream romaji and timing projection.
  */
-export function computeNoSpaceBefore(
+export function buildJapaneseBoundaryPlan(
   entries: MergeableEntry[],
-  tokens: readonly JapaneseAnalyzerToken[]
-): boolean[] {
-  const noSpaceBefore: boolean[] = Array.from({ length: tokens.length }, () => false);
+  tokens: readonly JapaneseAnalyzerToken[],
+  sourceText?: string,
+): JapaneseBoundaryPlan {
+  if (tokens.length === 0) return [];
+  const plan: JapaneseTokenBoundary[] = [];
+  const addReason = (
+    reasons: JapaneseBoundaryReason[],
+    reason: JapaneseBoundaryReason,
+  ) => {
+    if (!reasons.includes(reason)) reasons.push(reason);
+  };
+
   for (let i = 1; i < tokens.length; i++) {
+    const reasons: JapaneseBoundaryReason[] = [];
+    let joinsPrevious = false;
+    const joinFor = (reason: JapaneseBoundaryReason) => {
+      joinsPrevious = true;
+      addReason(reasons, reason);
+    };
     if (entries[i].consumed) {
-      noSpaceBefore[i] = true;
+      plan.push({ tokenIndex: i, joinsPrevious: true, reasons: ["consumed"] });
       continue;
     }
 
     let pi = i - 1;
     while (pi >= 0 && entries[pi].consumed) pi--;
-    if (pi < 0) continue;
+    if (pi < 0) {
+      plan.push({ tokenIndex: i, joinsPrevious: false, reasons: ["start"] });
+      continue;
+    }
 
     const prevSf = tokens[pi].surface;
     const prevPron = tokens[pi].pronunciationKana || tokens[pi].readingKana || "";
@@ -99,14 +137,14 @@ export function computeNoSpaceBefore(
       currSf.startsWith("っ") ||
       currSf.startsWith("ッ")
     ) {
-      noSpaceBefore[i] = true;
+      joinFor("phonetic");
     }
 
     // う extending previous o-row sound (long vowel)
     if ((currSf === "う" || currPron === "う") && prevPron) {
       const last = prevPron[prevPron.length - 1];
       if ("おこそとのほもよろをごぞどぼぽょうくすつぬふむゆるぐずづぶぷゅ".includes(last)) {
-        noSpaceBefore[i] = true;
+        joinFor("phonetic");
       }
     }
 
@@ -114,13 +152,13 @@ export function computeNoSpaceBefore(
     if ((currSf === "い" || currPron === "い") && prevPron) {
       const last = prevPron[prevPron.length - 1];
       if ("えけせてねへめれげぜでべぺぇ".includes(last)) {
-        noSpaceBefore[i] = true;
+        joinFor("phonetic");
       }
     }
 
     // A separately tokenized chōonpu still extends the preceding mora.
     if (PROLONGED_SOUND_MARK.test(currSf)) {
-      noSpaceBefore[i] = true;
+      joinFor("phonetic");
     }
 
     const prevPos = tokens[pi].partOfSpeech;
@@ -136,21 +174,28 @@ export function computeNoSpaceBefore(
         currPos === "verb" &&
         (currFeatures.includes("nonIndependent") || currFeatures.includes("suffix"))
       )
-        noSpaceBefore[i] = true;
+        joinFor("linguistic");
       if (currPos === "particle" && currFeatures.includes("conjunctiveParticle"))
-        noSpaceBefore[i] = true;
+        joinFor("linguistic");
       if (currPos === "auxiliaryVerb" && !/^(?:でしょ|です|だろ)/.test(currSf))
-        noSpaceBefore[i] = true;
+        joinFor("linguistic");
+    }
+
+    if (
+      entries[pi].readingGroupId &&
+      entries[pi].readingGroupId === entries[i].readingGroupId
+    ) {
+      joinFor("linguistic");
     }
 
     // Closing punctuation stays attached to the preceding text. Opening
     // punctuation starts a new Latin-typography group, while the first token
     // inside it stays attached to the opening mark.
     if (LeadingClosingPunctuation.test(currSf)) {
-      noSpaceBefore[i] = true;
+      joinFor("punctuation");
     }
     if (TrailingOpeningPunctuation.test(prevSf)) {
-      noSpaceBefore[i] = true;
+      joinFor("punctuation");
     }
 
     // Preserve authored slash adjacency instead of treating every slash as a
@@ -162,7 +207,7 @@ export function computeNoSpaceBefore(
       entries[pi].end === entries[i].start;
     const slashToken = /^[/／]+$/u;
     if (adjacentInSource && (slashToken.test(currSf) || slashToken.test(prevSf))) {
-      noSpaceBefore[i] = true;
+      joinFor("sourceAdjacency");
     }
 
     // Preserve an authored no-space boundary when Japanese text is attached
@@ -175,8 +220,35 @@ export function computeNoSpaceBefore(
       ((JapaneseText.test(prevSf) && LatinOrNumberText.test(currSf)) ||
         (LatinOrNumberText.test(prevSf) && JapaneseText.test(currSf)))
     ) {
-      noSpaceBefore[i] = true;
+      joinFor("mixedScript");
     }
+
+    if (reasons.length === 0) {
+      const sourceGap =
+        sourceText !== undefined &&
+        entries[pi].end !== undefined &&
+        entries[i].start !== undefined
+          ? sourceText.slice(entries[pi].end, entries[i].start)
+          : "";
+      addReason(
+        reasons,
+        /\s/u.test(sourceGap)
+          ? "sourceWhitespace"
+          : "linguistic",
+      );
+    }
+    plan.push({ tokenIndex: i, joinsPrevious, reasons });
   }
-  return noSpaceBefore;
+
+  return [
+    { tokenIndex: 0, joinsPrevious: false, reasons: ["start"] },
+    ...plan,
+  ];
+}
+
+export function japaneseTokenJoinsPrevious(
+  plan: JapaneseBoundaryPlan,
+  tokenIndex: number,
+): boolean {
+  return plan[tokenIndex]?.joinsPrevious === true;
 }

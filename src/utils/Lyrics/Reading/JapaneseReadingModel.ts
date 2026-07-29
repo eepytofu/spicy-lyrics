@@ -1,4 +1,7 @@
-import type { MergeableEntry } from "../Fork/JukujikunMerge.ts";
+import type {
+  JapaneseBoundaryPlan,
+  MergeableEntry,
+} from "../Fork/JukujikunMerge.ts";
 import type { ReadingProvenance, RenderPlan } from "../Processing/Model.ts";
 import type {
   JapaneseAnalyzer,
@@ -128,7 +131,7 @@ export type JapaneseTokenContext = {
   analyzer: JapaneseAnalyzer;
   tokens: readonly JapaneseAnalyzerToken[];
   entries: JapaneseTokenEntry[];
-  noSpaceBefore: boolean[];
+  boundaryPlan: JapaneseBoundaryPlan;
   explicitReadings: FuriganaSegment[];
   kanaToRomaji: JapaneseKanaRomanizer;
 };

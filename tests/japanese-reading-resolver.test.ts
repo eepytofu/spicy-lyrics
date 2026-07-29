@@ -386,7 +386,7 @@ test("verified lexical resolver corrects only audited Kuromoji token shapes", as
       fixture.text,
     );
     assert.equal(
-      analysis?.reading.romaji?.replace(/\s+/gu, ""),
+      analysis?.reading.romaji,
       fixture.expectedRomaji,
       fixture.text,
     );

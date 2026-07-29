@@ -1,4 +1,5 @@
 import type { JapaneseAnalyzerToken } from "../Processing/Japanese/JapaneseAnalyzer.ts";
+import { japaneseTokenJoinsPrevious } from "../Fork/JukujikunMerge.ts";
 import type {
   JapaneseRomajiSegment,
   JapaneseTokenContext,
@@ -30,7 +31,11 @@ export function buildRomajiProjectionFromContext(
   for (let index = 0; index < context.entries.length; index += 1) {
     const entry = context.entries[index];
     if (entry.consumed || !entry.romaji) continue;
-    const prefix = segments.length > 0 && !context.noSpaceBefore[index] ? " " : "";
+    const prefix =
+      segments.length > 0 &&
+      !japaneseTokenJoinsPrevious(context.boundaryPlan, index)
+        ? " "
+        : "";
     segments.push({
       text: `${prefix}${entry.romaji}`,
       ...(entry.readingProvenance ? { provenance: entry.readingProvenance } : {}),

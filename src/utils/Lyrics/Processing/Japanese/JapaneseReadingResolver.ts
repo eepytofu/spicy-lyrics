@@ -244,6 +244,18 @@ export function applyVerifiedLexicalReadings(
       entries[decision.tokenIndex].readingKana = decision.readingKana;
       applied.push(decision);
     }
+    const first = decisions[0];
+    const readingGroupId =
+      `verified-lexical:${first.lexicalStart}:${first.lexicalEnd}`;
+    for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {
+      const token = tokens[tokenIndex];
+      if (
+        token.start >= first.lexicalStart &&
+        token.end <= first.lexicalEnd
+      ) {
+        entries[tokenIndex].readingGroupId = readingGroupId;
+      }
+    }
   }
 
   return { applied, abstentions };

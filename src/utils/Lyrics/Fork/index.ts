@@ -13,7 +13,14 @@
 
 // Shared token merge logic. Japanese readings should come from Kuromoji; keep
 // this layer limited to spacing and tiny POS-guarded phonetic fixes.
-export { computeNoSpaceBefore, type MergeableEntry } from "./JukujikunMerge.ts";
+export {
+  buildJapaneseBoundaryPlan,
+  japaneseTokenJoinsPrevious,
+  type JapaneseBoundaryPlan,
+  type JapaneseBoundaryReason,
+  type JapaneseTokenBoundary,
+  type MergeableEntry,
+} from "./JukujikunMerge.ts";
 
 // Text detection patterns and utilities
 export {

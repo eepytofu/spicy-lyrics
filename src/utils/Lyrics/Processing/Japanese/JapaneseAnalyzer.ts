@@ -49,6 +49,8 @@ export type JapaneseAnalyzerToken = {
 export type JapaneseAnalyzerReadingState = {
   romaji: string;
   consumed: boolean;
+  /** Stable derived lexical group used by the reading boundary planner. */
+  readingGroupId?: string;
   surface?: string;
   readingKana?: string;
   start?: number;

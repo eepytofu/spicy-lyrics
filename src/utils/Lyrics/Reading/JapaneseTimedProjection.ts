@@ -1,4 +1,5 @@
 import { utf16FuriganaSegmentKey } from "../Processing/Japanese/FuriganaIdentity.ts";
+import { japaneseTokenJoinsPrevious } from "../Fork/JukujikunMerge.ts";
 import { kataToHira } from "./JapaneseFurigana.ts";
 import {
   KanaCharTest,
@@ -126,7 +127,10 @@ function buildEntryRomajiProjection(
   for (let entryIndex = 0; entryIndex < context.entries.length; entryIndex += 1) {
     const entry = context.entries[entryIndex];
     if (entry.consumed || !entry.romaji) continue;
-    if (previousActiveEntryIndex < 0 || !context.noSpaceBefore[entryIndex]) {
+    if (
+      previousActiveEntryIndex < 0 ||
+      !japaneseTokenJoinsPrevious(context.boundaryPlan, entryIndex)
+    ) {
       logicalGroupIndex = entryIndex;
     }
     previousActiveEntryIndex = entryIndex;
@@ -270,7 +274,10 @@ export function applyJapaneseReadingContextToSyllables(
 
     for (const part of entryParts) {
       if (!part.text) continue;
-      if (romajiParts.length > 0 && !context.noSpaceBefore[part.entryIndex]) {
+      if (
+        romajiParts.length > 0 &&
+        !japaneseTokenJoinsPrevious(context.boundaryPlan, part.entryIndex)
+      ) {
         romajiParts.push(" ");
       }
       romajiParts.push(part.text);
@@ -285,7 +292,7 @@ export function applyJapaneseReadingContextToSyllables(
       firstEntryIndex !== -1 &&
       (hasSourceSpaceBefore ||
         (firstEntryIndex !== previousLastEntryIndex &&
-          !context.noSpaceBefore[firstEntryIndex]))
+          !japaneseTokenJoinsPrevious(context.boundaryPlan, firstEntryIndex)))
     ) {
       syllable.RomajiSpaceBefore = true;
     }
@@ -297,7 +304,8 @@ export function applyJapaneseReadingContextToSyllables(
       if (!part.text) continue;
       const entry = context.entries[part.entryIndex];
       const prefix =
-        syllableRomajiSegments.length > 0 && !context.noSpaceBefore[part.entryIndex]
+        syllableRomajiSegments.length > 0 &&
+        !japaneseTokenJoinsPrevious(context.boundaryPlan, part.entryIndex)
           ? " "
           : "";
       syllableRomajiSegments.push({

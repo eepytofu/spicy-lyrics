@@ -9,7 +9,7 @@
 import Kuroshiro from "kuroshiro";
 import {
   applyPhoneticMerges,
-  computeNoSpaceBefore,
+  buildJapaneseBoundaryPlan,
 } from "../Fork/JukujikunMerge.ts";
 import { normalizeChineseProviderJapaneseText } from "../ChineseCharacterConversion.ts";
 import {
@@ -185,7 +185,7 @@ async function buildJapaneseTokenContext(
     analyzer,
     tokens,
     entries,
-    noSpaceBefore: computeNoSpaceBefore(entries, tokens),
+    boundaryPlan: buildJapaneseBoundaryPlan(entries, tokens, analysisText),
     explicitReadings,
     kanaToRomaji,
   };

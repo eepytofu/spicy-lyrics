@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { buildJapaneseBoundaryPlan } from "../src/utils/Lyrics/Fork/JukujikunMerge.ts";
 import type {
   JapaneseAnalyzer,
   JapaneseAnalyzerReadingState,
@@ -82,11 +83,7 @@ const fixtures: PipelineFixture[] = [
     expectedRawReading: "めふた",
     expectedAdapterReading: "めふた",
     expectedResolvedReading: "まぶた",
-    // The current boolean spacing contract cannot express that the verified
-    // lexical resolver joined these two analyzer tokens. The typed-boundary
-    // refactor has a dedicated red-to-green regression for `mabuta`; this
-    // characterization records the pre-refactor product output.
-    expectedRomaji: "ma buta",
+    expectedRomaji: "mabuta",
     expectedFurigana: [
       { start: 0, end: 1, reading: "ま" },
       { start: 1, end: 2, reading: "ぶた" },
@@ -190,6 +187,11 @@ test("Japanese accuracy harness records every reading-policy stage", async () =>
       resolvedEntries,
     );
     const resolvedReading = activeReading(resolvedEntries);
+    const boundaryPlan = buildJapaneseBoundaryPlan(
+      resolvedEntries,
+      tokens,
+      fixture.text,
+    );
 
     const analysis = await prepareJapaneseLineAnalysis(
       fixture.text,
@@ -210,6 +212,13 @@ test("Japanese accuracy harness records every reading-policy stage", async () =>
       fixture.expectedResolvedReading,
       `${fixture.text}: bounded resolver`,
     );
+    if (fixture.text === "目蓋") {
+      assert.deepEqual(boundaryPlan[1], {
+        tokenIndex: 1,
+        joinsPrevious: true,
+        reasons: ["linguistic"],
+      });
+    }
     assert.equal(analysis?.reading.romaji, fixture.expectedRomaji, `${fixture.text}: romaji`);
     assert.deepEqual(
       analysis?.reading.furigana.map(({ start, end, reading }) => ({

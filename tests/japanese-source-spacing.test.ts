@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applyPhoneticMerges,
-  computeNoSpaceBefore,
+  buildJapaneseBoundaryPlan,
+  japaneseTokenJoinsPrevious,
+  type JapaneseBoundaryPlan,
   type MergeableEntry,
 } from "../src/utils/Lyrics/Fork/JukujikunMerge.ts";
 import type { JapaneseAnalyzerToken } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
@@ -28,7 +30,7 @@ function analyzerToken(
   };
 }
 
-function spacingFor(source: string, surfaces: string[]): boolean[] {
+function boundaryPlanFor(source: string, surfaces: string[]): JapaneseBoundaryPlan {
   let cursor = 0;
   const entries: MergeableEntry[] = surfaces.map((surface) => {
     const start = source.indexOf(surface, cursor);
@@ -37,39 +39,81 @@ function spacingFor(source: string, surfaces: string[]): boolean[] {
     return { surface, romaji: surface, consumed: false, start, end: cursor };
   });
   const tokens = surfaces.map((surface) => analyzerToken(surface));
-  return computeNoSpaceBefore(entries, tokens);
+  return buildJapaneseBoundaryPlan(entries, tokens, source);
+}
+
+function joins(plan: JapaneseBoundaryPlan): boolean[] {
+  return plan.map(({ joinsPrevious }) => joinsPrevious);
 }
 
 test("Japanese local romaji keeps source-attached slashes attached", () => {
-  assert.deepEqual(spacingFor("D/N/A", ["D", "/", "N", "/", "A"]), [false, true, true, true, true]);
+  const plan = boundaryPlanFor("D/N/A", ["D", "/", "N", "/", "A"]);
+  assert.deepEqual(joins(plan), [false, true, true, true, true]);
+  assert.deepEqual(plan.slice(1).map(({ reasons }) => reasons), [
+    ["sourceAdjacency"],
+    ["sourceAdjacency"],
+    ["sourceAdjacency"],
+    ["sourceAdjacency"],
+  ]);
 });
 
 test("Japanese local romaji preserves explicitly spaced slashes", () => {
-  assert.deepEqual(spacingFor("A / B", ["A", "/", "B"]), [false, false, false]);
-  assert.deepEqual(spacingFor("A/ B", ["A", "/", "B"]), [false, true, false]);
-  assert.deepEqual(spacingFor("A /B", ["A", "/", "B"]), [false, false, true]);
+  const spaced = boundaryPlanFor("A / B", ["A", "/", "B"]);
+  assert.deepEqual(joins(spaced), [false, false, false]);
+  assert.deepEqual(spaced.slice(1).map(({ reasons }) => reasons), [
+    ["sourceWhitespace"],
+    ["sourceWhitespace"],
+  ]);
+  assert.deepEqual(joins(boundaryPlanFor("A/ B", ["A", "/", "B"])), [
+    false,
+    true,
+    false,
+  ]);
+  assert.deepEqual(joins(boundaryPlanFor("A /B", ["A", "/", "B"])), [
+    false,
+    false,
+    true,
+  ]);
 });
 
 test("Japanese local romaji uses Latin spacing around parentheticals", () => {
   const surfaces = ["な", "(", "それ", "いけっ", "!", ")"];
-  const noSpaceBefore = spacingFor("な(それいけっ!)", surfaces);
-  assert.deepEqual(noSpaceBefore, [false, false, true, false, true, true]);
+  const plan = boundaryPlanFor("な(それいけっ!)", surfaces);
+  assert.deepEqual(joins(plan), [false, false, true, false, true, true]);
+  assert.deepEqual(plan.slice(1).map(({ reasons }) => reasons), [
+    ["linguistic"],
+    ["punctuation"],
+    ["linguistic"],
+    ["phonetic", "punctuation"],
+    ["punctuation"],
+  ]);
 
   const romaji = ["na", "(", "sore", "ike", "!", ")"];
   const rendered = romaji
-    .map((text, index) => `${index > 0 && !noSpaceBefore[index] ? " " : ""}${text}`)
+    .map((text, index) =>
+      `${index > 0 && !japaneseTokenJoinsPrevious(plan, index) ? " " : ""}${text}`
+    )
     .join("");
   assert.equal(rendered, "na (sore ike!)");
 });
 
 test("Japanese local romaji preserves attached mixed-script labels and parenthetical spaces", () => {
   const surfaces = ["暁", "Records", "(", "akatsuki", "records", ")"];
-  const noSpaceBefore = spacingFor("暁Records (akatsuki records)", surfaces);
-  assert.deepEqual(noSpaceBefore, [false, true, false, true, false, true]);
+  const plan = boundaryPlanFor("暁Records (akatsuki records)", surfaces);
+  assert.deepEqual(joins(plan), [false, true, false, true, false, true]);
+  assert.deepEqual(plan.slice(1).map(({ reasons }) => reasons), [
+    ["mixedScript"],
+    ["sourceWhitespace"],
+    ["punctuation"],
+    ["sourceWhitespace"],
+    ["punctuation"],
+  ]);
 
   const romaji = ["akatsuki", "Records", "(", "akatsuki", "records", ")"];
   const rendered = romaji
-    .map((text, index) => `${index > 0 && !noSpaceBefore[index] ? " " : ""}${text}`)
+    .map((text, index) =>
+      `${index > 0 && !japaneseTokenJoinsPrevious(plan, index) ? " " : ""}${text}`
+    )
     .join("");
   assert.equal(rendered, "akatsukiRecords (akatsuki records)");
 });
@@ -91,10 +135,12 @@ test("Japanese local romaji joins a separately tokenized long-vowel mark", () =>
   ];
 
   applyPhoneticMerges(entries, tokens);
-  const noSpaceBefore = computeNoSpaceBefore(entries, tokens);
+  const boundaryPlan = buildJapaneseBoundaryPlan(entries, tokens);
   const rendered = entries
     .map((entry, index) =>
-      entry.romaji ? `${index > 0 && !noSpaceBefore[index] ? " " : ""}${entry.romaji}` : ""
+      entry.romaji
+        ? `${index > 0 && !japaneseTokenJoinsPrevious(boundaryPlan, index) ? " " : ""}${entry.romaji}`
+        : ""
     )
     .join("");
 
@@ -126,10 +172,12 @@ test("Japanese local romaji formats combined punctuation tokens", () => {
   ];
 
   applyPhoneticMerges(entries, tokens);
-  const noSpaceBefore = computeNoSpaceBefore(entries, tokens);
+  const boundaryPlan = buildJapaneseBoundaryPlan(entries, tokens);
   const rendered = entries
     .map((entry, index) =>
-      entry.romaji ? `${index > 0 && !noSpaceBefore[index] ? " " : ""}${entry.romaji}` : ""
+      entry.romaji
+        ? `${index > 0 && !japaneseTokenJoinsPrevious(boundaryPlan, index) ? " " : ""}${entry.romaji}`
+        : ""
     )
     .join("");
 
@@ -142,8 +190,9 @@ test("Japanese local romaji joins a token that starts with sokuon", () => {
     { surface: "っけ", romaji: "kke", consumed: false },
   ];
   const tokens = [analyzerToken("い", "い"), analyzerToken("っけ", "っけ")];
-  const noSpaceBefore = computeNoSpaceBefore(entries, tokens);
-  assert.deepEqual(noSpaceBefore, [false, true]);
+  const boundaryPlan = buildJapaneseBoundaryPlan(entries, tokens);
+  assert.deepEqual(joins(boundaryPlan), [false, true]);
+  assert.deepEqual(boundaryPlan[1].reasons, ["phonetic"]);
 });
 
 test("Japanese sokuon merging never duplicates trailing punctuation", () => {
