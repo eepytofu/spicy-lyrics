@@ -47,7 +47,7 @@ All lyric routes use `GET`:
 Required query data:
 
 - `title`
-- one or more `artist_name` values, or legacy comma-separated `artist`
+- one or more `artist_name` values
 - `duration` in seconds
 
 `album` is optional but can improve matching. The extension supplies these values automatically.
