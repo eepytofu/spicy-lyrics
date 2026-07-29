@@ -1,1 +1,3 @@
 dist/* linguist-vendored
+src/utils/Lyrics/Processing/Japanese/GeneratedJitendexFuriganaGeometry.ts text eol=lf
+tools/japanese-furigana-geometry/generated-metadata.json text eol=lf
