@@ -169,6 +169,30 @@ test("synced furigana and romaji glow only with their active lyric owner", () =>
   );
 });
 
+test("static and Simple Line sidecars use completed paint without a stale sweep", () => {
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Static"\]\s+\.romanized-below:not\(\.romanization-placeholder\)\s*\{[\s\S]*?color:\s*rgba\(255,\s*255,\s*255,\s*0\.85\);[\s\S]*?-webkit-text-fill-color:\s*rgba\(255,\s*255,\s*255,\s*0\.85\);/u,
+  );
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Static"\]\s+\.translated-below:not\(\.translation-placeholder\)\s*\{[\s\S]*?color:\s*rgba\(255,\s*255,\s*255,\s*0\.78\);[\s\S]*?-webkit-text-fill-color:\s*rgba\(255,\s*255,\s*255,\s*0\.78\);/u,
+  );
+
+  assert.match(
+    mainCss,
+    /#SpicyLyricsPage\.SimpleLyricsMode\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.romanized-below:not\(\.romanization-placeholder\)\s*\{[\s\S]*?background-image:\s*none;/u,
+  );
+  assert.match(
+    mainCss,
+    /#SpicyLyricsPage\.SimpleLyricsMode\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.translated-below:not\(\.translation-placeholder\)\s*\{[\s\S]*?background-image:\s*none;/u,
+  );
+  assert.match(
+    mainCss,
+    /rgba\(255,\s*207,\s*128,\s*0\.9\)/u,
+  );
+});
+
 test("timed romaji and line sidecars follow paint-only extra gradient state", () => {
   assert.match(
     animatorSource,

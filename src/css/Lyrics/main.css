@@ -519,6 +519,22 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   background: none;
 }
 
+/* Static lyrics have no playback state, so their sidecars use the same
+   completed reading/translation endpoints as a finished synced line. */
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer[data-lyrics-type="Static"]
+  .romanized-below:not(.romanization-placeholder) {
+  color: rgba(255, 255, 255, 0.85);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.85);
+}
+
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer[data-lyrics-type="Static"]
+  .translated-below:not(.translation-placeholder) {
+  color: rgba(255, 255, 255, 0.78);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.78);
+}
+
 #SpicyLyricsPage
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .line
@@ -546,6 +562,37 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   .romanized-below:not(.romanization-placeholder) {
   --extra-gradient-alpha: 0.85;
   --extra-gradient-alpha-end: 0.35;
+}
+
+/* Simple line mode paints the whole lyric as completed instead of sweeping it.
+   Keep its sidecars on the same flat completed contract as its main line and
+   furigana rather than leaving a stale spatial gradient behind. */
+#SpicyLyricsPage.SimpleLyricsMode
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .romanized-below:not(.romanization-placeholder) {
+  color: rgba(255, 255, 255, 0.85);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.85);
+  background-image: none;
+}
+
+#SpicyLyricsPage.SimpleLyricsMode
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .translated-below:not(.translation-placeholder) {
+  color: rgba(255, 255, 255, 0.78);
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.78);
+  background-image: none;
+}
+
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer[data-lyrics-type="Static"]
+  .romanized-below
+  > .reading-origin-provider-explicit,
+#SpicyLyricsPage.SimpleLyricsMode
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .romanized-below
+  > .reading-origin-provider-explicit {
+  color: rgba(255, 207, 128, 0.9);
+  -webkit-text-fill-color: rgba(255, 207, 128, 0.9);
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below.translation-placeholder {
