@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 class FakeClassList {
@@ -81,10 +82,23 @@ const {
   isJapaneseEntry,
   packAdjacentFuriganaClusters,
   renderBaseTextWithReadings,
+  renderFullLineBaseTextWithReadings,
 } = await import(
   "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
 );
 const { $japaneseReadingMode } = await import("../src/utils/uiState.ts");
+const staticApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Static.ts", import.meta.url),
+  "utf8",
+);
+const lineApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Synced/Line.ts", import.meta.url),
+  "utf8",
+);
+const syllableApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Synced/Syllable.ts", import.meta.url),
+  "utf8",
+);
 
 const plan = {
   lineId: "jp",
@@ -553,6 +567,76 @@ test("reading modes preserve one exact base-text run contract", () => {
       mode,
     );
   }
+});
+
+test("full-line modes keep base runs inside one stable wrapping owner", () => {
+  const source = "叫べ!!! 言葉にならぬ想いを";
+  const entry = {
+    Text: source,
+    JapaneseReading: {
+      sourceText: source,
+      romaji: "sakebe!!! kotoba ni naranu omoi wo",
+      furigana: [
+        { start: 0, end: 1, reading: "さけ" },
+        { start: 6, end: 7, reading: "こと" },
+        { start: 7, end: 8, reading: "ば" },
+        { start: 12, end: 13, reading: "おも" },
+      ],
+    },
+  };
+
+  for (const mode of ["romaji", "furigana", "both"] as const) {
+    $japaneseReadingMode.set(mode);
+    const line = new FakeElement();
+    const options = {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+    };
+
+    renderFullLineBaseTextWithReadings(
+      line as unknown as HTMLElement,
+      entry,
+      options,
+    );
+    appendLineExtras(
+      line as unknown as HTMLElement,
+      entry,
+      options,
+    );
+
+    const baseFlow = line.children[0];
+    const renderedBase = baseFlow.children
+      .map((run) =>
+        run.className.includes("lyric-base-plain")
+          ? run.textContent
+          : run.children.find((child) => child.className === "furigana-base")?.textContent || ""
+      )
+      .join("");
+    assert.equal(baseFlow.className, "lyric-base-flow", mode);
+    assert.equal(renderedBase, source, mode);
+    assert.equal(
+      line.children.some((child) => child.className.includes("lyric-base-run")),
+      false,
+      mode,
+    );
+    assert.equal(
+      baseFlow.children.some((child) => child.className.includes("lyric-base-run")),
+      true,
+      mode,
+    );
+    assert.equal(
+      line.children.filter((child) => child.className.includes("romanized-below")).length,
+      mode === "furigana" ? 0 : 1,
+      mode,
+    );
+  }
+});
+
+test("only full-line applyers add the shared base-flow owner", () => {
+  assert.match(staticApplyerSource, /renderFullLineBaseTextWithReadings\(lineElem,/u);
+  assert.match(lineApplyerSource, /renderFullLineBaseTextWithReadings\(lineElem,/u);
+  assert.doesNotMatch(syllableApplyerSource, /renderFullLineBaseTextWithReadings/u);
+  assert.match(syllableApplyerSource, /renderBaseTextWithReadings\(word,/u);
 });
 
 test("explicit readings tint only derived furigana while displaying the immutable source as ruby", () => {

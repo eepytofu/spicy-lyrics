@@ -131,6 +131,13 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-align: end;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .lyric-base-flow {
+  display: block;
+  flex: 0 0 100%;
+  min-width: 0;
+  width: 100%;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .has-furigana {
   --furigana-rt-size: var(--japanese-ruby-ratio);
   --furigana-rt-gap: var(--japanese-ruby-gap);

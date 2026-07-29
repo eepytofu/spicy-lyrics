@@ -8,7 +8,7 @@ import {
   getInterludeTimePadding,
   getLyricsBetweenShow,
 } from "../../lyrics.ts";
-import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "../ReadingRenderer.ts";
+import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderFullLineBaseTextWithReadings } from "../ReadingRenderer.ts";
 import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
@@ -97,7 +97,7 @@ export function ApplyLineLyrics(
       hanLanguageContext,
     };
 
-    if (renderBaseTextWithReadings(lineElem, line, renderOptions)) {
+    if (renderFullLineBaseTextWithReadings(lineElem, line, renderOptions)) {
       forceStackedLine(lineElem, line.OppositeAligned);
     }
     appendLineExtras(lineElem, line, renderOptions);

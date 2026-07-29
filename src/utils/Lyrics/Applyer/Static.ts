@@ -5,7 +5,7 @@ import {
   LyricsObject,
   type LyricsStatic,
 } from "../lyrics.ts";
-import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderBaseTextWithReadings } from "./ReadingRenderer.ts";
+import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderFullLineBaseTextWithReadings } from "./ReadingRenderer.ts";
 import type { ProcessedTextEntry } from "../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../HanLanguage.ts";
 import { beginLyricsApply, finishLyricsApply } from "./ApplyLifecycle.ts";
@@ -69,7 +69,7 @@ export function ApplyStaticLyrics(
       hanLanguageContext,
     };
 
-    if (renderBaseTextWithReadings(lineElem, line, renderOptions)) {
+    if (renderFullLineBaseTextWithReadings(lineElem, line, renderOptions)) {
       forceStackedLine(lineElem);
     }
     appendLineExtras(lineElem, line, renderOptions);

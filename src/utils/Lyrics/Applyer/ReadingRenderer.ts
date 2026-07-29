@@ -337,6 +337,28 @@ export function renderBaseTextWithReadings(
   return false;
 }
 
+/**
+ * Static and line-synced lyrics do not have per-word timing owners. Keep all
+ * base runs inside one flex item so the line's shared flex layout cannot turn
+ * tokenizer/readability chunks into independent layout items. Syllable lyrics
+ * deliberately keep rendering inside their existing word owners instead.
+ */
+export function renderFullLineBaseTextWithReadings(
+  lineElem: HTMLElement,
+  entry: JapaneseReadable,
+  options: ReadingRenderOptions,
+): boolean {
+  const baseFlow = document.createElement("span");
+  baseFlow.className = "lyric-base-flow";
+  lineElem.appendChild(baseFlow);
+
+  const renderedFurigana = renderBaseTextWithReadings(baseFlow, entry, options);
+  if (baseFlow.classList.contains("furigana-pending")) {
+    lineElem.classList.add("furigana-pending");
+  }
+  return renderedFurigana;
+}
+
 export function forceStackedLine(lineElem: HTMLElement, oppositeAligned?: boolean): void {
   lineElem.classList.add("HasExtras");
   lineElem.classList.toggle("HasOppositeAlignedExtras", oppositeAligned === true);

@@ -30,6 +30,16 @@ function ruleBody(selector: string): string {
   return mainCss.slice(bodyStart + 1, bodyEnd);
 }
 
+test("full-line base text remains one flex wrapping item", () => {
+  const baseFlow = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .lyric-base-flow",
+  );
+  assert.match(baseFlow, /display:\s*block/u);
+  assert.match(baseFlow, /flex:\s*0\s+0\s+100%/u);
+  assert.match(baseFlow, /min-width:\s*0/u);
+  assert.match(baseFlow, /width:\s*100%/u);
+});
+
 test("lyric sidecars remain stable geometry rather than animated blocks", () => {
   for (const selector of [
     "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
