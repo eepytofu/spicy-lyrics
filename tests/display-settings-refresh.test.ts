@@ -22,6 +22,14 @@ test("display refresh accepts only current-track cached lyrics and current revis
   assert.match(source, /if \(!lyrics\) \{\s*lyrics = await fetchLyrics\(uri\);\s*\}/u);
 });
 
+test("a failed display refresh is logged without retrying the same revision forever", () => {
+  const source = readSource("../src/components/Pages/PageView.ts");
+  assert.match(
+    source,
+    /try \{\s*await rerenderCurrentLyrics\(targetRevision\);\s*\} catch \(error\) \{\s*pageLogger\.warn\("Failed to refresh lyrics after a display setting changed", error\);\s*\}\s*appliedDisplaySettingsRevision = targetRevision;/u,
+  );
+});
+
 test("structural display settings share the cached refresh queue", () => {
   const source = readSource("../src/components/Pages/PageView.ts");
   for (const setting of [

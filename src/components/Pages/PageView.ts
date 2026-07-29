@@ -889,7 +889,11 @@ async function runQueuedDisplaySettingsRefresh(): Promise<void> {
   try {
     while (appliedDisplaySettingsRevision < displaySettingsRevision) {
       const targetRevision = displaySettingsRevision;
-      await rerenderCurrentLyrics(targetRevision);
+      try {
+        await rerenderCurrentLyrics(targetRevision);
+      } catch (error) {
+        pageLogger.warn("Failed to refresh lyrics after a display setting changed", error);
+      }
       appliedDisplaySettingsRevision = targetRevision;
     }
   } finally {
