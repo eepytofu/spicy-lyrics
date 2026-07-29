@@ -40,6 +40,27 @@ test("full-line base text remains one flex wrapping item", () => {
   assert.match(baseFlow, /width:\s*100%/u);
 });
 
+test("plain syllable text reserves the same base row as real ruby", () => {
+  const cluster = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-cluster",
+  );
+
+  assert.match(cluster, /display:\s*inline-grid/u);
+  assert.match(
+    cluster,
+    /grid-template-rows:\s*calc\(var\(--furigana-rt-size\)\s*\+\s*var\(--furigana-rt-gap\)\)\s+1em/u,
+  );
+  assert.match(cluster, /vertical-align:\s*bottom/u);
+  assert.match(
+    mainCss,
+    /\.furigana-plain-cluster\s*\{\s*justify-items:\s*start/u,
+  );
+  assert.doesNotMatch(
+    mainCss,
+    /\.word\.furigana-row-reserved\s*\{[^}]*padding-top/u,
+  );
+});
+
 test("lyric sidecars remain stable geometry rather than animated blocks", () => {
   for (const selector of [
     "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",

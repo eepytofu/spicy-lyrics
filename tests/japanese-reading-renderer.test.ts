@@ -482,21 +482,119 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
 
     const renderedBase = line.children
       .map((run) =>
-        run.className.includes("lyric-base-plain")
-          ? run.textContent
-          : run.children.find((child) => child.className === "furigana-base")?.textContent || ""
+        run.children.find((child) => child.className === "furigana-base")?.textContent
+          ?? run.textContent
       )
       .join("");
     const plainBase = line.children
-      .filter((run) => run.className.includes("lyric-base-plain"))
-      .map((run) => run.textContent);
+      .filter((run) =>
+        run.className.includes("furigana-plain-cluster") ||
+        run.className.includes("lyric-base-whitespace")
+      )
+      .map((run) =>
+        run.children.find((child) => child.className === "furigana-base")?.textContent
+          ?? run.textContent
+      );
 
     assert.equal(renderedBase, fixture.text);
     assert.equal(plainBase.join(""), fixture.text.slice(fixture.rubyEnd));
     assert.ok(plainBase.length > 1);
     assert.equal(plainBase.includes("("), false);
     assert.equal(plainBase.includes(")"), false);
+    assert.equal(
+      line.children
+        .filter((run) => run.className.includes("furigana-plain-cluster"))
+        .some((run) => run.children.some((child) => child.className.includes("furigana-reading"))),
+      false,
+    );
   }
+});
+
+test("plain text beside or between ruby shares the ruby base row without placeholders", () => {
+  $japaneseReadingMode.set("furigana");
+
+  const partial = new FakeElement();
+  renderBaseTextWithReadings(
+    partial as unknown as HTMLElement,
+    {
+      Text: "確か",
+      JapaneseReading: {
+        sourceText: "確か",
+        romaji: "tashika",
+        furigana: [{ start: 0, end: 1, reading: "たし" }],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  assert.deepEqual(
+    partial.children.map((run) => ({
+      classes: run.className,
+      base: run.children.find((child) => child.className === "furigana-base")?.textContent,
+      reading: run.children.find((child) => child.className.includes("furigana-reading"))?.textContent,
+    })),
+    [
+      {
+        classes: "lyric-base-run furigana-cluster",
+        base: "確",
+        reading: "たし",
+      },
+      {
+        classes: "lyric-base-run furigana-plain-cluster",
+        base: "か",
+        reading: undefined,
+      },
+    ],
+  );
+
+  const reserved = new FakeElement();
+  renderBaseTextWithReadings(
+    reserved as unknown as HTMLElement,
+    { Text: "も" },
+    {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+      reserveFurigana: true,
+    },
+  );
+  assert.equal(reserved.classList.values.has("furigana-row-reserved"), true);
+  assert.equal(reserved.children[0]?.className.includes("furigana-plain-cluster"), true);
+  assert.equal(reserved.children[0]?.children[0]?.className, "furigana-base");
+  assert.equal(reserved.children[0]?.children[0]?.textContent, "も");
+  assert.equal(reserved.textContent.includes("\u00a0"), false);
+});
+
+test("whitespace beside ruby remains an ordinary wrapping boundary", () => {
+  $japaneseReadingMode.set("furigana");
+
+  const line = new FakeElement();
+  renderBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    {
+      Text: "ぶち壊して Shout It Out Loud!!!",
+      JapaneseReading: {
+        sourceText: "ぶち壊して Shout It Out Loud!!!",
+        romaji: "buchikowashite Shout It Out Loud!!!",
+        furigana: [{ start: 2, end: 3, reading: "こわ" }],
+      },
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  const whitespaceRuns = line.children.filter((run) =>
+    run.className.includes("lyric-base-whitespace")
+  );
+  assert.deepEqual(
+    whitespaceRuns.map((run) => run.textContent),
+    [" ", " ", " ", " "],
+  );
+  assert.equal(
+    whitespaceRuns.every((run) =>
+      run.className.includes("lyric-base-plain") &&
+      !run.className.includes("furigana-plain-cluster")
+    ),
+    true,
+  );
 });
 
 test("reading modes preserve one exact base-text run contract", () => {
@@ -513,9 +611,8 @@ test("reading modes preserve one exact base-text run contract", () => {
   const renderedBaseText = (line: FakeElement): string =>
     line.children
       .map((run) =>
-        run.className.includes("lyric-base-plain")
-          ? run.textContent
-          : run.children.find((child) => child.className === "furigana-base")?.textContent || ""
+        run.children.find((child) => child.className === "furigana-base")?.textContent
+          ?? run.textContent
       )
       .join("");
 

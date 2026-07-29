@@ -158,7 +158,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   height: calc(var(--DefaultLyricsSize) * 0.52);
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-cluster {
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-cluster,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-plain-cluster {
   display: inline-grid;
   grid-template-rows: calc(var(--furigana-rt-size) + var(--furigana-rt-gap)) 1em;
   justify-items: center;
@@ -172,14 +173,11 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   display: inline;
 }
 
-/* A syllable without its own ruby may still share a line with ruby-bearing
-   words. Reserve that row on the word itself instead of manufacturing an
-   invisible reading and NBSP for every plain-text chunk. */
-#SpicyLyricsPage .LyricsContainer .LyricsContent .word.furigana-row-reserved {
-  display: inline-block;
-  padding-top: calc(var(--furigana-rt-size) + var(--furigana-rt-gap));
-  line-height: 1;
-  vertical-align: bottom;
+/* Plain text beside ruby uses the same two-row cluster geometry with an empty
+   reading row. This keeps every base glyph on one baseline without adding a
+   hidden reading or placeholder character. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-plain-cluster {
+  justify-items: start;
 }
 
 /* Readings wider than their base overhang the neighbors like typeset ruby

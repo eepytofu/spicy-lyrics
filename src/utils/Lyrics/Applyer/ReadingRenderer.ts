@@ -62,6 +62,7 @@ const plainTextSegmenter = typeof Intl.Segmenter === "function"
   : undefined;
 const OpeningPunctuation = /^[([{（［｛「『【〈《〔]+$/u;
 const ClosingPunctuation = /^[)\]}）］｝」』】〉》〕、。！？!?…,:;]+$/u;
+const WhitespaceOnlyText = /^\s+$/u;
 
 function plainTextWrapChunks(text: string): string[] {
   const segmented = plainTextSegmenter
@@ -120,6 +121,7 @@ function appendPlainText(
   text: string,
   sourceStart = 0,
   hanLanguageContext?: HanLanguageContext,
+  layout: "inline" | "furiganaRow" = "inline",
 ): void {
   if (!text) return;
 
@@ -127,12 +129,27 @@ function appendPlainText(
   for (const chunk of plainTextWrapChunks(text)) {
     for (const languageRun of splitHanLanguageRuns(chunk, hanLanguageContext)) {
       const run = document.createElement("span");
-      run.className = "lyric-base-run lyric-base-plain";
+      const usesFuriganaRow =
+        layout === "furiganaRow" &&
+        !WhitespaceOnlyText.test(languageRun.text);
+      run.className = usesFuriganaRow
+        ? "lyric-base-run furigana-plain-cluster"
+        : layout === "furiganaRow"
+          ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
+          : "lyric-base-run lyric-base-plain";
       run.dataset.sourceStart = String(cursor);
       cursor += languageRun.text.length;
       run.dataset.sourceEnd = String(cursor);
-      run.textContent = languageRun.text;
       if (languageRun.language) run.lang = languageRun.language;
+
+      if (usesFuriganaRow) {
+        const base = document.createElement("span");
+        base.className = "furigana-base";
+        base.textContent = languageRun.text;
+        run.appendChild(base);
+      } else {
+        run.textContent = languageRun.text;
+      }
       parent.appendChild(run);
     }
   }
@@ -199,6 +216,7 @@ export function appendFuriganaText(
       text.slice(cursor, segment.start),
       cursor,
       hanLanguageContext,
+      "furiganaRow",
     );
 
     const cluster = document.createElement("span");
@@ -235,7 +253,7 @@ export function appendFuriganaText(
     cursor = segment.end;
   }
 
-  appendPlainText(parent, text.slice(cursor), cursor, hanLanguageContext);
+  appendPlainText(parent, text.slice(cursor), cursor, hanLanguageContext, "furiganaRow");
 }
 
 const hasElementClass = (element: Element, className: string): boolean =>
@@ -319,7 +337,7 @@ export function renderBaseTextWithReadings(
     isJapaneseEntry(entry, options.isJapaneseLyrics)
   ) {
     element.classList.add("has-furigana", "furigana-row-reserved");
-    appendPlainText(element, text, 0, hanLanguageContext);
+    appendPlainText(element, text, 0, hanLanguageContext, "furiganaRow");
     return true;
   }
 
