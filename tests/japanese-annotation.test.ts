@@ -87,6 +87,103 @@ test("Japanese annotation keeps split spans as unique timing owners", async () =
   assert.equal(plan.joinedDisplayText.length > 0, true);
 });
 
+test("Japanese annotation preserves exact reading ranges across partial timing spans", async () => {
+  const line = {
+    id: "jp-partial-span",
+    displayText: "耳鳴りが",
+    paragraphProvenance: "lineBoundary" as const,
+    spans: [
+      {
+        id: "0",
+        rawText: "耳",
+        cleanText: "耳",
+        startMs: 100,
+        endMs: 200,
+        providerPartOfWord: true,
+      },
+      {
+        id: "1",
+        rawText: "鳴りが",
+        cleanText: "鳴りが",
+        startMs: 200,
+        endMs: 500,
+        providerPartOfWord: false,
+      },
+    ],
+  };
+  const tokens: JapaneseAnalyzerToken[] = [
+    {
+      surface: "耳鳴り",
+      start: 0,
+      end: 3,
+      readingKana: "みみなり",
+      pronunciationKana: "みみなり",
+      partOfSpeech: "noun",
+      morphologyFeatures: [],
+      baseForm: "耳鳴り",
+      conjugationType: "",
+      conjugationForm: "",
+      provenance: { analyzerId: "partial-span-fixture", rangeSource: "native" },
+    },
+    {
+      surface: "が",
+      start: 3,
+      end: 4,
+      readingKana: "が",
+      pronunciationKana: "が",
+      partOfSpeech: "particle",
+      morphologyFeatures: [],
+      baseForm: "が",
+      conjugationType: "",
+      conjugationForm: "",
+      provenance: { analyzerId: "partial-span-fixture", rangeSource: "native" },
+    },
+  ];
+  const analyzer: JapaneseAnalyzer = {
+    id: "partial-span-fixture",
+    async analyze(text) {
+      assert.equal(text, "耳鳴りが");
+      return tokens;
+    },
+  };
+  const canonical = buildCanonicalLine(line);
+  const annotation = await annotateJapaneseLine(
+    canonical,
+    undefined,
+    undefined,
+    {
+      analyzer,
+      kanaRomanizer: (kana) =>
+        ({ みみなり: "miminari", が: "ga" })[kana] ?? kana,
+    },
+  );
+  assert.ok(annotation);
+
+  const plan = buildRenderPlan(line, canonical, [annotation]);
+  assert.deepEqual(
+    plan.timedReadingUnits.map((unit) => ({
+      spanId: unit.spanId,
+      text: unit.text,
+      animationTimingRefs: unit.animationTimingRefs,
+      animationRange: unit.animationRange,
+    })),
+    [
+      {
+        spanId: "0",
+        text: "miminari",
+        animationTimingRefs: ["0", "1"],
+        animationRange: { startCp: 0, endCp: 3 },
+      },
+      {
+        spanId: "1",
+        text: " ga",
+        animationTimingRefs: undefined,
+        animationRange: { startCp: 3, endCp: 4 },
+      },
+    ],
+  );
+});
+
 test("structured-provider Japanese lines keep authored English spaces without duplicating timed words", async () => {
   const syllables = [
     { Text: "ぶ", IsPartOfWord: true },

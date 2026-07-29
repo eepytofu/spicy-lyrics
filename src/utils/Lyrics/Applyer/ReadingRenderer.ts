@@ -14,7 +14,7 @@ import {
   type JapaneseReadable,
   type JapaneseReading,
 } from "../Reading/JapaneseReading.ts";
-import type { RenderPlan } from "../Processing/Model.ts";
+import type { RenderPlan, TextRange } from "../Processing/Model.ts";
 import { renderReadingPlan } from "./ReadingPlanRenderer.ts";
 import { resolveSyllableBoundary } from "../Processing/SyllableBoundaries.ts";
 import {
@@ -40,6 +40,14 @@ export type ReadingRenderOptions = {
 type SyllableLike = JapaneseReadable & {
   IsPartOfWord?: boolean;
   RomajiSpaceBefore?: boolean;
+};
+
+type RomajiAnimatorEntry = {
+  RomajiElement?: HTMLElement;
+  RomajiStartTime?: number;
+  RomajiEndTime?: number;
+  StartTime?: number;
+  EndTime?: number;
 };
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
@@ -352,13 +360,7 @@ export function appendSyllableRomanizedBelow(
   groupRomanizedText: string | undefined,
   groupProviderTranslatedText: string | undefined,
   groupTranslatedText: string | undefined,
-  animatorEntries: Array<{
-    RomajiElement?: HTMLElement;
-    RomajiStartTime?: number;
-    RomajiEndTime?: number;
-    StartTime?: number;
-    EndTime?: number;
-  }> | undefined,
+  animatorEntries: RomajiAnimatorEntry[] | undefined,
   readingPlan: RenderPlan | undefined,
   options: ReadingRenderOptions
 ): void {
@@ -387,6 +389,19 @@ export function appendSyllableRomanizedBelow(
       owner.RomajiElement = element;
       delete owner.RomajiStartTime;
       delete owner.RomajiEndTime;
+
+      const exactWindow = unit.animationRange
+        ? projectCanonicalRangeToTiming(
+            readingPlan,
+            unit.animationRange,
+            animatorEntries
+          )
+        : undefined;
+      if (exactWindow) {
+        owner.RomajiStartTime = exactWindow.startTime;
+        owner.RomajiEndTime = exactWindow.endTime;
+        return;
+      }
 
       const animationEntries = (unit.animationTimingRefs || [])
         .map((ref) => animatorEntries?.[Number(ref)])
@@ -454,4 +469,50 @@ export function appendSyllableRomanizedBelow(
     translationPending: false,
   });
   appendTranslatedBelow(lineElem, sourceText, translations.generic, options);
+}
+
+function projectCanonicalRangeToTiming(
+  plan: RenderPlan,
+  range: TextRange,
+  animatorEntries: RomajiAnimatorEntry[] | undefined
+): { startTime: number; endTime: number } | undefined {
+  if (!animatorEntries || range.endCp <= range.startCp) return undefined;
+
+  const timeAt = (offsetCp: number, edge: "start" | "end"): number | undefined => {
+    const mapping = plan.sourceUnits.find(({ canonicalRange }) =>
+      edge === "start"
+        ? offsetCp >= canonicalRange.startCp && offsetCp < canonicalRange.endCp
+        : offsetCp > canonicalRange.startCp && offsetCp <= canonicalRange.endCp
+    );
+    if (!mapping) return undefined;
+
+    const entry = animatorEntries[Number(mapping.spanId)];
+    if (
+      !entry ||
+      !Number.isFinite(entry.StartTime) ||
+      !Number.isFinite(entry.EndTime)
+    ) {
+      return undefined;
+    }
+
+    const sourceLength =
+      mapping.canonicalRange.endCp - mapping.canonicalRange.startCp;
+    if (sourceLength <= 0) return undefined;
+    const progress = clamp(
+      (offsetCp - mapping.canonicalRange.startCp) / sourceLength,
+      0,
+      1
+    );
+    return entry.StartTime! + (entry.EndTime! - entry.StartTime!) * progress;
+  };
+
+  const startTime = timeAt(range.startCp, "start");
+  const endTime = timeAt(range.endCp, "end");
+  return (
+    startTime !== undefined &&
+    endTime !== undefined &&
+    endTime > startTime
+  )
+    ? { startTime, endTime }
+    : undefined;
 }

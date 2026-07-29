@@ -63,6 +63,9 @@ export type JapaneseRomajiTimingProjection = {
   logicalGroupId: string;
   /** Span indexes whose combined window owns this reading unit's sweep. */
   animationSpanIndexes: number[];
+  /** Exact UTF-16 source range represented by this reading unit. */
+  animationStart: number;
+  animationEnd: number;
 };
 
 export type JapaneseReadable = {
@@ -863,6 +866,8 @@ type ProjectedEntryPart = {
   logicalGroupIndex: number;
   text: string;
   animationSpanIndexes: number[];
+  animationStart: number;
+  animationEnd: number;
 };
 
 function normalizedRomajiComparison(text: string): string {
@@ -1017,6 +1022,12 @@ function buildEntryRomajiProjection(
         .map((projection) => context.entries[projection.entryIndex].romaji)
         .join("");
       const groupSpanIndexes = groupSpans.map((span) => span.index);
+      const animationStart = Math.min(
+        ...group.map((projection) => context.entries[projection.entryIndex].start)
+      );
+      const animationEnd = Math.max(
+        ...group.map((projection) => context.entries[projection.entryIndex].end)
+      );
       for (let index = 0; index < groupSpans.length; index += 1) {
         append(groupSpans[index].index, {
           entryIndex: group[0].entryIndex,
@@ -1024,6 +1035,10 @@ function buildEntryRomajiProjection(
           text: index === 0 ? groupText : "",
           animationSpanIndexes:
             index === 0 ? groupSpanIndexes : [groupSpans[index].index],
+          animationStart:
+            index === 0 ? animationStart : groupSpans[index].start,
+          animationEnd:
+            index === 0 ? animationEnd : groupSpans[index].end,
         });
       }
       continue;
@@ -1036,6 +1051,14 @@ function buildEntryRomajiProjection(
           logicalGroupIndex: groupIndex,
           text: projection.split![index],
           animationSpanIndexes: [projection.spans[index].index],
+          animationStart: Math.max(
+            context.entries[projection.entryIndex].start,
+            projection.spans[index].start
+          ),
+          animationEnd: Math.min(
+            context.entries[projection.entryIndex].end,
+            projection.spans[index].end
+          ),
         });
       }
     }
@@ -1131,12 +1154,22 @@ function applyJapaneseReadingContextToSyllables(
       const animationSpanIndexes = [
         ...new Set(entryParts.flatMap((part) => part.animationSpanIndexes)),
       ];
+      const animatedParts = entryParts.filter((part) => part.text);
+      const rangeParts = animatedParts.length > 0 ? animatedParts : entryParts;
+      const animationStart = Math.min(
+        ...rangeParts.map((part) => part.animationStart)
+      );
+      const animationEnd = Math.max(
+        ...rangeParts.map((part) => part.animationEnd)
+      );
       syllable.JapaneseRomajiTiming = {
         logicalGroupId:
           logicalGroupIndexes.length === 1
             ? `jp-token-${logicalGroupIndexes[0]}`
             : `jp-span-${si}`,
         animationSpanIndexes,
+        animationStart,
+        animationEnd,
       };
     }
 

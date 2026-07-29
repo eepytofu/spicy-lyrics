@@ -163,6 +163,74 @@ test("opaque Japanese readings bind their sidecar to the full compound window", 
   assert.equal(animatorEntries[1].RomajiEndTime, undefined);
 });
 
+test("Japanese romaji sweep interpolates token boundaries inside a timing span", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  const animatorEntries: Array<{
+    StartTime: number;
+    EndTime: number;
+    RomajiElement?: HTMLElement;
+    RomajiStartTime?: number;
+    RomajiEndTime?: number;
+  }> = [
+    { StartTime: 100, EndTime: 200 },
+    { StartTime: 200, EndTime: 500 },
+  ];
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [
+      { Text: "耳", JapaneseReading: { sourceText: "耳", romaji: "miminari", furigana: [] } },
+      { Text: "鳴りが", JapaneseReading: { sourceText: "鳴りが", romaji: "ga", furigana: [] } },
+    ],
+    "耳鳴りが",
+    "miminari ga",
+    undefined,
+    undefined,
+    animatorEntries,
+    {
+      ...plan,
+      sourceUnits: [
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 1 },
+          rawText: "耳",
+          cleanText: "耳",
+        },
+        {
+          spanId: "1",
+          canonicalRange: { startCp: 1, endCp: 4 },
+          rawText: "鳴りが",
+          cleanText: "鳴りが",
+        },
+      ],
+      joinedDisplayText: "miminari ga",
+      timedReadingUnits: [
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 1 },
+          text: "miminari",
+          logicalGroupId: "jp-token-0",
+          animationTimingRefs: ["0", "1"],
+          animationRange: { startCp: 0, endCp: 3 },
+        },
+        {
+          spanId: "1",
+          canonicalRange: { startCp: 1, endCp: 4 },
+          text: " ga",
+          logicalGroupId: "jp-token-1",
+          animationRange: { startCp: 3, endCp: 4 },
+        },
+      ],
+    },
+    { useRomanized: true, isJapaneseLyrics: true },
+  );
+
+  assert.equal(animatorEntries[0].RomajiStartTime, 100);
+  assert.equal(animatorEntries[0].RomajiEndTime, 400);
+  assert.equal(animatorEntries[1].RomajiStartTime, 400);
+  assert.equal(animatorEntries[1].RomajiEndTime, 500);
+});
+
 test("timed-group suppression removes only the selected line segment", () => {
   $japaneseReadingMode.set("furigana");
   const line = new FakeElement();

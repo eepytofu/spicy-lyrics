@@ -72,6 +72,18 @@ export async function annotateJapaneseLine(
     const animationTimingRefs = timingProjection?.animationSpanIndexes
       .map((spanIndex) => canonical.spanMappings[spanIndex]?.spanId)
       .filter((spanId): spanId is string => typeof spanId === "string");
+    const animationRange = timingProjection && aligned[index]
+      ? {
+          startCp: utf16IndexToCodePointOffset(
+            canonical.text,
+            timingProjection.animationStart
+          ),
+          endCp: utf16IndexToCodePointOffset(
+            canonical.text,
+            timingProjection.animationEnd
+          ),
+        }
+      : undefined;
     return {
       canonicalRange: mapping.canonicalRange,
       text: aligned[index],
@@ -81,6 +93,7 @@ export async function annotateJapaneseLine(
       ...(animationTimingRefs && animationTimingRefs.length > 1
         ? { animationTimingRefs }
         : {}),
+      ...(animationRange ? { animationRange } : {}),
       ...(temp[index].JapaneseReading?.romajiSegments?.some((segment) => segment.provenance === "providerExplicit")
         ? { provenance: "providerExplicit" as const }
         : {}),

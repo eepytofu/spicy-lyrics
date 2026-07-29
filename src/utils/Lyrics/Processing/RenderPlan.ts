@@ -23,6 +23,9 @@ export function buildRenderPlan(
       ...(unit.animationTimingRefs
         ? { animationTimingRefs: unit.animationTimingRefs }
         : {}),
+      ...(unit.animationRange
+        ? { animationRange: unit.animationRange }
+        : {}),
       ...(unit.provenance ? { provenance: unit.provenance } : {}),
     }))
   );

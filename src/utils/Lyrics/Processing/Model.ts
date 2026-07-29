@@ -60,6 +60,8 @@ export type ReadingUnit = {
   readonly timingRefs: readonly string[];
   /** Optional derived-reading sweep window; source timing owners stay distinct. */
   readonly animationTimingRefs?: readonly string[];
+  /** Exact canonical source range represented by this derived reading text. */
+  readonly animationRange?: TextRange;
   readonly provenance?: ReadingProvenance;
 };
 
@@ -90,6 +92,7 @@ export type TimedReadingUnit = {
   readonly text: string;
   readonly logicalGroupId: string;
   readonly animationTimingRefs?: readonly string[];
+  readonly animationRange?: TextRange;
   readonly provenance?: ReadingProvenance;
 };
 
