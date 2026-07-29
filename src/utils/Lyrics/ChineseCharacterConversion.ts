@@ -43,6 +43,11 @@ function restoreJapaneseLexicalForms(source: string, normalized: string): string
   // to 叶う/叶える, while ordinary 葉 words such as 葉っぱ stay untouched.
   restoreMatches(/叶(?=[わいうえお])/gu, 0, "叶");
   restoreMatches(/叶っ(?=[たて])/gu, 0, "叶");
+
+  // OpenCC's Simplified-to-Traditional character pass expands Japanese 占 to
+  // the Traditional Chinese variant 佔, which its Shinjitai table does not
+  // map back. Japanese uses 占, so preserve that source character.
+  restoreMatches(/占/gu, 0, "占");
   return result;
 }
 

@@ -45,6 +45,10 @@ test("keeps ambiguous Japanese lexical forms in safe source contexts", () => {
     normalizeChineseProviderJapaneseText("后妃 皇后 太后 后宫"),
     "后妃 皇后 太后 後宮"
   );
+  assert.equal(
+    normalizeChineseProviderJapaneseText("ひとり占めできるまで"),
+    "ひとり占めできるまで"
+  );
 });
 
 test("limits Japanese kanji repair to built-in Chinese lyric providers", () => {

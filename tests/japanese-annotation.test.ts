@@ -269,6 +269,18 @@ test("opaque and context-sensitive readings keep one text unit but sweep the who
   }
 });
 
+test("Chinese-provider Japanese repair preserves Japanese 占", async () => {
+  const reading = (await prepareJapaneseLineAnalysis(
+    "ひとり占めできるまで",
+    undefined,
+    undefined,
+    { normalizeChineseProviderKanji: true },
+  ))?.reading;
+  assert.ok(reading);
+  assert.equal(reading!.sourceText, "ひとり占めできるまで");
+  assert.equal(reading!.displayText ?? reading!.sourceText, "ひとり占めできるまで");
+});
+
 test("Chinese-provider Japanese repair reaches every timed display span", async () => {
   const syllables = ["梦", "见", "て", "は"].map((Text) => ({ Text }));
   const map = buildJapaneseLineTextMap(syllables);
