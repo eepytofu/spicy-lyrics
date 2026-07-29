@@ -5,6 +5,11 @@ import {
 } from "../ExtraGradient.ts";
 
 export type LyricAnimationState = "NotSung" | "Active" | "Sung";
+export type SyllableLinePaintAction =
+  | "none"
+  | "resetNotSung"
+  | "continueSung"
+  | "settleSung";
 
 interface ClassTarget {
   classList: Pick<DOMTokenList, "toggle">;
@@ -76,6 +81,24 @@ export function wordGradientTargets(
     base,
     extra: simpleMode ? base : extraGradientPositionAt(progress),
   };
+}
+
+/**
+ * A line reached through ordinary playback may finish its spring tail after
+ * its timing window. A seek can skip that Active phase entirely, so those
+ * lines must snap to their terminal paint state instead.
+ */
+export function syllableLinePaintAction(
+  state: LyricAnimationState,
+  previousState: LyricAnimationState | undefined,
+  nextState: LyricAnimationState | undefined,
+): SyllableLinePaintAction {
+  if (state === "NotSung") {
+    return previousState === "NotSung" ? "none" : "resetNotSung";
+  }
+  if (state !== "Sung") return "none";
+  if (previousState === "Active" && nextState !== "Sung") return "continueSung";
+  return previousState === "Sung" ? "none" : "settleSung";
 }
 
 export function timedGroupEnvelopeAt(

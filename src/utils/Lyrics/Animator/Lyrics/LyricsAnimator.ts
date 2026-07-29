@@ -26,6 +26,7 @@ import {
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
+  syllableLinePaintAction,
   timedGroupEnvelopeAt,
   wordGradientTargets,
 } from "./AnimatorState.ts";
@@ -452,6 +453,89 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
   }
 };
 
+/**
+ * Seeking forward can move a connected or newly mounted line straight from
+ * its initial NotSung paint into Sung. Snap every paint owner to the completed
+ * state because there was no Active frame in which to create or advance its
+ * springs.
+ */
+const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
+  if (!words) return;
+
+  const simpleMode = $simpleLyricsMode.get();
+
+  for (const word of words) {
+    if (word.Dot && !word.LetterGroup) {
+      word.AnimatorStore ??= createDotSprings();
+      word.AnimatorStore.Scale.SetGoal(DotScaleSpline.at(1), true);
+      word.AnimatorStore.YOffset.SetGoal(DotYOffsetSpline.at(1), true);
+      word.AnimatorStore.Glow.SetGoal(DotGlowSpline.at(1), true);
+      word.AnimatorStore.Opacity?.SetGoal(DotOpacitySpline.at(1), true);
+      applyDotVisualState(
+        word.HTMLElement,
+        DotScaleSpline.at(1),
+        DotYOffsetSpline.at(1),
+        DotGlowSpline.at(1),
+        DotOpacitySpline.at(1),
+      );
+      continue;
+    }
+
+    word.AnimatorStore ??= createWordSprings();
+    word.AnimatorStore.Scale.SetGoal(ScaleSpline.at(1), true);
+    word.AnimatorStore.YOffset.SetGoal(YOffsetSpline.at(1), true);
+    word.AnimatorStore.Glow.SetGoal(GlowSpline.at(1), true);
+
+    if (simpleMode) {
+      word.HTMLElement.style.animation = "none";
+      word.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+    } else {
+      setStyleIfChanged(word.HTMLElement, "scale", `${ScaleSpline.at(1)}`, 0);
+      setStyleIfChanged(
+        word.HTMLElement,
+        "transform",
+        `translate3d(0, calc(var(--DefaultLyricsSize) * ${YOffsetSpline.at(1)}), 0)`,
+        0,
+      );
+      word.HTMLElement.style.setProperty("--gradient-position", "100%");
+      applyTimedRubyAnchorState(word, ScaleSpline.at(1));
+    }
+    word.RomajiElement?.style.setProperty(
+      "--extra-gradient-position",
+      `${ExtraGradientSungPosition}%`,
+    );
+    setStyleIfChanged(word.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+    setStyleIfChanged(word.HTMLElement, "--text-shadow-opacity", "0%", 0);
+    word.SLMAnimated = false;
+    word.PreSLMAnimated = false;
+
+    for (const letter of word.Letters || []) {
+      letter.AnimatorStore ??= createLetterSprings();
+      letter.AnimatorStore.Scale.SetGoal(LetterScaleSpline.at(1), true);
+      letter.AnimatorStore.YOffset.SetGoal(LetterYOffsetSpline.at(1), true);
+      letter.AnimatorStore.Glow.SetGoal(GlowSpline.at(1), true);
+
+      if (simpleMode) {
+        letter.HTMLElement.style.animation = "none";
+        letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+      } else {
+        setStyleIfChanged(letter.HTMLElement, "scale", `${LetterScaleSpline.at(1)}`, 0);
+        setStyleIfChanged(
+          letter.HTMLElement,
+          "transform",
+          `translate3d(0, calc(var(--DefaultLyricsSize) * ${LetterYOffsetSpline.at(1) * 2}), 0)`,
+          0,
+        );
+        letter.HTMLElement.style.setProperty("--gradient-position", "100%");
+      }
+      setStyleIfChanged(letter.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
+      setStyleIfChanged(letter.HTMLElement, "--text-shadow-opacity", "0%", 0);
+      letter.SLMAnimated = false;
+      letter.PreSLMAnimated = false;
+    }
+  }
+};
+
 // Visual Constants
 const LineGlowRange = [
   {
@@ -488,6 +572,7 @@ const createLineSprings = () => {
 
 export let Blurring_LastLine: number | null = null;
 let lastFrameTime = performance.now();
+const syllableLinePaintStates = new WeakMap<HTMLElement, "NotSung" | "Active" | "Sung">();
 
 // When the virtualizer mounts a previously off-screen element, reset
 // Blurring_LastLine so that applyBlur runs on the next animation frame and
@@ -616,8 +701,7 @@ export function Animate(position: number): void {
       const line = arr[index];
       if (!line.HTMLElement.isConnected) continue;
       const lineState = getElementState(ProcessedPosition, line.StartTime, line.EndTime);
-      const enteredNotSung =
-        lineState === "NotSung" && !line.HTMLElement.classList.contains("NotSung");
+      const previousPaintState = syllableLinePaintStates.get(line.HTMLElement);
       applyLineState(line.HTMLElement, lineState);
       if (line.DotLine) {
         setClassPresence(
@@ -628,6 +712,7 @@ export function Animate(position: number): void {
       }
 
       if (lineState === "Active") {
+        syllableLinePaintStates.set(line.HTMLElement, "Active");
         if (Blurring_LastLine !== index) {
           applyBlur(arr, index, BlurMultiplier);
           Blurring_LastLine = index;
@@ -1196,7 +1281,13 @@ export function Animate(position: number): void {
           "--extra-gradient-position",
           `${ExtraGradientUnsungPosition}%`
         );
-        if (enteredNotSung) resetSyllableLineToNotSung(line.Syllables?.Lead);
+        if (
+          syllableLinePaintAction(lineState, previousPaintState, undefined) ===
+          "resetNotSung"
+        ) {
+          resetSyllableLineToNotSung(line.Syllables?.Lead);
+        }
+        syllableLinePaintStates.set(line.HTMLElement, "NotSung");
       } else if (lineState === "Sung") {
         line.HTMLElement.style.setProperty(
           "--extra-gradient-position",
@@ -1318,20 +1409,20 @@ export function Animate(position: number): void {
           }
         };
 
-        {
-          const NextLine = arr[index + 1];
-          if (NextLine) {
-            const nextLineStatus = getElementState(
-              ProcessedPosition,
-              NextLine.StartTime,
-              NextLine.EndTime
-            );
-            if (nextLineStatus === "NotSung" || nextLineStatus === "Active") {
-              checkNextLine();
-            }
-          } else if (!NextLine) {
-            checkNextLine();
-          }
+        const nextLine = arr[index + 1];
+        const nextLineState = nextLine
+          ? getElementState(ProcessedPosition, nextLine.StartTime, nextLine.EndTime)
+          : undefined;
+        const paintAction = syllableLinePaintAction(
+          lineState,
+          previousPaintState,
+          nextLineState,
+        );
+        if (paintAction === "continueSung") {
+          checkNextLine();
+        } else if (paintAction === "settleSung") {
+          settleSyllableLineToSung(line.Syllables?.Lead);
+          syllableLinePaintStates.set(line.HTMLElement, "Sung");
         }
       }
     }

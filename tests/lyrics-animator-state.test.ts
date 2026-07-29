@@ -9,6 +9,7 @@ import {
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
+  syllableLinePaintAction,
   timedGroupEnvelopeAt,
   wordGradientTargets,
 } from "../src/utils/Lyrics/Animator/Lyrics/AnimatorState.ts";
@@ -50,6 +51,15 @@ test("forward, pause, backward, and rapid seeks resolve deterministically", () =
     positions.map((position) => getElementState(position, 100, 200)),
     ["NotSung", "Active", "Active", "Active", "Sung", "Active", "NotSung", "Active"]
   );
+});
+
+test("syllable paint state settles lines skipped by a seek", () => {
+  assert.equal(syllableLinePaintAction("Sung", undefined, "Sung"), "settleSung");
+  assert.equal(syllableLinePaintAction("Sung", "NotSung", "Active"), "settleSung");
+  assert.equal(syllableLinePaintAction("Sung", "Active", "NotSung"), "continueSung");
+  assert.equal(syllableLinePaintAction("Sung", "Active", "Sung"), "settleSung");
+  assert.equal(syllableLinePaintAction("Sung", "Sung", "Sung"), "none");
+  assert.equal(syllableLinePaintAction("NotSung", "Sung", "Active"), "resetNotSung");
 });
 
 test("animation delay guards NaN, infinity, and browser-clamped negatives", () => {
@@ -134,6 +144,6 @@ test("live animator has no dormant dot-group or invalid fallback paths", () => {
     /DotGroupAnimations|_createDotGroupSprings|_calculateOpacity|_calculateLineGlowOpacity/u
   );
   assert.doesNotMatch(animatorSource, /Number\([^)]+\)\s*\?\?/u);
-  assert.equal(animatorSource.match(/applyDotVisualState\(/gu)?.length, 4);
+  assert.equal(animatorSource.match(/applyDotVisualState\(/gu)?.length, 5);
   assert.equal(animatorSource.match(/safeAnimationDelay\(/gu)?.length, 2);
 });
