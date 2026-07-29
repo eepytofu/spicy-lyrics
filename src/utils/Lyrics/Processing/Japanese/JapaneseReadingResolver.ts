@@ -7,6 +7,93 @@ const PRODUCTIVE_PERSON_COUNTER_READINGS = new Map([
 
 const NAME_LIKE_SUFFIXES = new Set(["さん", "くん", "君", "ちゃん", "様", "氏", "殿"]);
 
+type VerifiedLexicalTokenRule = {
+  surface: string;
+  baselineReadingKana: string;
+  readingKana: string;
+};
+
+type VerifiedLexicalRule = {
+  lexicalSurface: string;
+  tokens: readonly VerifiedLexicalTokenRule[];
+};
+
+/**
+ * Small product slice from the pinned JMdict/Jitendex differential audit.
+ * Each rule preserves Kuromoji's token ranges and applies only when the full
+ * lexical surface, tokenization, and baseline readings still match the audited
+ * shape. Broad dictionary and frequency-driven selection intentionally remain
+ * offline-only.
+ */
+const VERIFIED_LEXICAL_RULES: readonly VerifiedLexicalRule[] = [
+  {
+    lexicalSurface: "大人買い",
+    tokens: [
+      { surface: "大人", baselineReadingKana: "おとな", readingKana: "おとな" },
+      { surface: "買い", baselineReadingKana: "かい", readingKana: "がい" },
+    ],
+  },
+  {
+    lexicalSurface: "響めく",
+    tokens: [
+      { surface: "響", baselineReadingKana: "ひびき", readingKana: "どよ" },
+      { surface: "めく", baselineReadingKana: "めく", readingKana: "めく" },
+    ],
+  },
+  {
+    lexicalSurface: "一歩",
+    tokens: [
+      { surface: "一", baselineReadingKana: "いち", readingKana: "いっ" },
+      { surface: "歩", baselineReadingKana: "ほ", readingKana: "ぽ" },
+    ],
+  },
+  {
+    lexicalSurface: "目蓋",
+    tokens: [
+      { surface: "目", baselineReadingKana: "め", readingKana: "ま" },
+      { surface: "蓋", baselineReadingKana: "ふた", readingKana: "ぶた" },
+    ],
+  },
+  {
+    lexicalSurface: "変われる",
+    tokens: [
+      { surface: "変", baselineReadingKana: "へん", readingKana: "か" },
+      { surface: "われる", baselineReadingKana: "われる", readingKana: "われる" },
+    ],
+  },
+];
+
+export type VerifiedLexicalReadingDecision = {
+  source: "verifiedLexical";
+  start: number;
+  end: number;
+  surface: string;
+  readingKana: string;
+  baselineReadingKana: string;
+  tokenIndex: number;
+  lexicalSurface: string;
+  lexicalStart: number;
+  lexicalEnd: number;
+};
+
+export type VerifiedLexicalReadingAbstention = {
+  source: "verifiedLexical";
+  lexicalSurface: string;
+  lexicalStart: number;
+  lexicalEnd: number;
+  reason: "nameLikeContext" | "readingStateConflict";
+};
+
+export type VerifiedLexicalReadingCollection = {
+  decisions: VerifiedLexicalReadingDecision[];
+  abstentions: VerifiedLexicalReadingAbstention[];
+};
+
+export type VerifiedLexicalReadingAudit = {
+  applied: VerifiedLexicalReadingDecision[];
+  abstentions: VerifiedLexicalReadingAbstention[];
+};
+
 export type ProductivePersonCounterDecision = {
   source: "productivePersonCounter";
   start: number;
@@ -32,6 +119,135 @@ export type ProductivePersonCounterAudit = {
   applied: ProductivePersonCounterDecision[];
   abstentions: ProductivePersonCounterAbstention[];
 };
+
+function tokensMatchVerifiedLexicalRule(
+  text: string,
+  tokens: readonly JapaneseAnalyzerToken[],
+  startIndex: number,
+  rule: VerifiedLexicalRule
+): boolean {
+  const lastIndex = startIndex + rule.tokens.length - 1;
+  if (lastIndex >= tokens.length) return false;
+
+  for (let offset = 0; offset < rule.tokens.length; offset += 1) {
+    const token = tokens[startIndex + offset];
+    const expected = rule.tokens[offset];
+    if (
+      token.surface !== expected.surface ||
+      token.readingKana !== expected.baselineReadingKana ||
+      (offset > 0 && tokens[startIndex + offset - 1].end !== token.start)
+    ) {
+      return false;
+    }
+  }
+
+  return text.slice(tokens[startIndex].start, tokens[lastIndex].end) === rule.lexicalSurface;
+}
+
+export function collectVerifiedLexicalReadings(
+  text: string,
+  tokens: readonly JapaneseAnalyzerToken[]
+): VerifiedLexicalReadingCollection {
+  const decisions: VerifiedLexicalReadingDecision[] = [];
+  const abstentions: VerifiedLexicalReadingAbstention[] = [];
+
+  for (const rule of VERIFIED_LEXICAL_RULES) {
+    for (let startIndex = 0; startIndex < tokens.length; startIndex += 1) {
+      if (!tokensMatchVerifiedLexicalRule(text, tokens, startIndex, rule)) continue;
+
+      const lastIndex = startIndex + rule.tokens.length - 1;
+      const lexicalStart = tokens[startIndex].start;
+      const lexicalEnd = tokens[lastIndex].end;
+      const following = tokens[lastIndex + 1];
+      if (
+        following &&
+        following.start === lexicalEnd &&
+        (following.morphologyFeatures.includes("properName") ||
+          NAME_LIKE_SUFFIXES.has(following.surface))
+      ) {
+        abstentions.push({
+          source: "verifiedLexical",
+          lexicalSurface: rule.lexicalSurface,
+          lexicalStart,
+          lexicalEnd,
+          reason: "nameLikeContext",
+        });
+        continue;
+      }
+
+      for (let offset = 0; offset < rule.tokens.length; offset += 1) {
+        const expected = rule.tokens[offset];
+        if (expected.readingKana === expected.baselineReadingKana) continue;
+        const tokenIndex = startIndex + offset;
+        const token = tokens[tokenIndex];
+        decisions.push({
+          source: "verifiedLexical",
+          start: token.start,
+          end: token.end,
+          surface: token.surface,
+          readingKana: expected.readingKana,
+          baselineReadingKana: expected.baselineReadingKana,
+          tokenIndex,
+          lexicalSurface: rule.lexicalSurface,
+          lexicalStart,
+          lexicalEnd,
+        });
+      }
+    }
+  }
+
+  return { decisions, abstentions };
+}
+
+export function applyVerifiedLexicalReadings(
+  text: string,
+  tokens: readonly JapaneseAnalyzerToken[],
+  entries: JapaneseAnalyzerReadingState[]
+): VerifiedLexicalReadingAudit {
+  const collected = collectVerifiedLexicalReadings(text, tokens);
+  const applied: VerifiedLexicalReadingDecision[] = [];
+  const abstentions = [...collected.abstentions];
+
+  const decisionGroups = new Map<string, VerifiedLexicalReadingDecision[]>();
+  for (const decision of collected.decisions) {
+    const key = `${decision.lexicalStart}:${decision.lexicalEnd}`;
+    const group = decisionGroups.get(key);
+    if (group) group.push(decision);
+    else decisionGroups.set(key, [decision]);
+  }
+
+  for (const decisions of decisionGroups.values()) {
+    const hasConflict = decisions.some((decision) => {
+      const entry = entries[decision.tokenIndex];
+      return (
+        !entry ||
+        entry.consumed ||
+        entry.start !== decision.start ||
+        entry.end !== decision.end ||
+        entry.surface !== decision.surface ||
+        entry.readingKana !== decision.baselineReadingKana
+      );
+    });
+    if (hasConflict) {
+      const first = decisions[0];
+      abstentions.push({
+        source: "verifiedLexical",
+        lexicalSurface: first.lexicalSurface,
+        lexicalStart: first.lexicalStart,
+        lexicalEnd: first.lexicalEnd,
+        reason: "readingStateConflict",
+      });
+      continue;
+    }
+
+    for (const decision of decisions) {
+      entries[decision.tokenIndex].readingKana = decision.readingKana;
+      applied.push(decision);
+    }
+  }
+
+  return { applied, abstentions };
+}
 
 function candidate(
   text: string,

@@ -114,9 +114,9 @@ function kanaReading(surface: string, candidate: string): string {
   return normalizeJapaneseKana(reading);
 }
 
-function normalizePartOfSpeech(raw: string): JapanesePartOfSpeech {
+function normalizePartOfSpeech(raw: string, detail1: string): JapanesePartOfSpeech {
+  if (raw === "代名詞" || (raw === "名詞" && detail1 === "代名詞")) return "pronoun";
   if (raw === "名詞") return "noun";
-  if (raw === "代名詞") return "pronoun";
   if (raw === "動詞") return "verb";
   if (raw === "助動詞") return "auxiliaryVerb";
   if (raw === "助詞") return "particle";
@@ -167,7 +167,10 @@ export function normalizeKuromojiTokens(
       end,
       readingKana: kanaReading(surface, rawToken.reading || rawToken.pronunciation || ""),
       pronunciationKana: kanaReading(surface, rawToken.pronunciation || rawToken.reading || ""),
-      partOfSpeech: normalizePartOfSpeech(rawToken.pos || ""),
+      partOfSpeech: normalizePartOfSpeech(
+        rawToken.pos || "",
+        rawToken.pos_detail_1 || ""
+      ),
       morphologyFeatures: normalizeMorphologyFeatures(
         rawToken.pos || "",
         rawToken.pos_detail_1 || "",

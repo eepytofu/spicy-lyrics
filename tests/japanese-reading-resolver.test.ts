@@ -6,7 +6,9 @@ import { buildRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import { annotateJapaneseLine } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
 import type { JapaneseAnalyzer } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
 import {
+  applyVerifiedLexicalReadings,
   collectProductivePersonCounterReadings,
+  collectVerifiedLexicalReadings,
   type ProductivePersonCounterAudit,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseReadingResolver.ts";
 import { normalizeKuromojiTokens } from "../src/utils/Lyrics/Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
@@ -294,5 +296,217 @@ test("ablation exposes the exact Kuromoji baseline changed by the resolver", () 
       { baseline: "いちにん", resolved: "ひとり", geometry: "irreducibleWholeSpan" },
       { baseline: "ににん", resolved: "ふたり", geometry: "irreducibleWholeSpan" },
     ]
+  );
+});
+
+test("verified lexical resolver corrects only audited Kuromoji token shapes", async () => {
+  const cases: Array<{
+    text: string;
+    specs: RawTokenSpec[];
+    expectedFurigana: string;
+    expectedRomaji: string;
+    expectedDecisionCount: number;
+  }> = [
+    {
+      text: "大人買い",
+      specs: [
+        { surface: "大人", reading: "オトナ" },
+        { surface: "買い", reading: "カイ", pos: "動詞", detail1: "自立" },
+      ],
+      expectedFurigana: "おとなが",
+      expectedRomaji: "otonagai",
+      expectedDecisionCount: 1,
+    },
+    {
+      text: "響めく",
+      specs: [
+        { surface: "響", reading: "ヒビキ" },
+        { surface: "めく", reading: "メク", pos: "動詞", detail1: "非自立" },
+      ],
+      expectedFurigana: "どよ",
+      expectedRomaji: "doyomeku",
+      expectedDecisionCount: 1,
+    },
+    {
+      text: "一歩",
+      specs: [
+        { surface: "一", reading: "イチ", detail1: "数" },
+        { surface: "歩", reading: "ホ", detail1: "接尾", detail2: "助数詞" },
+      ],
+      expectedFurigana: "いっぽ",
+      expectedRomaji: "ippo",
+      expectedDecisionCount: 2,
+    },
+    {
+      text: "目蓋",
+      specs: [
+        { surface: "目", reading: "メ" },
+        { surface: "蓋", reading: "フタ" },
+      ],
+      expectedFurigana: "まぶた",
+      expectedRomaji: "mabuta",
+      expectedDecisionCount: 2,
+    },
+    {
+      text: "変われる",
+      specs: [
+        { surface: "変", reading: "ヘン", detail1: "形容動詞語幹" },
+        { surface: "われる", reading: "ワレル", pos: "動詞", detail1: "自立" },
+      ],
+      expectedFurigana: "か",
+      expectedRomaji: "kawareru",
+      expectedDecisionCount: 1,
+    },
+  ];
+  const romanized = new Map([
+    ["おとな", "otona"],
+    ["がい", "gai"],
+    ["どよ", "doyo"],
+    ["めく", "meku"],
+    ["いっ", "i"],
+    ["ぽ", "ppo"],
+    ["ま", "ma"],
+    ["ぶた", "buta"],
+    ["か", "ka"],
+    ["われる", "wareru"],
+  ]);
+
+  for (const fixture of cases) {
+    const tokens = normalizedTokens(fixture.text, fixture.specs);
+    const audit = collectVerifiedLexicalReadings(fixture.text, tokens);
+    assert.equal(audit.decisions.length, fixture.expectedDecisionCount, fixture.text);
+    assert.equal(audit.abstentions.length, 0, fixture.text);
+
+    const analysis = await prepareJapaneseLineAnalysis(
+      fixture.text,
+      undefined,
+      undefined,
+      {
+        analyzer: analyzerFor(fixture.text, fixture.specs),
+        kanaRomanizer: (kana) => romanized.get(kana) || kana,
+      },
+    );
+    assert.equal(
+      analysis?.reading.furigana.map(({ reading }) => reading).join(""),
+      fixture.expectedFurigana,
+      fixture.text,
+    );
+    assert.equal(
+      analysis?.reading.romaji?.replace(/\s+/gu, ""),
+      fixture.expectedRomaji,
+      fixture.text,
+    );
+  }
+});
+
+test("verified lexical resolver abstains on correct, split, and name-like near misses", () => {
+  const cases = [
+    {
+      text: "一歩",
+      specs: [{ surface: "一歩", reading: "イッポ" }],
+      abstention: undefined,
+    },
+    {
+      text: "大人 買い",
+      specs: [
+        { surface: "大人", reading: "オトナ" },
+        { surface: " ", reading: "" },
+        { surface: "買い", reading: "カイ", pos: "動詞" },
+      ],
+      abstention: undefined,
+    },
+    {
+      text: "反響めく",
+      specs: [
+        { surface: "反響", reading: "ハンキョウ" },
+        { surface: "めく", reading: "メク", pos: "動詞" },
+      ],
+      abstention: undefined,
+    },
+    {
+      text: "変われる",
+      specs: [
+        { surface: "変わ", reading: "カワ", pos: "動詞" },
+        { surface: "れる", reading: "レル", pos: "動詞", detail1: "接尾" },
+      ],
+      abstention: undefined,
+    },
+    {
+      text: "目蓋さん",
+      specs: [
+        { surface: "目", reading: "メ" },
+        { surface: "蓋", reading: "フタ" },
+        { surface: "さん", reading: "サン", detail1: "接尾", detail2: "人名" },
+      ],
+      abstention: "nameLikeContext",
+    },
+  ] as const;
+
+  for (const fixture of cases) {
+    const audit = collectVerifiedLexicalReadings(
+      fixture.text,
+      normalizedTokens(fixture.text, fixture.specs),
+    );
+    assert.equal(audit.decisions.length, 0, fixture.text);
+    assert.equal(audit.abstentions[0]?.reason, fixture.abstention, fixture.text);
+  }
+});
+
+test("verified lexical projection is atomic when another reading layer already changed one token", () => {
+  const tokens = normalizedTokens("一歩", [
+    { surface: "一", reading: "イチ", detail1: "数" },
+    { surface: "歩", reading: "ホ", detail1: "接尾", detail2: "助数詞" },
+  ]);
+  const entries = [
+    {
+      romaji: "ichi",
+      consumed: false,
+      surface: "一",
+      readingKana: "いち",
+      start: 0,
+      end: 1,
+    },
+    {
+      romaji: "hou",
+      consumed: false,
+      surface: "歩",
+      readingKana: "ほう",
+      start: 1,
+      end: 2,
+    },
+  ];
+
+  const audit = applyVerifiedLexicalReadings("一歩", tokens, entries);
+  assert.equal(audit.applied.length, 0);
+  assert.equal(audit.abstentions[0]?.reason, "readingStateConflict");
+  assert.deepEqual(entries.map(({ readingKana }) => readingKana), ["いち", "ほう"]);
+});
+
+test("provider-authored readings override verified lexical defaults", async () => {
+  const analysis = await prepareJapaneseLineAnalysis(
+    "目蓋(めぶた)だけ",
+    undefined,
+    undefined,
+    {
+      analyzer: analyzerFor("目蓋だけ", [
+        { surface: "目", reading: "メ" },
+        { surface: "蓋", reading: "フタ" },
+        { surface: "だけ", reading: "ダケ", pos: "助詞", detail1: "副助詞" },
+      ]),
+      kanaRomanizer: (kana) =>
+        ({ めぶた: "mebuta", ま: "ma", ぶた: "buta", だけ: "dake" })[kana] || kana,
+    },
+  );
+
+  assert.equal(analysis?.reading.displayText, "目蓋だけ");
+  assert.equal(analysis?.reading.romaji, "mebuta dake");
+  assert.deepEqual(
+    analysis?.reading.furigana.map(({ start, end, reading, provenance }) => ({
+      start,
+      end,
+      reading,
+      provenance,
+    })),
+    [{ start: 0, end: 2, reading: "めぶた", provenance: "providerExplicit" }],
   );
 });

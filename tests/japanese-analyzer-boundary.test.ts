@@ -116,6 +116,91 @@ test("Kuromoji adapter normalizes numeric, counter, and name morphology", () => 
   assert.equal(tokens[2].provenance.rawPartOfSpeechDetail2, "人名");
 });
 
+test("Kuromoji adapter recognizes IPADIC noun-detail pronouns", () => {
+  const [watashi, kimi] = normalizeKuromojiTokens("私君", [
+    {
+      surface_form: "私",
+      reading: "ワタクシ",
+      pronunciation: "ワタクシ",
+      pos: "名詞",
+      pos_detail_1: "代名詞",
+      pos_detail_2: "一般",
+      basic_form: "私",
+    },
+    {
+      surface_form: "君",
+      reading: "クン",
+      pronunciation: "クン",
+      pos: "名詞",
+      pos_detail_1: "代名詞",
+      pos_detail_2: "一般",
+      basic_form: "君",
+    },
+  ]);
+
+  assert.equal(watashi.partOfSpeech, "pronoun");
+  assert.equal(kimi.partOfSpeech, "pronoun");
+  assert.equal(watashi.provenance.rawPartOfSpeech, "名詞");
+  assert.equal(watashi.provenance.rawPartOfSpeechDetail1, "代名詞");
+});
+
+test("IPADIC pronoun shapes activate the guarded lyric readings", async () => {
+  const text = "私と君とあなた方";
+  const tokens = normalizeKuromojiTokens(text, [
+    {
+      surface_form: "私",
+      reading: "ワタクシ",
+      pos: "名詞",
+      pos_detail_1: "代名詞",
+      pos_detail_2: "一般",
+    },
+    { surface_form: "と", reading: "ト", pos: "助詞", pos_detail_1: "並立助詞" },
+    {
+      surface_form: "君",
+      reading: "クン",
+      pos: "名詞",
+      pos_detail_1: "代名詞",
+      pos_detail_2: "一般",
+    },
+    { surface_form: "と", reading: "ト", pos: "助詞", pos_detail_1: "並立助詞" },
+    {
+      surface_form: "あなた",
+      reading: "アナタ",
+      pos: "名詞",
+      pos_detail_1: "代名詞",
+      pos_detail_2: "一般",
+    },
+    {
+      surface_form: "方",
+      reading: "カタ",
+      pos: "名詞",
+      pos_detail_1: "接尾",
+      pos_detail_2: "一般",
+    },
+  ]);
+  const analyzer: JapaneseAnalyzer = {
+    id: kuromojiJapaneseAnalyzer.id,
+    applyReadingOverrides: kuromojiJapaneseAnalyzer.applyReadingOverrides,
+    async analyze(actualText) {
+      assert.equal(actualText, text);
+      return tokens;
+    },
+  };
+  const romanized = await prepareJapaneseLineAnalysis(text, undefined, undefined, {
+    analyzer,
+    kanaRomanizer: (kana) =>
+      ({
+        わたし: "watashi",
+        と: "to",
+        きみ: "kimi",
+        あなた: "anata",
+        がた: "gata",
+      })[kana] || kana,
+  });
+
+  assert.equal(romanized?.reading.romaji, "watashi to kimi to anata gata");
+});
+
 test("Kuromoji adapter recovers punctuated unknown Katakana for local romaji", async () => {
   const surface = "アレグロ・アジテート";
   const [adapterToken] = normalizeKuromojiTokens(surface, [{

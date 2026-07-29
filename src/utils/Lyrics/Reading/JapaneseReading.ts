@@ -31,7 +31,10 @@ import {
   kuromojiJapaneseAnalyzer,
   normalizeJapaneseKana,
 } from "../Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
-import { applyProductivePersonCounterReadings } from "../Processing/Japanese/JapaneseReadingResolver.ts";
+import {
+  applyProductivePersonCounterReadings,
+  applyVerifiedLexicalReadings,
+} from "../Processing/Japanese/JapaneseReadingResolver.ts";
 import { lookupJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 
 export type FuriganaSegment = {
@@ -614,6 +617,7 @@ async function buildJapaneseTokenContext(
   }
 
   analyzer.applyReadingOverrides?.(entries, tokens);
+  applyVerifiedLexicalReadings(analysisText, tokens, entries);
   applyProductivePersonCounterReadings(analysisText, tokens, entries);
   const explicitReadings = applyExplicitReadingOverrides(lineText, entries, explicitHints);
   for (let index = 0; index < entries.length; index += 1) {
