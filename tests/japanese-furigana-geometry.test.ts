@@ -1,17 +1,24 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { test } from "node:test";
+import { before, test } from "node:test";
 import type {
   JapaneseAnalyzer,
   JapaneseAnalyzerToken,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
 import { timedFuriganaGroups } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
 import { JAPANESE_FURIGANA_GEOMETRY_BUCKETS } from "../src/utils/Lyrics/Processing/Japanese/GeneratedJitendexFuriganaGeometry.ts";
-import { lookupJitendexFuriganaGeometry } from "../src/utils/Lyrics/Processing/Japanese/JitendexFuriganaGeometry.ts";
+import {
+  loadJitendexFuriganaGeometry,
+  lookupJitendexFuriganaGeometry,
+} from "../src/utils/Lyrics/Processing/Japanese/JitendexFuriganaGeometry.ts";
 import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
 import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 import { prepareJapaneseLineAnalysis } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
+
+before(async () => {
+  await loadJitendexFuriganaGeometry();
+});
 
 function analyzerToken(surface: string, readingKana: string): JapaneseAnalyzerToken {
   return {
@@ -141,6 +148,30 @@ test("tracked metadata verifies the generated asset bytes and entry count", () =
   assert.equal(JAPANESE_FURIGANA_GEOMETRY_BUCKETS.length, 256);
   assert.equal(metadata.output.entries, 37_465);
   assert.equal(createHash("sha256").update(asset).digest("hex"), metadata.output.sha256);
+});
+
+test("production geometry loads through the retryable lazy boundary", () => {
+  const source = readFileSync(
+    new URL(
+      "../src/utils/Lyrics/Processing/Japanese/JitendexFuriganaGeometry.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const readingSource = readFileSync(
+    new URL("../src/utils/Lyrics/Reading/JapaneseReading.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.doesNotMatch(
+    source,
+    /^import\s+\{\s*JAPANESE_FURIGANA_GEOMETRY_BUCKETS\s*\}/mu,
+  );
+  assert.match(
+    source,
+    /await import\("\.\/GeneratedJitendexFuriganaGeometry\.ts"\)/u,
+  );
+  assert.match(readingSource, /await loadJitendexFuriganaGeometry\(\)/u);
 });
 
 test("every generated record round-trips through the runtime lookup", () => {

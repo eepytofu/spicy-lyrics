@@ -1,4 +1,4 @@
-import { JAPANESE_FURIGANA_GEOMETRY_BUCKETS } from "./GeneratedJitendexFuriganaGeometry.ts";
+import { createRetryableLazyInitializer } from "../../Analyzer/LazyInitializer.ts";
 import { normalizeJapaneseKana } from "./KuromojiJapaneseAnalyzer.ts";
 
 export type ProvenFuriganaGeometrySegment = {
@@ -6,6 +6,15 @@ export type ProvenFuriganaGeometrySegment = {
   readonly end: number;
   readonly reading: string;
 };
+
+let geometryBuckets: readonly string[] | undefined;
+const lazyGeometry = createRetryableLazyInitializer(async () => {
+  const module = await import("./GeneratedJitendexFuriganaGeometry.ts");
+  geometryBuckets = module.JAPANESE_FURIGANA_GEOMETRY_BUCKETS;
+});
+
+export const loadJitendexFuriganaGeometry = (): Promise<void> =>
+  lazyGeometry.ensure();
 
 function fnv1a(value: string): number {
   let hash = 0x811c9dc5;
@@ -29,11 +38,11 @@ export function lookupJitendexFuriganaGeometry(
   const normalizedSurface = surface.normalize("NFKC");
   if (normalizedSurface !== surface) return undefined;
   const normalizedReading = normalizeJapaneseKana(reading);
-  if (!normalizedSurface || !normalizedReading) return undefined;
+  if (!normalizedSurface || !normalizedReading || !geometryBuckets) return undefined;
 
   const bucket =
-    JAPANESE_FURIGANA_GEOMETRY_BUCKETS[
-      fnv1a(normalizedSurface) & (JAPANESE_FURIGANA_GEOMETRY_BUCKETS.length - 1)
+    geometryBuckets[
+      fnv1a(normalizedSurface) & (geometryBuckets.length - 1)
     ];
   const marker = `\n${normalizedSurface}\t`;
   const recordStart = bucket.indexOf(marker);

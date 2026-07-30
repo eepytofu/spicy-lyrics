@@ -23,6 +23,7 @@ import {
   applyProductivePersonCounterReadings,
   applyVerifiedLexicalReadings,
 } from "../Processing/Japanese/JapaneseReadingResolver.ts";
+import { loadJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 import {
   buildFuriganaFromContext,
   kanaReadingForToken,
@@ -219,9 +220,11 @@ export async function prepareJapaneseLineAnalysis(
     projection.hints,
   );
   const romajiProjection = buildRomajiProjectionFromContext(context);
-  const furigana = KanjiTextTest.test(displayText)
-    ? buildFuriganaFromContext(displayText, context)
-    : [];
+  let furigana: FuriganaSegment[] = [];
+  if (KanjiTextTest.test(displayText)) {
+    await loadJitendexFuriganaGeometry();
+    furigana = buildFuriganaFromContext(displayText, context);
+  }
 
   const reading: JapaneseReading = {
     sourceText,

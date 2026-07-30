@@ -4,18 +4,21 @@ const iterations = 250_000;
 
 globalThis.gc?.();
 const beforeImport = process.memoryUsage();
-const assetImportStarted = performance.now();
-await import("../../src/utils/Lyrics/Processing/Japanese/GeneratedJitendexFuriganaGeometry.ts");
-const assetImportMs = performance.now() - assetImportStarted;
-globalThis.gc?.();
-const afterAssetImport = process.memoryUsage();
-
 const lookupImportStarted = performance.now();
-const { lookupJitendexFuriganaGeometry } =
+const {
+  loadJitendexFuriganaGeometry,
+  lookupJitendexFuriganaGeometry,
+} =
   await import("../../src/utils/Lyrics/Processing/Japanese/JitendexFuriganaGeometry.ts");
 const lookupModuleImportMs = performance.now() - lookupImportStarted;
 globalThis.gc?.();
-const afterLookupImport = process.memoryUsage();
+const afterLookupModuleImport = process.memoryUsage();
+
+const assetImportStarted = performance.now();
+await loadJitendexFuriganaGeometry();
+const assetImportMs = performance.now() - assetImportStarted;
+globalThis.gc?.();
+const afterAssetImport = process.memoryUsage();
 
 const fixtures = [
   ["運命", "うんめい"],
@@ -40,12 +43,16 @@ console.log(
     {
       node: process.version,
       iterations,
-      assetImportMs: Number(assetImportMs.toFixed(3)),
-      assetRetainedHeapBytes: afterAssetImport.heapUsed - beforeImport.heapUsed,
-      assetRetainedRssBytes: afterAssetImport.rss - beforeImport.rss,
       lookupModuleImportMs: Number(lookupModuleImportMs.toFixed(3)),
-      lookupModuleRetainedHeapBytes: afterLookupImport.heapUsed - afterAssetImport.heapUsed,
-      lookupModuleRetainedRssBytes: afterLookupImport.rss - afterAssetImport.rss,
+      lookupModuleRetainedHeapBytes:
+        afterLookupModuleImport.heapUsed - beforeImport.heapUsed,
+      lookupModuleRetainedRssBytes:
+        afterLookupModuleImport.rss - beforeImport.rss,
+      assetImportMs: Number(assetImportMs.toFixed(3)),
+      assetRetainedHeapBytes:
+        afterAssetImport.heapUsed - afterLookupModuleImport.heapUsed,
+      assetRetainedRssBytes:
+        afterAssetImport.rss - afterLookupModuleImport.rss,
       totalLookupMs: Number(lookupMs.toFixed(3)),
       nanosecondsPerLookup: Number(((lookupMs * 1_000_000) / iterations).toFixed(1)),
       checksum,
