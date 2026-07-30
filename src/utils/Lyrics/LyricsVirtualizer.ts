@@ -6,6 +6,10 @@ import {
 } from "@tanstack/virtual-core";
 import { Maid } from "../../modules/Maid.ts";
 import Logger from "../Logger.ts";
+import {
+  measuredVerticalSize,
+  shouldVerifyLyricsScroll,
+} from "./LyricsScrollPolicy.ts";
 
 // Gap scale factors relative to 1cqw (containerWidth / 100).
 // Gap is baked into each wrapper's padding-bottom so items can have
@@ -40,9 +44,6 @@ class LyricsVirtualizer {
   // active-line blur cache so newly visible elements get the correct --BlurAmount
   // next frame instead of a stale value from a run that skipped them while disconnected.
   private _onNewElementMounted: (() => void) | null = null;
-
-  // Shared ResizeObserver — fires after every layout recalc for observed elements.
-  private _resizeObserver: ResizeObserver | null = null;
 
   // Timer for the scroll-settle remeasure pass (fallback for browsers without scrollend).
   private _scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
@@ -133,10 +134,11 @@ class LyricsVirtualizer {
     return h + this._itemGap(index);
   };
 
-  // offsetHeight is the most reliable measurement: it reflects the true rendered
-  // layout height and is unaffected by translateY, scrollTop, or paint clipping.
-  private _measureHeight(el: HTMLElement): number {
-    return el.offsetHeight;
+  // TanStack's own ResizeObserver supplies borderBoxSize without a forced layout.
+  // Initial/manual mounts have no observer entry, so retain offsetHeight as the
+  // one synchronous fallback that seeds an exact first measurement.
+  private _measureHeight(el: HTMLElement, entry?: ResizeObserverEntry): number {
+    return measuredVerticalSize(el, entry);
   }
 
   private _remeasureVisible(): void {
@@ -259,7 +261,7 @@ class LyricsVirtualizer {
       return;
     }
 
-    // 3. Measurement drift — a dropped per-wrapper _resizeObserver notification
+    // 3. Measurement drift — a dropped per-wrapper virtualizer observer notification
     // leaves a mounted wrapper's true height out of sync with the cached size.
     // Read-only offsetHeight over the small mounted window (overscan 5).
     for (const idx of this._mountedIndices) {
@@ -321,35 +323,6 @@ class LyricsVirtualizer {
     this._containerWidth = containerWidth;
     this._containerHeight = scrollEl.clientHeight;
     virtualizerLogger.debug("Initial container width resolved", containerWidth);
-
-    this._resizeObserver = this._maid!.Give(new ResizeObserver((entries) => {
-      const v = this._virtualizer;
-      if (!v) return;
-      // When minimized the scroll element collapses to 0×0 and every wrapper fires
-      // with 0 offsetHeight; caching those zeros corrupts the cache so on restore all
-      // items land at start=0. Only write measurements when the container is rendered.
-      if (this._scrollEl && this._scrollEl.clientWidth === 0) {
-        virtualizerLogger.debug("Skipping resize measure: container width is zero");
-        return;
-      }
-      let changed = false;
-      for (const entry of entries) {
-        const el = entry.target as HTMLElement;
-        if (!el.isConnected) continue;
-        if (el.getAttribute("data-index") === null) continue;
-        v.measureElement(el);
-        changed = true;
-      }
-      if (changed && this._resizeRAF === null) {
-        this._resizeRAF = requestAnimationFrame(() => {
-          this._resizeRAF = null;
-          if (this._virtualizer === v) {
-            virtualizerLogger.debug("ResizeObserver scheduled virtualizer update");
-            v._willUpdate();
-          }
-        });
-      }
-    }));
 
     this._classObserver = this._maid!.Give(new MutationObserver((mutations) => {
       const v = this._virtualizer;
@@ -597,6 +570,7 @@ class LyricsVirtualizer {
     for (const idx of this._mountedIndices) {
       if (!nextVisible.has(idx)) toUnmount.push(idx);
     }
+    const unmountWrappers: HTMLElement[] = [];
     for (const idx of toUnmount) {
       const wrapper = this._wrappers[idx];
       if (wrapper) {
@@ -612,23 +586,31 @@ class LyricsVirtualizer {
         if (Math.abs(prevPad - gap) >= 0.5) {
           wrapper.style.paddingBottom = `${gap}px`;
         }
-        v.measureElement(wrapper);
-        if (this._resizeRAF === null) {
-          this._resizeRAF = requestAnimationFrame(() => {
-            this._resizeRAF = null;
-            if (this._virtualizer === v) {
-              virtualizerLogger.debug("Unmount pass scheduled virtualizer update");
-              v._willUpdate();
-            }
-          });
-        }
-        this._resizeObserver?.unobserve(wrapper);
-        wrapper.parentElement?.removeChild(wrapper);
+        unmountWrappers.push(wrapper);
       }
+    }
+    // Batch every DOM write above before the first layout read. Measuring and
+    // removing one wrapper at a time alternates read/write phases and forces a
+    // complete layout for every item during track changes.
+    for (const wrapper of unmountWrappers) {
+      v.measureElement(wrapper);
+    }
+    if (unmountWrappers.length > 0 && this._resizeRAF === null) {
+      this._resizeRAF = requestAnimationFrame(() => {
+        this._resizeRAF = null;
+        if (this._virtualizer === v) {
+          virtualizerLogger.debug("Unmount pass scheduled virtualizer update");
+          v._willUpdate();
+        }
+      });
+    }
+    for (const idx of toUnmount) {
+      const wrapper = this._wrappers[idx];
+      wrapper?.parentElement?.removeChild(wrapper);
       this._mountedIndices.delete(idx);
     }
 
-    let didMeasure = false;
+    const wrappersToMeasure: HTMLElement[] = [];
     for (const item of items) {
       const wrapper = this._getOrCreateWrapper(item.index);
       const gap = this._itemGap(item.index);
@@ -641,19 +623,21 @@ class LyricsVirtualizer {
       if (!this._mountedIndices.has(item.index)) {
         this._virtualContainer.appendChild(wrapper);
         this._mountedIndices.add(item.index);
-        this._resizeObserver?.observe(wrapper);
-        // Measure immediately on mount so start offsets are corrected in the same frame.
-        v.measureElement(wrapper);
-        didMeasure = true;
+        wrappersToMeasure.push(wrapper);
         this._onNewElementMounted?.();
       } else if (Math.abs(prevPad - gap) >= 0.5) {
         // Gap changes alter wrapper height without necessarily triggering a ResizeObserver
         // callback quickly enough for this pass.
-        v.measureElement(wrapper);
-        didMeasure = true;
+        wrappersToMeasure.push(wrapper);
       }
     }
-    if (didMeasure && this._resizeRAF === null) {
+    // All wrappers are connected and styled before measurement starts, so the
+    // first offsetHeight fallback lays out the complete new window and later
+    // reads reuse that clean layout instead of thrashing once per append.
+    for (const wrapper of wrappersToMeasure) {
+      v.measureElement(wrapper);
+    }
+    if (wrappersToMeasure.length > 0 && this._resizeRAF === null) {
       this._resizeRAF = requestAnimationFrame(() => {
         this._resizeRAF = null;
         if (this._virtualizer === v) {
@@ -872,6 +856,17 @@ class LyricsVirtualizer {
       this._onVirtualizerChange(v);
     }
 
+    // Ordinary next-line scrolling targets an item that is already inside the
+    // overscanned window. Its CSS-smooth scroll owns the subsequent frames;
+    // retrying from stale intermediate scrollTop values only restarts that
+    // animation and repeats geometry reads. Forced/far jumps still retain the
+    // bounded convergence path because their target begins unmounted or must
+    // land immediately after a seek.
+    if (!shouldVerifyLyricsScroll(instant, this._mountedIndices.has(index))) {
+      this._setConverging(false);
+      return;
+    }
+
     if (retry < LyricsVirtualizer._MAX_SCROLL_RETRIES) {
       this._scrollVerifyRAF = requestAnimationFrame(() => {
         this._scrollVerifyRAF = null;
@@ -930,7 +925,6 @@ class LyricsVirtualizer {
     this._maid?.Destroy();
     this._maid = null;
     this._scrollEl = null;
-    this._resizeObserver = null;
     this._widthObserver = null;
     this._containerWidth = 0;
     this._containerHeight = 0;
