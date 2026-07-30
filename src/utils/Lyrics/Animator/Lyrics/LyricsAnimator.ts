@@ -441,7 +441,7 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
         `translate3d(0, calc(var(--DefaultLyricsSize) * ${YOffsetSpline.at(0)}), 0)`,
         0
       );
-      word.HTMLElement.style.setProperty("--gradient-position", restingGradient);
+      setStyleIfChanged(word.HTMLElement, "--gradient-position", restingGradient, 0);
     } else {
       word.HTMLElement.style.animation = "none";
       word.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
@@ -451,7 +451,14 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
       ScaleSpline.at(0),
       simpleMode ? -50 : -20,
     );
-    word.RomajiElement?.style.setProperty("--extra-gradient-position", restingExtraGradient);
+    if (word.RomajiElement) {
+      setStyleIfChanged(
+        word.RomajiElement,
+        "--extra-gradient-position",
+        restingExtraGradient,
+        0,
+      );
+    }
     applyWordGlowState(word, 0);
     word.SLMAnimated = false;
     word.PreSLMAnimated = false;
@@ -470,7 +477,7 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
           `translate3d(0, calc(var(--DefaultLyricsSize) * ${LetterYOffsetSpline.at(0) * 2}), 0)`,
           0
         );
-        letter.HTMLElement.style.setProperty("--gradient-position", restingGradient);
+        setStyleIfChanged(letter.HTMLElement, "--gradient-position", restingGradient, 0);
       } else {
         letter.HTMLElement.style.animation = "none";
         letter.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
@@ -527,13 +534,17 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
         `translate3d(0, calc(var(--DefaultLyricsSize) * ${YOffsetSpline.at(1)}), 0)`,
         0,
       );
-      word.HTMLElement.style.setProperty("--gradient-position", "100%");
+      setStyleIfChanged(word.HTMLElement, "--gradient-position", "100%", 0);
     }
     applyTimedRubyAnchorState(word, ScaleSpline.at(1), 100);
-    word.RomajiElement?.style.setProperty(
-      "--extra-gradient-position",
-      `${ExtraGradientSungPosition}%`,
-    );
+    if (word.RomajiElement) {
+      setStyleIfChanged(
+        word.RomajiElement,
+        "--extra-gradient-position",
+        `${ExtraGradientSungPosition}%`,
+        0,
+      );
+    }
     applyWordGlowState(word, 0);
     word.SLMAnimated = false;
     word.PreSLMAnimated = false;
@@ -555,7 +566,7 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
           `translate3d(0, calc(var(--DefaultLyricsSize) * ${LetterYOffsetSpline.at(1) * 2}), 0)`,
           0,
         );
-        letter.HTMLElement.style.setProperty("--gradient-position", "100%");
+        setStyleIfChanged(letter.HTMLElement, "--gradient-position", "100%", 0);
       }
       setStyleIfChanged(letter.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
       setStyleIfChanged(letter.HTMLElement, "--text-shadow-opacity", "0%", 0);
@@ -765,15 +776,17 @@ export function Animate(position: number): void {
         const timedWords = words.filter((word) => !word.Dot);
         const firstTimedWord = timedWords[0];
         const lastTimedWord = timedWords.at(-1);
-        if (firstTimedWord && lastTimedWord) {
+        if (line.HasExtraSidecars && firstTimedWord && lastTimedWord) {
           const extraProgress = getProgressPercentage(
             ProcessedPosition,
             firstTimedWord.StartTime,
             lastTimedWord.EndTime
           );
-          line.HTMLElement.style.setProperty(
+          setStyleIfChanged(
+            line.HTMLElement,
             "--extra-gradient-position",
-            `${extraGradientPositionAt(extraProgress)}%`
+            `${extraGradientPositionAt(extraProgress)}%`,
+            0.5,
           );
         }
         for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
@@ -851,9 +864,11 @@ export function Animate(position: number): void {
             applyWordGlowState(word, currentGlow);
 
             if (word.RomajiElement) {
-              word.RomajiElement.style.setProperty(
+              setStyleIfChanged(
+                word.RomajiElement,
                 "--extra-gradient-position",
-                `${targetExtraGradientPos}%`
+                `${targetExtraGradientPos}%`,
+                0.5,
               );
             }
             applyTimedRubyAnchorState(
@@ -954,13 +969,12 @@ export function Animate(position: number): void {
                   }
                 }
               } else {
-                word.HTMLElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
-                if (word.RomajiElement) {
-                  word.RomajiElement.style.setProperty(
-                    "--extra-gradient-position",
-                    `${targetExtraGradientPos}%`
-                  );
-                }
+                setStyleIfChanged(
+                  word.HTMLElement,
+                  "--gradient-position",
+                  `${targetGradientPos}%`,
+                  0.5,
+                );
               }
             }
           } else if (isDot && !isLetterGroup) {
@@ -1198,7 +1212,12 @@ export function Animate(position: number): void {
                     }
                   }
                 } else {
-                  letter.HTMLElement.style.setProperty("--gradient-position", `${targetGradient}%`);
+                  setStyleIfChanged(
+                    letter.HTMLElement,
+                    "--gradient-position",
+                    `${targetGradient}%`,
+                    0.5,
+                  );
                 }
                 // Use translate3d to ensure GPU-accelerated transforms
                 setStyleIfChanged(
@@ -1245,7 +1264,7 @@ export function Animate(position: number): void {
                   letter.HTMLElement.style.animation = "none";
                   letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "-50%");
                 } else {
-                  letter.HTMLElement.style.setProperty("--gradient-position", `-20%`);
+                  setStyleIfChanged(letter.HTMLElement, "--gradient-position", "-20%", 0);
                 }
 
                 setStyleIfChanged(
@@ -1292,7 +1311,7 @@ export function Animate(position: number): void {
                   letter.HTMLElement.style.animation = "none";
                   letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
                 } else {
-                  letter.HTMLElement.style.setProperty("--gradient-position", `100%`);
+                  setStyleIfChanged(letter.HTMLElement, "--gradient-position", "100%", 0);
                 }
                 setStyleIfChanged(
                   letter.HTMLElement,
@@ -1318,10 +1337,14 @@ export function Animate(position: number): void {
           }
         }
       } else if (lineState === "NotSung") {
-        line.HTMLElement.style.setProperty(
-          "--extra-gradient-position",
-          `${ExtraGradientUnsungPosition}%`
-        );
+        if (line.HasExtraSidecars) {
+          setStyleIfChanged(
+            line.HTMLElement,
+            "--extra-gradient-position",
+            `${ExtraGradientUnsungPosition}%`,
+            0,
+          );
+        }
         if (
           syllableLinePaintAction(lineState, previousPaintState, undefined) ===
           "resetNotSung"
@@ -1330,10 +1353,14 @@ export function Animate(position: number): void {
         }
         syllableLinePaintStates.set(line.HTMLElement, "NotSung");
       } else if (lineState === "Sung") {
-        line.HTMLElement.style.setProperty(
-          "--extra-gradient-position",
-          `${ExtraGradientSungPosition}%`
-        );
+        if (line.HasExtraSidecars) {
+          setStyleIfChanged(
+            line.HTMLElement,
+            "--extra-gradient-position",
+            `${ExtraGradientSungPosition}%`,
+            0,
+          );
+        }
         const checkNextLine = () => {
           const words = line.Syllables?.Lead;
           if (!words) return;
@@ -1356,9 +1383,11 @@ export function Animate(position: number): void {
               setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
               applyTimedRubyAnchorState(word, currentScale, 100);
               if (word.RomajiElement) {
-                word.RomajiElement.style.setProperty(
+                setStyleIfChanged(
+                  word.RomajiElement,
                   "--extra-gradient-position",
-                  `${ExtraGradientSungPosition}%`
+                  `${ExtraGradientSungPosition}%`,
+                  0,
                 );
               }
               if (!word.LetterGroup) {
@@ -1366,13 +1395,7 @@ export function Animate(position: number): void {
                   word.HTMLElement.style.animation = "none";
                   word.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
                 } else {
-                  word.HTMLElement.style.setProperty("--gradient-position", "100%");
-                  if (word.RomajiElement) {
-                    word.RomajiElement.style.setProperty(
-                      "--extra-gradient-position",
-                      `${ExtraGradientSungPosition}%`
-                    );
-                  }
+                  setStyleIfChanged(word.HTMLElement, "--gradient-position", "100%", 0);
                 }
               }
             } else if (word.AnimatorStore && word.Dot && !word.LetterGroup) {
@@ -1417,7 +1440,7 @@ export function Animate(position: number): void {
                   letter.HTMLElement.style.animation = "none";
                   letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
                 } else {
-                  letter.HTMLElement.style.setProperty("--gradient-position", `100%`);
+                  setStyleIfChanged(letter.HTMLElement, "--gradient-position", "100%", 0);
                 }
                 setStyleIfChanged(
                   letter.HTMLElement,
@@ -1469,7 +1492,7 @@ export function Animate(position: number): void {
         line.EndTime,
       );
       applyLineState(line.HTMLElement, lineState);
-      if (!line.DotLine) {
+      if (!line.DotLine && line.HasFurigana) {
         setStyleIfChanged(
           line.HTMLElement,
           "--line-furigana-fill-progress",
@@ -1576,11 +1599,20 @@ export function Animate(position: number): void {
 
           // Apply styles using spring value for glow, keep direct calculation for gradient
           if (!$simpleLyricsMode.get()) {
-            line.HTMLElement.style.setProperty("--gradient-position", `${targetGradientPos}%`);
-            line.HTMLElement.style.setProperty(
-              "--extra-gradient-position",
-              `${targetExtraGradientPos}%`
+            setStyleIfChanged(
+              line.HTMLElement,
+              "--gradient-position",
+              `${targetGradientPos}%`,
+              0.5,
             );
+            if (line.HasExtraSidecars) {
+              setStyleIfChanged(
+                line.HTMLElement,
+                "--extra-gradient-position",
+                `${targetExtraGradientPos}%`,
+                0.5,
+              );
+            }
             setStyleIfChanged(
               line.HTMLElement,
               "--text-shadow-blur-radius",
@@ -1594,18 +1626,26 @@ export function Animate(position: number): void {
         line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(0), true);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
-        line.HTMLElement.style.setProperty(
-          "--extra-gradient-position",
-          `${ExtraGradientUnsungPosition}%`
-        );
+        if (line.HasExtraSidecars) {
+          setStyleIfChanged(
+            line.HTMLElement,
+            "--extra-gradient-position",
+            `${ExtraGradientUnsungPosition}%`,
+            0,
+          );
+        }
       } else if (lineState === "Sung") {
         line.AnimatorStore?.Glow.SetGoal(LineGlowSpline.at(1), true);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
         setStyleIfChanged(line.HTMLElement, "--text-shadow-opacity", "0%", 0);
-        line.HTMLElement.style.setProperty(
-          "--extra-gradient-position",
-          `${ExtraGradientSungPosition}%`
-        );
+        if (line.HasExtraSidecars) {
+          setStyleIfChanged(
+            line.HTMLElement,
+            "--extra-gradient-position",
+            `${ExtraGradientSungPosition}%`,
+            0,
+          );
+        }
       }
     }
   }

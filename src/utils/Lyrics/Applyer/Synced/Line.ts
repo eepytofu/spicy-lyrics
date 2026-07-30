@@ -97,10 +97,11 @@ export function ApplyLineLyrics(
       hanLanguageContext,
     };
 
-    if (renderFullLineBaseTextWithReadings(lineElem, line, renderOptions)) {
+    const hasFurigana = renderFullLineBaseTextWithReadings(lineElem, line, renderOptions);
+    if (hasFurigana) {
       forceStackedLine(lineElem, line.OppositeAligned);
     }
-    appendLineExtras(lineElem, line, renderOptions);
+    const hasExtraSidecars = appendLineExtras(lineElem, line, renderOptions);
 
     lineElem.classList.add("line");
 
@@ -127,6 +128,8 @@ export function ApplyLineLyrics(
       StartTime: ConvertTime(line.StartTime),
       EndTime: ConvertTime(lineEndTime),
       TotalTime: ConvertTime(lineEndTime) - ConvertTime(line.StartTime),
+      HasExtraSidecars: hasExtraSidecars,
+      HasFurigana: hasFurigana,
     });
 
     if (line.OppositeAligned) {

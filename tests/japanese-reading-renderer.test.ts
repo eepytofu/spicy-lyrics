@@ -1033,7 +1033,7 @@ test("active Chinese reading plans render contextual spaces between timing units
 
 test("provider and built-in translations share markup but keep independent lanes", () => {
   const line = new FakeElement();
-  appendLineExtras(
+  const appended = appendLineExtras(
     line as unknown as HTMLElement,
     {
       Text: "どうせ水は乾く土地さ",
@@ -1051,6 +1051,7 @@ test("provider and built-in translations share markup but keep independent lanes
   assert.equal(line.children[0]?.lang, "zh-Hans");
   assert.equal(line.children[1]?.className.includes("translated-below"), true);
   assert.equal(line.children[1]?.lang, "");
+  assert.equal(appended, true);
 });
 
 test("provider translation visibility does not hide the built-in lane", () => {
@@ -1093,7 +1094,7 @@ test("identical provider and built-in translations render once", () => {
 
 test("a provider-owned generic alias stays hidden with the provider toggle off", () => {
   const line = new FakeElement();
-  appendLineExtras(
+  const appended = appendLineExtras(
     line as unknown as HTMLElement,
     {
       Text: "どうせ水は乾く土地さ",
@@ -1107,4 +1108,5 @@ test("a provider-owned generic alias stays hidden with the provider toggle off",
   );
 
   assert.equal(line.children.length, 0);
+  assert.equal(appended, false);
 });

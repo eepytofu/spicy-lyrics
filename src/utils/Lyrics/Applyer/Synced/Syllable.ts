@@ -13,6 +13,7 @@ import {
   SetWordArrayInCurentLine,
   getInterludeTimePadding,
   getLyricsBetweenShow,
+  type LyricsSyllable,
   type SyllableLead,
   type TimedGroupWindow,
 } from "../../lyrics.ts";
@@ -381,12 +382,13 @@ export function ApplySyllableLyrics(
           : lineWindow.endTime
       : lineWindow.endTime;
 
-    LyricsObject.Types.Syllable.Lines.push({
+    const leadLyricsLine = {
       HTMLElement: lineElem,
       StartTime: ConvertTime(lineWindow.startTime),
       EndTime: ConvertTime(lineEndTime),
       TotalTime: ConvertTime(lineEndTime) - ConvertTime(lineWindow.startTime),
-    });
+    } satisfies LyricsSyllable;
+    LyricsObject.Types.Syllable.Lines.push(leadLyricsLine);
 
     SetWordArrayInCurentLine();
 
@@ -477,7 +479,7 @@ export function ApplySyllableLyrics(
 
     const leadRomanizedText = line.Lead.RomanizedText || line.Lead.TransliteratedText;
     const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
-    appendSyllableRomanizedBelow(
+    leadLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
       lineElem,
       line.Lead.Syllables,
       leadSourceText,
@@ -498,13 +500,14 @@ export function ApplySyllableLyrics(
           oppositeAligned: line.OppositeAligned,
         };
 
-        LyricsObject.Types.Syllable.Lines.push({
+        const backgroundLyricsLine = {
           HTMLElement: lineE,
           StartTime: ConvertTime(bg.StartTime),
           EndTime: ConvertTime(bg.EndTime),
           TotalTime: ConvertTime(bg.EndTime) - ConvertTime(bg.StartTime),
           BGLine: true,
-        });
+        } satisfies LyricsSyllable;
+        LyricsObject.Types.Syllable.Lines.push(backgroundLyricsLine);
         SetWordArrayInCurentLine();
 
         if (line.OppositeAligned) {
@@ -582,7 +585,7 @@ export function ApplySyllableLyrics(
         const allEntries =
           LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
         const bgEntries = allEntries.filter((entry: any) => entry.BGWord);
-        appendSyllableRomanizedBelow(
+        backgroundLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
           lineE,
           bg.Syllables,
           bgSourceText,

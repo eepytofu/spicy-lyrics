@@ -16,8 +16,14 @@ import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import { Lyrics } from "./Animator/Main.ts";
 import { PageContainer } from "../../components/Pages/PageView.ts";
 import { Maid } from "../../modules/Maid.ts";
+import {
+  PausedAnimationSettleMs,
+  shouldAnimateLyricsFrame,
+} from "./AnimationFramePolicy.ts";
 
-export const ScrollingIntervalTime = Infinity;
+// Auto-scroll only reacts to line/state changes; it does not need a second
+// display-rate loop alongside the lyric animator.
+export const ScrollingIntervalTime = 1 / 30;
 
 export const getLyricsBetweenShow = () => ($minimalLyricsMode.get() ? 5 : 3);
 
@@ -99,6 +105,7 @@ export interface LyricsSyllable {
   StartTime: number;
   EndTime: number;
   TotalTime?: number;
+  HasExtraSidecars?: boolean;
   Status?: string;
   Syllables?: {
     Lead: SyllableLead[];
@@ -115,6 +122,8 @@ export interface LyricsLine {
   StartTime: number;
   EndTime: number;
   TotalTime?: number;
+  HasExtraSidecars?: boolean;
+  HasFurigana?: boolean;
   Status?: string;
   DotLine?: boolean;
   Syllables?: {
@@ -200,6 +209,17 @@ const logLyric = (lyric: string) => {
   lastLyric = lyric;
 }
  */
+let lastObservedLyricsPosition: number | null = null;
+let animateLyricsThrough = performance.now() + PausedAnimationSettleMs;
+
+const requestPausedAnimationSettle = () => {
+  animateLyricsThrough = performance.now() + PausedAnimationSettleMs;
+};
+
+Global.Event.listen("lyrics:apply", requestPausedAnimationSettle);
+Global.Event.listen("playback:playpause", requestPausedAnimationSettle);
+Global.Event.listen("playback:songchange", requestPausedAnimationSettle);
+
 const LyricsInterval = () => {
   /* { // Logging Line part
     const currentLyrics = storage.get("currentLyricsData") as string;
@@ -243,8 +263,27 @@ const LyricsInterval = () => {
 
   if ($lyricsContainerExists.get()) {
     const progress = SpotifyPlayer.GetPosition();
-    Lyrics.TimeSetter(progress);
-    Lyrics.Animate(progress);
+    const now = performance.now();
+    const positionChanged =
+      lastObservedLyricsPosition === null ||
+      Math.abs(progress - lastObservedLyricsPosition) >= 0.5;
+    if (positionChanged) {
+      lastObservedLyricsPosition = progress;
+      animateLyricsThrough = now + PausedAnimationSettleMs;
+    }
+    if (
+      shouldAnimateLyricsFrame(
+        SpotifyPlayer.IsPlaying,
+        positionChanged,
+        now,
+        animateLyricsThrough,
+      )
+    ) {
+      Lyrics.TimeSetter(progress);
+      Lyrics.Animate(progress);
+    }
+  } else {
+    lastObservedLyricsPosition = null;
   }
   requestAnimationFrame(LyricsInterval);
 };

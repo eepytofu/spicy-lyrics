@@ -495,18 +495,25 @@ export function appendLineExtras(
   lineElem: HTMLElement,
   entry: JapaneseReadable & { TranslatedText?: string },
   options: ReadingRenderOptions
-): void {
-  appendRomanizedBelow(lineElem, entry, options);
+): boolean {
+  let appended = appendRomanizedBelow(lineElem, entry, options);
   const translations = resolveTranslationSidecars(entry);
   const providerTranslation = options.showProviderTranslations
     ? translations.provider
     : undefined;
-  appendTranslatedBelow(lineElem, entry.Text || "", providerTranslation, {
+  const appendedProviderTranslation = appendTranslatedBelow(lineElem, entry.Text || "", providerTranslation, {
     ...options,
     translationLanguage: translations.providerLanguage,
     translationPending: false,
   });
-  appendTranslatedBelow(lineElem, entry.Text || "", translations.generic, options);
+  const appendedGenericTranslation = appendTranslatedBelow(
+    lineElem,
+    entry.Text || "",
+    translations.generic,
+    options,
+  );
+  appended ||= appendedProviderTranslation || appendedGenericTranslation;
+  return appended;
 }
 
 export function appendSyllableRomanizedBelow(
@@ -519,7 +526,8 @@ export function appendSyllableRomanizedBelow(
   animatorEntries: RomajiAnimatorEntry[] | undefined,
   readingPlan: RenderPlan | undefined,
   options: ReadingRenderOptions
-): void {
+): boolean {
+  let appended = false;
   const groupEntry: JapaneseReadable = {
     Text: sourceText,
     RomanizedText: groupRomanizedText,
@@ -538,6 +546,7 @@ export function appendSyllableRomanizedBelow(
 
   if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
     forceStackedLine(lineElem, options.oppositeAligned);
+    appended = true;
     renderReadingPlan(lineElem, readingPlan, (spanId, element, unit) => {
       const index = Number(spanId);
       const owner = Number.isInteger(index) ? animatorEntries?.[index] : undefined;
@@ -579,6 +588,7 @@ export function appendSyllableRomanizedBelow(
     const hasDistinctRomanization = isMeaningfullyDifferent(readableGroupRomanizedText, sourceText);
     if (hasDistinctRomanization || options.romanizationPending) {
       forceStackedLine(lineElem, options.oppositeAligned);
+      appended = true;
       const romanizedDiv = document.createElement("div");
       romanizedDiv.className = "romanized-below";
 
@@ -619,12 +629,19 @@ export function appendSyllableRomanizedBelow(
   const providerTranslation = options.showProviderTranslations
     ? translations.provider
     : undefined;
-  appendTranslatedBelow(lineElem, sourceText, providerTranslation, {
+  const appendedProviderTranslation = appendTranslatedBelow(lineElem, sourceText, providerTranslation, {
     ...options,
     translationLanguage: translations.providerLanguage,
     translationPending: false,
   });
-  appendTranslatedBelow(lineElem, sourceText, translations.generic, options);
+  const appendedGenericTranslation = appendTranslatedBelow(
+    lineElem,
+    sourceText,
+    translations.generic,
+    options,
+  );
+  appended ||= appendedProviderTranslation || appendedGenericTranslation;
+  return appended;
 }
 
 function projectCanonicalRangeToTiming(

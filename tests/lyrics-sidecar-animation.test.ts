@@ -19,6 +19,14 @@ const animatorSource = readFileSync(
   new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
   "utf8",
 );
+const lineApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Synced/Line.ts", import.meta.url),
+  "utf8",
+);
+const syllableApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Synced/Syllable.ts", import.meta.url),
+  "utf8",
+);
 
 function ruleBody(selector: string): string {
   const selectorStart = mainCss.indexOf(selector);
@@ -196,9 +204,21 @@ test("static and Simple Line sidecars use completed paint without a stale sweep"
 test("timed romaji and line sidecars follow paint-only extra gradient state", () => {
   assert.match(
     animatorSource,
-    /RomajiElement(?:\?\.|\.)style\.setProperty\(\s*"--extra-gradient-position"/u,
+    /setStyleIfChanged\(\s*word\.RomajiElement,\s*"--extra-gradient-position"/u,
   );
-  assert.match(animatorSource, /"--extra-gradient-position"/u);
+  assert.match(
+    animatorSource,
+    /line\.HasExtraSidecars[\s\S]*?"--extra-gradient-position"/u,
+  );
+  assert.doesNotMatch(
+    animatorSource,
+    /(?:RomajiElement|line\.HTMLElement)\.style\.setProperty\(\s*"--extra-gradient-position"/u,
+  );
+  assert.match(lineApplyerSource, /HasExtraSidecars:\s*hasExtraSidecars/u);
+  assert.match(
+    syllableApplyerSource,
+    /\.HasExtraSidecars\s*=\s*appendSyllableRomanizedBelow/u,
+  );
   assert.match(mainCss, /var\(--extra-gradient-position, -40%\)/u);
 });
 
@@ -280,8 +300,9 @@ test("line furigana keeps direct fill separate from breathing glow", () => {
   );
   assert.match(
     animatorSource,
-    /"--line-furigana-fill-progress"[\s\S]*?lineFuriganaFillProgress/u,
+    /line\.HasFurigana[\s\S]*?"--line-furigana-fill-progress"[\s\S]*?lineFuriganaFillProgress/u,
   );
+  assert.match(lineApplyerSource, /HasFurigana:\s*hasFurigana/u);
   assert.doesNotMatch(mainCss, /--line-furigana-brightness/u);
   assert.doesNotMatch(animatorSource, /--line-furigana-brightness/u);
   assert.match(
