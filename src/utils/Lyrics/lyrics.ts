@@ -212,9 +212,9 @@ const logLyric = (lyric: string) => {
 let lastObservedLyricsPosition: number | null = null;
 let animateLyricsThrough = performance.now() + PausedAnimationSettleMs;
 
-const requestPausedAnimationSettle = () => {
+export function requestPausedAnimationSettle(): void {
   animateLyricsThrough = performance.now() + PausedAnimationSettleMs;
-};
+}
 
 Global.Event.listen("lyrics:apply", requestPausedAnimationSettle);
 Global.Event.listen("playback:playpause", requestPausedAnimationSettle);

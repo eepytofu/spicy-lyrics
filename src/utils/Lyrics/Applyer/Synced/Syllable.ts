@@ -4,7 +4,7 @@ import {
   $minimalLyricsMode,
   $simpleLyricsMode,
 } from "../../../../utils/stores.ts";
-import { IdleEmphasisLyricsScale, IdleLyricsScale } from "../../Animator/Shared.ts";
+import { IdleEmphasisGroupScale, IdleLyricsScale } from "../../Animator/Shared.ts";
 import { ConvertTime } from "../../ConvertTime.ts";
 import isRtl from "../../isRtl.ts";
 import {
@@ -166,7 +166,7 @@ const createSyllableWord = (
     if (!$simpleLyricsMode.get()) {
       word.style.setProperty("--text-shadow-opacity", `0%`);
       word.style.setProperty("--text-shadow-blur-radius", `4px`);
-      word.style.scale = IdleEmphasisLyricsScale.toString();
+      word.style.scale = IdleEmphasisGroupScale.toString();
       word.style.transform = `translateY(calc(${sizeVar} * 0.02))`;
     }
 

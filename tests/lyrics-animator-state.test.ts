@@ -16,10 +16,23 @@ import {
   timedGroupEnvelopeAt,
   wordGradientTargets,
 } from "../src/utils/Lyrics/Animator/Lyrics/AnimatorState.ts";
+import {
+  IdleEmphasisGroupScale,
+  IdleEmphasisLetterScale,
+  IdleLyricsScale,
+} from "../src/utils/Lyrics/Animator/Shared.ts";
 
 const animatorSource = readFileSync(
   new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
   "utf8"
+);
+const emphasizeSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Utils/Emphasize.ts", import.meta.url),
+  "utf8",
+);
+const syllableApplyerSource = readFileSync(
+  new URL("../src/utils/Lyrics/Applyer/Synced/Syllable.ts", import.meta.url),
+  "utf8",
 );
 
 class FakeClassList {
@@ -46,6 +59,28 @@ test("animation state keeps exact start/end and zero-duration semantics", () => 
   assert.equal(getProgressPercentage(200, 100, 200), 1);
   assert.equal(getProgressPercentage(100, 100, 100), 0);
   assert.equal(getProgressPercentage(101, 100, 100), 1);
+});
+
+test("idle lyric geometry does not shrink words, emphasis groups, or glyph boxes", () => {
+  assert.equal(IdleLyricsScale, 1);
+  assert.equal(IdleEmphasisGroupScale, 1);
+  assert.equal(IdleEmphasisLetterScale, 1);
+  assert.match(
+    emphasizeSource,
+    /letterElem\.style\.scale\s*=\s*IdleEmphasisLetterScale\.toString\(\)/u,
+  );
+  assert.match(
+    syllableApplyerSource,
+    /word\.style\.scale\s*=\s*IdleEmphasisGroupScale\.toString\(\)/u,
+  );
+  assert.equal(
+    animatorSource.match(/\{\s*Time:\s*0,\s*Value:\s*IdleEmphasisLetterScale\s*\}/gu)?.length,
+    2,
+  );
+  assert.match(
+    animatorSource,
+    /const ScaleRange\s*=\s*\[\s*\{\s*Time:\s*0,\s*Value:\s*IdleLyricsScale\s*\}/u,
+  );
 });
 
 test("forward, pause, backward, and rapid seeks resolve deterministically", () => {

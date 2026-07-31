@@ -40,10 +40,9 @@ class LyricsVirtualizer {
   private _virtualContainer: HTMLElement | null = null;
   private _scrollEl: HTMLElement | null = null;
 
-  // Invoked when a new element is mounted. Used by the animator to invalidate its
-  // active-line blur cache so newly visible elements get the correct --BlurAmount
-  // next frame instead of a stale value from a run that skipped them while disconnected.
-  private _onNewElementMounted: (() => void) | null = null;
+  // Invoked once per mounted batch. Used by the animator to invalidate only the
+  // new subtrees before its next bounded paint pass.
+  private _onNewElementMounted: ((elements: readonly HTMLElement[]) => void) | null = null;
 
   // Timer for the scroll-settle remeasure pass (fallback for browsers without scrollend).
   private _scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
@@ -98,7 +97,9 @@ class LyricsVirtualizer {
   private _inOnChange = false;
   private _onChangePending = false;
 
-  setOnNewElementMounted(cb: (() => void) | null): void {
+  setOnNewElementMounted(
+    cb: ((elements: readonly HTMLElement[]) => void) | null,
+  ): void {
     this._onNewElementMounted = cb;
   }
 
@@ -611,6 +612,7 @@ class LyricsVirtualizer {
     }
 
     const wrappersToMeasure: HTMLElement[] = [];
+    const newlyMountedWrappers: HTMLElement[] = [];
     for (const item of items) {
       const wrapper = this._getOrCreateWrapper(item.index);
       const gap = this._itemGap(item.index);
@@ -624,12 +626,15 @@ class LyricsVirtualizer {
         this._virtualContainer.appendChild(wrapper);
         this._mountedIndices.add(item.index);
         wrappersToMeasure.push(wrapper);
-        this._onNewElementMounted?.();
+        newlyMountedWrappers.push(wrapper);
       } else if (Math.abs(prevPad - gap) >= 0.5) {
         // Gap changes alter wrapper height without necessarily triggering a ResizeObserver
         // callback quickly enough for this pass.
         wrappersToMeasure.push(wrapper);
       }
+    }
+    if (newlyMountedWrappers.length > 0) {
+      this._onNewElementMounted?.(newlyMountedWrappers);
     }
     // All wrappers are connected and styled before measurement starts, so the
     // first offsetHeight fallback lays out the complete new window and later
@@ -950,7 +955,10 @@ class LyricsVirtualizer {
       clearTimeout(this._resizeDebounceTimer);
       this._resizeDebounceTimer = null;
     }
-    this._onNewElementMounted = null;
+    // The mount observer belongs to this singleton's animator integration, not
+    // to one track's DOM lifecycle. init() begins by calling destroy(), so
+    // clearing it here silently disables mount paint recovery after the first
+    // lyrics apply.
   }
 }
 
@@ -983,7 +991,9 @@ export function destroyLyricsVirtualizer(): void {
   lyricsVirtualizer.destroy();
 }
 
-export function setOnNewElementMounted(cb: (() => void) | null): void {
+export function setOnNewElementMounted(
+  cb: ((elements: readonly HTMLElement[]) => void) | null,
+): void {
   lyricsVirtualizer.setOnNewElementMounted(cb);
 }
 

@@ -1,5 +1,6 @@
-const IdleLyricsScale = 0.95;
-const IdleEmphasisLyricsScale = 0.95;
+const IdleLyricsScale = 1;
+const IdleEmphasisGroupScale = 1;
+const IdleEmphasisLetterScale = 1;
 const timeOffset = 0;
 const DurationTimeOffset = 0;
 const BlurMultiplier = 1.25;
@@ -24,7 +25,8 @@ const WordBlurs = {
 
 export {
   IdleLyricsScale,
-  IdleEmphasisLyricsScale,
+  IdleEmphasisGroupScale,
+  IdleEmphasisLetterScale,
   timeOffset,
   DurationTimeOffset,
   BlurMultiplier,

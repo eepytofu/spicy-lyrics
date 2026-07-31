@@ -10,9 +10,15 @@ import {
   LyricsObject,
   SimpleLyricsMode_LetterEffectsStrengthConfig,
   preHiddenDotLineMs,
+  requestPausedAnimationSettle,
 } from "../../lyrics.ts";
 import type { SyllableLead } from "../../lyrics.ts";
-import { BlurMultiplier, timeOffset } from "../Shared.ts";
+import {
+  BlurMultiplier,
+  IdleEmphasisLetterScale,
+  IdleLyricsScale,
+  timeOffset,
+} from "../Shared.ts";
 import {
   ExtraGradientSungPosition,
   ExtraGradientUnsungPosition,
@@ -98,19 +104,19 @@ const applyTimedRubyAnchorState = (
 };
 
 const ScaleRange = [
-  { Time: 0, Value: 0.95 },
+  { Time: 0, Value: IdleLyricsScale },
   { Time: 0.7, Value: 1.0505 },
   { Time: 1, Value: 1 },
 ];
 
 const LetterScaleRange = [
-  { Time: 0, Value: 0.95 },
+  { Time: 0, Value: IdleEmphasisLetterScale },
   { Time: 0.7, Value: 1.175 },
   { Time: 1, Value: 1 },
 ];
 
 const SimpleLetterScaleRange = [
-  { Time: 0, Value: 0.95 },
+  { Time: 0, Value: IdleEmphasisLetterScale },
   { Time: 0.7, Value: 1.07 },
   { Time: 1, Value: 1 },
 ];
@@ -278,6 +284,13 @@ function setStyleIfChanged(el: HTMLElement, prop: string, value: string, epsilon
   }
   queueStyle(el, prop, value);
   map.set(prop, value);
+}
+
+function invalidateMountedStyleCache(root: HTMLElement): void {
+  _styleCache.delete(root);
+  for (const element of root.querySelectorAll<HTMLElement>("*")) {
+    _styleCache.delete(element);
+  }
 }
 
 function applyWordGlowState(word: SyllableLead, glow: unknown): void {
@@ -615,11 +628,23 @@ let lastFrameTime = performance.now();
 let lastAnimationPosition: number | null = null;
 const syllableLinePaintStates = new WeakMap<HTMLElement, "NotSung" | "Active" | "Sung">();
 
-// When the virtualizer mounts a previously off-screen element, reset
-// Blurring_LastLine so that applyBlur runs on the next animation frame and
-// writes the correct --BlurAmount to the freshly connected element.
-setOnNewElementMounted(() => {
+// A freshly mounted line can otherwise inherit a cached animation decision
+// while its initial transparent text has not received any playback-state
+// paint. Give genuinely new lines a visible resting state immediately, then
+// invalidate only the mounted subtree so the bounded paused settle frame
+// recomputes its exact NotSung/Active/Sung paint and blur.
+setOnNewElementMounted((mountedWrappers) => {
+  for (const wrapper of mountedWrappers) {
+    invalidateMountedStyleCache(wrapper);
+    for (const line of wrapper.querySelectorAll<HTMLElement>(".line")) {
+      syllableLinePaintStates.delete(line);
+      if (!line.matches(".NotSung, .Active, .Sung, .static")) {
+        applyLineState(line, "NotSung");
+      }
+    }
+  }
   Blurring_LastLine = null;
+  requestPausedAnimationSettle();
 });
 
 export function findActiveElement(currentTime: number): any {
