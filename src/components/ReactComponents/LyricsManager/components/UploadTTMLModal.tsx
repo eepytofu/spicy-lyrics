@@ -135,6 +135,11 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
         </button>
       </div>
 
+      <p className="sl-ldb-upload-parser-note">
+        TTML is parsed by the Spicy Lyrics service. Persistent files stay in your local DB, but
+        their contents are sent for parsing when loaded.
+      </p>
+
       <div className="sl-ldb-upload-actions">
         <IconButton
           icon={<ArrowLeftIcon size={14} />}

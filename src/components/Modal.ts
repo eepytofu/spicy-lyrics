@@ -1,6 +1,6 @@
 type ModalDisplayOptions = {
 	title: string;
-	content: any;
+	content: Node;
 	isLarge?: boolean;
 	onClose?: (() => void) | null;
 	closeBtn?: boolean;
@@ -16,7 +16,7 @@ type ModalDisplayOptions = {
 
 type ModalTransitionOptions = {
 	title?: string;
-	content: any;
+	content: Node;
 	isLarge?: boolean;
 	onClose?: (() => void) | null;
 	closeHandler?: (() => void) | null;
@@ -133,12 +133,7 @@ class _HTMLGenericModal extends HTMLElement {
 		this._applyModalId(modalId);
 		const main = this.querySelector("main");
 		if (main) {
-			main.innerHTML = "";
-			if (typeof content === "string") {
-				main.innerHTML = content;
-			} else if (content instanceof Node || (content && typeof content === "object" && "nodeType" in content)) {
-				main.append(content);
-			}
+			main.replaceChildren(content);
 			this._restoreContentScroll(contentScrollTop ?? 0);
 		}
 		if (typeof previousOnClose === "function") {
@@ -166,10 +161,10 @@ class _HTMLGenericModal extends HTMLElement {
 		this._currentModalId = null;
 		this.innerHTML = `
 <div class="sl-modal-overlay sl-modal-overlay-animated" style="z-index: 100;">
-	<div class="sl-modal" tabindex="-1" role="dialog" aria-label="${title}" aria-modal="true">
+	<div class="sl-modal" tabindex="-1" role="dialog" aria-modal="true">
 		<div class="${isLarge ? "sl-modal-container-large" : "sl-modal-container"}">
 			<div class="sl-modal-header">
-				<h1 class="sl-modal-title" as="h1">${title}</h1>
+				<h1 class="sl-modal-title" as="h1"></h1>
 				${closeBtn ? '<button aria-label="Close" class="sl-modal-close-btn"><svg width="18" height="18" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg"><title>Close</title><path d="M31.098 29.794L16.955 15.65 31.097 1.51 29.683.093 15.54 14.237 1.4.094-.016 1.508 14.126 15.65-.016 29.795l1.414 1.414L15.54 17.065l14.144 14.143" fill="currentColor" fill-rule="evenodd"></path></svg></button>' : ""}
 			</div>
 			<div class="sl-modal-main-section">
@@ -178,6 +173,10 @@ class _HTMLGenericModal extends HTMLElement {
 		</div>
 	</div>
 </div>`;
+		const modal = this.querySelector(".sl-modal");
+		const modalTitle = this.querySelector(".sl-modal-title");
+		modal?.setAttribute("aria-label", title);
+		if (modalTitle) modalTitle.textContent = title;
 
 		const closeButton = this.querySelector("button");
 		if (closeButton) {
@@ -197,13 +196,7 @@ class _HTMLGenericModal extends HTMLElement {
 		}
 
 		if (main) {
-			if (typeof content === "string") {
-				main.innerHTML = content;
-			} else if (content instanceof Node || (content && typeof content === "object" && "nodeType" in content)) {
-				main.append(content);
-			} else if (content !== null && content !== undefined) {
-				main.append(String(content));
-			}
+			main.append(content);
 			this._resetContentScroll();
 		}
 		(targetDocument ?? this.ownerDocument).body.append(this);

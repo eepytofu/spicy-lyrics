@@ -406,4 +406,11 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay .sl-ldb-upload-root {
       font-size: var(--text-body-size) !important;
     }
   }
+
+  .sl-ldb-upload-parser-note {
+    margin: 0;
+    font-size: var(--text-caption-size) !important;
+    color: var(--color-text-secondary);
+    line-height: 1.45;
+  }
 }

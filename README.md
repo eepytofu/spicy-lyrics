@@ -112,6 +112,8 @@ If source changes do not appear, clear the current song caches under **Advanced*
 
 Some lyric sources use unofficial interfaces and may stop working. Lyrics and metadata can also have their own terms or rights. You are responsible for how you deploy, log, use, or redistribute them.
 
+Local TTML uploads are stored in the browser's local database. Parsing still uses the Spicy Lyrics service, so the TTML contents are sent there whenever a saved file is loaded.
+
 The optional Worker has open CORS and no built-in authentication or rate limiting. Review the code and add suitable Cloudflare controls before using it for a public, high-traffic deployment. See [SECURITY.md](SECURITY.md) and [worker/NOTICE.md](worker/NOTICE.md) for scope and attribution.
 
 <details>
