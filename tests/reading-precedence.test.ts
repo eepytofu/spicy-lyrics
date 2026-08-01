@@ -5,6 +5,7 @@ import {
   preserveProviderReadingWithoutResidual,
   restoreProviderReading,
   restoreProviderReadingWithoutResidual,
+  selectTimedLineReading,
   shouldPreferGeneratedReading,
   shouldUseConfiguredLocalReading,
 } from "../src/utils/Lyrics/Processing/ReadingPrecedence.ts";
@@ -23,6 +24,31 @@ test("Arabic-script Google readings precede provider fallback", () => {
   assert.equal(shouldPreferGeneratedReading("سيدي منصور", ["Arabic"]), true);
   assert.equal(shouldPreferGeneratedReading("sidi mansour", ["Arabic"]), false);
   assert.equal(shouldPreferGeneratedReading("Αγάπη", ["Greek"]), false);
+});
+
+test("Apple timing chunks cannot group locally generated Pinyin", () => {
+  const generated = "wǒ zǒu zài cháng jiē zhōng tīng xì zi chàng jīng chéng";
+  const appleTimedReading = "wǒ zǒu zài cháng jiēzhōngtīng xì zi chàng jīngchéng";
+
+  assert.deepEqual(
+    selectTimedLineReading(false, generated, undefined, appleTimedReading),
+    { text: generated, provenance: "local", usesLineContext: false },
+  );
+});
+
+test("Arabic timed readings retain generated-first provider fallback", () => {
+  assert.deepEqual(
+    selectTimedLineReading(true, "sidi mansour", "provider line", "provider chunks"),
+    { text: "sidi mansour", provenance: "remoteFallback", usesLineContext: true },
+  );
+  assert.deepEqual(
+    selectTimedLineReading(true, undefined, "provider line", "provider chunks"),
+    { text: "provider line", provenance: "provider", usesLineContext: true },
+  );
+  assert.deepEqual(
+    selectTimedLineReading(true, undefined, undefined, "provider chunks"),
+    { text: "provider chunks", provenance: "provider", usesLineContext: false },
+  );
 });
 
 test("provider reading is preserved separately and restored as fallback", () => {

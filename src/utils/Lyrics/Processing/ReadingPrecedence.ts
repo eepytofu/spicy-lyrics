@@ -2,12 +2,19 @@ import {
   ArabicTextTest,
   type RomanizationBranch,
 } from "../Fork/TextDetection.ts";
+import type { ReadingProvenance } from "./Model.ts";
 
 type ReadingEntry = {
   Text?: string;
   RomanizedText?: string;
   TransliteratedText?: string;
   ProviderRomanizedText?: string;
+};
+
+export type TimedLineReadingSelection = {
+  text: string;
+  provenance: ReadingProvenance;
+  usesLineContext: boolean;
 };
 
 const LocalReadingTests: Partial<Record<RomanizationBranch, RegExp>> = {
@@ -38,6 +45,42 @@ export function shouldPreferGeneratedReading(
 ): boolean {
   return shouldUseConfiguredLocalReading(targetText, branches) ||
     branches.some((branch) => RemoteGeneratedReadingTests[branch]?.test(targetText) === true);
+}
+
+export function selectTimedLineReading(
+  isArabicLine: boolean,
+  generatedLineReading: string | undefined,
+  providerGroupReading?: string,
+  providerSyllableReading?: string,
+): TimedLineReadingSelection | undefined {
+  if (generatedLineReading) {
+    return {
+      text: generatedLineReading,
+      provenance: isArabicLine ? "remoteFallback" : "local",
+      usesLineContext: isArabicLine,
+    };
+  }
+
+  // Provider fallback was introduced for Arabic because its generated reading
+  // is remote and may be unavailable. Other configured processors keep owning
+  // their reading text; provider timing chunks must not silently redefine
+  // Pinyin, Cyrillic, or another local reading's display boundaries.
+  if (!isArabicLine) return undefined;
+  if (providerGroupReading) {
+    return {
+      text: providerGroupReading,
+      provenance: "provider",
+      usesLineContext: true,
+    };
+  }
+  if (providerSyllableReading) {
+    return {
+      text: providerSyllableReading,
+      provenance: "provider",
+      usesLineContext: false,
+    };
+  }
+  return undefined;
 }
 
 export function preserveProviderReading(entry: ReadingEntry): string | undefined {

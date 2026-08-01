@@ -77,15 +77,16 @@ import {
   preserveProviderReadingWithoutResidual,
   restoreProviderReading,
   restoreProviderReadingWithoutResidual,
+  selectTimedLineReading,
   shouldPreferGeneratedReading,
 } from "./Processing/ReadingPrecedence.ts";
-import type { ParsedLine, ReadingProvenance } from "./Processing/Model.ts";
+import type { ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v57: prefer generated Arabic-script readings and retain usable provider text as fallback.
-export const LYRICS_PROCESSING_VERSION = 57;
+// v58: keep non-Arabic timed readings owned by their configured local processor.
+export const LYRICS_PROCESSING_VERSION = 58;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 
@@ -451,39 +452,34 @@ const postProcessSyllableRomanization = async (
       }
       const providerGroupReading = isArabicLine
         ? preserveProviderReadingWithoutResidual(group, ItemArabicTest)
-        : preserveProviderReading(group);
-      const providerSyllableReadings = syllables.map((syllable: any) => isArabicLine
-        ? preserveProviderReadingWithoutResidual(syllable, ItemArabicTest)
-        : preserveProviderReading(syllable));
+        : undefined;
+      const providerSyllableReadings = isArabicLine
+        ? syllables.map((syllable: any) =>
+          preserveProviderReadingWithoutResidual(syllable, ItemArabicTest)
+        )
+        : [];
       const hasProviderSyllableReading = providerSyllableReadings.some(Boolean);
-      let fullRomaji: string | undefined;
-      let readingProvenance: ReadingProvenance = "local";
-      let readingUsesLineContext = false;
+      const providerSyllableReading = hasProviderSyllableReading
+        ? syllables.reduce((output: string, syllable: any, index: number) => {
+          const reading = providerSyllableReadings[index] || syllable.Text || "";
+          if (index === 0) return reading;
+          return `${output}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${reading}`;
+        }, "")
+        : undefined;
       const generatedLineReading = await romanizeLineText(
         effectiveLineText,
         docContext,
         language,
         arabicReadings,
       );
-      if (isArabicLine && generatedLineReading) {
-        fullRomaji = generatedLineReading;
-        readingProvenance = "remoteFallback";
-        readingUsesLineContext = true;
-      } else if (providerGroupReading) {
-        fullRomaji = providerGroupReading;
-        readingProvenance = "provider";
-        readingUsesLineContext = true;
-      } else if (hasProviderSyllableReading) {
-        fullRomaji = syllables.reduce((output: string, syllable: any, index: number) => {
-          const reading = providerSyllableReadings[index] || syllable.Text || "";
-          if (index === 0) return reading;
-          return `${output}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${reading}`;
-        }, "");
-        readingProvenance = "provider";
-      } else {
-        fullRomaji = generatedLineReading;
-      }
-      if (!fullRomaji) return;
+      const reading = selectTimedLineReading(
+        isArabicLine,
+        generatedLineReading,
+        providerGroupReading,
+        providerSyllableReading,
+      );
+      if (!reading) return;
+      const fullRomaji = reading.text;
 
       group.TransliteratedText = fullRomaji;
       group.RomanizedText = fullRomaji;
@@ -502,13 +498,13 @@ const postProcessSyllableRomanization = async (
           cjkLineRoute === "Chinese" && chineseTranslitMode === "pinyin" && joinMandarinWords
             ? buildMandarinWordLayout(effectiveLineText)
             : undefined;
-        const plan = isArabicLine && readingUsesLineContext
-          ? buildTimedContextReadingPlan(group, fullRomaji, "Arabic", readingProvenance)
+        const plan = isArabicLine && reading.usesLineContext
+          ? buildTimedContextReadingPlan(group, fullRomaji, "Arabic", reading.provenance)
           : buildTimedGenericPlan(
             group,
             fullRomaji,
             isChineseLine ? "Chinese" : "Generic",
-            { mandarinWordLayout, provenance: readingProvenance },
+            { mandarinWordLayout, provenance: reading.provenance },
           );
         if (plan) {
           group.ReadingRenderPlan = plan;
