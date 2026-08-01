@@ -65,8 +65,9 @@ export type KugouCandidate = {
 };
 
 // The catalog-first, hash-bound KuGou flow is adapted from Lyricify Lyrics
-// Helper (Apache-2.0), with an HTTPS catalog endpoint and Spicy Lyrics-specific
-// candidate validation. See worker/NOTICE.md and worker/LICENSES/Apache-2.0.txt.
+// Helper (Apache-2.0), with its coverage-preserving mobile catalog and
+// Spicy Lyrics-specific candidate validation. See worker/NOTICE.md and
+// worker/LICENSES/Apache-2.0.txt.
 
 function kugouArtists(value: string): string[] {
   return value.split(/\s*(?:、|,|，|\/|／)\s*/u).map((artist) => artist.trim()).filter(Boolean);
