@@ -53,7 +53,10 @@ test("failed lazy initialization can be retried", async () => {
 });
 
 test("Japanese analyzer loading is deferred to nonempty browser parsing", () => {
-  assert.doesNotMatch(kuromojiSource, /^RetrievePackage\("Kuromoji"[^;]+;\s*$/mu);
+  assert.match(kuromojiSource, /from "kuromoji\/build\/kuromoji\.js"/u);
+  assert.doesNotMatch(kuromojiSource, /RetrievePackage|https:\/\/pkgs\.spikerko\.org/u);
+  assert.match(processLyricsSource, /from "greek-transliteration"/u);
+  assert.doesNotMatch(processLyricsSource, /RetrievePackage|pkgs\.spikerko\.org/u);
   assert.match(kuromojiSource, /if \(text\.trim\(\) === ""\) return \[\];/u);
   assert.match(kuromojiSource, /if \(typeof window === "undefined"\) return \[\];/u);
   assert.match(kuromojiSource, /await init\(\);/u);

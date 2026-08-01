@@ -1,4 +1,4 @@
-import { RetrievePackage } from "../ImportPackage.ts";
+import kuromoji from "kuromoji/build/kuromoji.js";
 import { createRetryableLazyInitializer } from "./Analyzer/LazyInitializer.ts";
 
 export type KuromojiToken = {
@@ -24,14 +24,8 @@ export type KuromojiToken = {
 let Analyzer: any;
 const lazyInitialization = createRetryableLazyInitializer(async () => {
   if (Analyzer === undefined) {
-    await RetrievePackage("Kuromoji", "1.0.0", "js");
-    for (let attempt = 0; !(window as any).kuromoji && attempt < 300; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (!(window as any).kuromoji) throw new Error("Kuromoji package did not initialize");
-
     Analyzer = await new Promise<any>((resolve, reject) => {
-      (window as any).kuromoji
+      kuromoji
         .builder({
           dicPath: "https://kuromoji.pkgs.spikerko.org",
         })

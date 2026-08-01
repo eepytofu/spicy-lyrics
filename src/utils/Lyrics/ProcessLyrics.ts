@@ -1,6 +1,6 @@
 import { franc } from "franc-all";
+import { transliterate as greekRomanization } from "greek-transliteration";
 import langs from "langs";
-import { RetrievePackage } from "../ImportPackage.ts";
 import Logger from "../Logger.ts";
 import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
@@ -99,25 +99,6 @@ const ScriptResidualTests: Record<RomanizationBranch, RegExp> = {
 // Any original (non-Latin) romanizable script — used in dev to flag residue.
 const ResidualScriptTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
 
-// Load Packages
-RetrievePackage("GreekRomanization", "1.0.0", "js").catch(() => {});
-
-type RomanizationPackages = {
-  greekRomanization?: any;
-};
-
-const loadPackagesForScripts = async (
-  scripts: RomanizationBranch[]
-): Promise<RomanizationPackages> => {
-  const packages: RomanizationPackages = {};
-  for (const script of scripts) {
-    if (script === "Greek") {
-      packages.greekRomanization = await RetrievePackage("GreekRomanization", "1.0.0", "js");
-    }
-  }
-  return packages;
-};
-
 const romanizeChineseText = async (text: string, primaryLanguage: string): Promise<string> => {
   if (chineseTranslitMode === "jyutping") {
     return (await romanizeCantonese(text, primaryLanguage, true, chineseTones)) ?? text;
@@ -131,9 +112,8 @@ const romanizeKoreanText = (text: string): string =>
 const romanizeCyrillicText = (text: string): string =>
   romanizeCyrillic(text, cyrillicRomanizationMode, cyrillicKeepSigns);
 
-const romanizeGreekText = (text: string, greekRomanization: any): string => {
-  if (!greekRomanization) return text;
-  const result = greekRomanization.default(text);
+const romanizeGreekText = (text: string): string => {
+  const result = greekRomanization(text);
   return result != null ? result : text;
 };
 
@@ -322,18 +302,16 @@ const joinSyllables = (syllables: any[], compact = false): string => {
 const romanizeLineText = async (
   text: string,
   docContext: ScriptBranchDocContext,
-  packages: RomanizationPackages,
   language: string
 ): Promise<string | undefined> => {
   const entry: RomanizeEntry = { target: { Text: text }, line: {}, lineText: text };
-  const changed = await romanizeEntry(entry, docContext, packages, language, false);
+  const changed = await romanizeEntry(entry, docContext, language, false);
   return changed ? entry.target.TransliteratedText : undefined;
 };
 
 const postProcessSyllableRomanization = async (
   lyrics: any,
   docContext: ScriptBranchDocContext,
-  packages: RomanizationPackages,
   language: string,
   allowChineseProviderJapaneseRepair: boolean
 ) => {
@@ -440,7 +418,7 @@ const postProcessSyllableRomanization = async (
         }
         return;
       }
-      const fullRomaji = await romanizeLineText(effectiveLineText, docContext, packages, language);
+      const fullRomaji = await romanizeLineText(effectiveLineText, docContext, language);
       if (!fullRomaji) return;
 
       group.TransliteratedText = fullRomaji;
@@ -489,7 +467,6 @@ const postProcessSyllableRomanization = async (
 const romanizeEntry = async (
   entry: RomanizeEntry,
   docContext: ScriptBranchDocContext,
-  packages: RomanizationPackages,
   primaryLanguage: string,
   annotateJapanese: boolean = true,
   allowChineseProviderJapaneseRepair: boolean = false
@@ -579,7 +556,7 @@ const romanizeEntry = async (
       }
     } else if (script === "Greek") {
       if (ItemGreekTest.test(text)) {
-        text = romanizeGreekText(text, packages.greekRomanization);
+        text = romanizeGreekText(text);
         changed = true;
       }
     }
@@ -688,7 +665,6 @@ export const ProcessLyrics = async (
   }
 
   let appliedRomanization = false;
-  let packages: RomanizationPackages = {};
   const needsRomanizationOrJapaneseReading = entries.some(
     (entry) =>
       shouldUseConfiguredLocalReading(
@@ -701,13 +677,11 @@ export const ProcessLyrics = async (
         !entry.target.JapaneseReading)
   );
   if (presentScripts.length > 0 && needsRomanizationOrJapaneseReading) {
-    packages = await loadPackagesForScripts(presentScripts);
     const results = await Promise.all(
       entries.map((entry) =>
         romanizeEntry(
           entry,
           docContext,
-          packages,
           language,
           lyrics.Type !== "Syllable",
           allowChineseProviderJapaneseRepair
@@ -718,11 +692,9 @@ export const ProcessLyrics = async (
   }
 
   if (presentScripts.length > 0) {
-    if (Object.keys(packages).length === 0) packages = await loadPackagesForScripts(presentScripts);
     await postProcessSyllableRomanization(
       lyrics,
       docContext,
-      packages,
       language,
       allowChineseProviderJapaneseRepair
     );
