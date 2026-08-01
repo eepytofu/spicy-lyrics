@@ -123,7 +123,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   /* Reading rows are roughly 46% of the main lyric size. Scale the line's
      unfocused blur by the same ratio so furigana, romaji, and translations
      share its depth without becoming less legible than the larger glyphs. */
-  --ExtraLineBlurAmount: clamp(0px, calc(var(--BlurAmount, 0px) * 0.46), 3.25px);
+  --DerivedTextBlurAmount: clamp(0px, calc(var(--BlurAmount, 0px) * 0.46), 3.25px);
   display: block;
 }
 
@@ -260,7 +260,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   -webkit-text-fill-color: var(--furigana-fill-bright);
   color: var(--furigana-fill-bright);
   text-shadow: none;
-  filter: blur(var(--ExtraLineBlurAmount, 0px));
+  --FuriganaBlurAmount: var(--DerivedTextBlurAmount, 0px);
+  filter: blur(var(--FuriganaBlurAmount));
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading > .furigana-reading-text,
@@ -442,29 +443,50 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   color: rgba(255, 255, 255, 0.55);
   -webkit-text-fill-color: rgba(255, 255, 255, 0.55);
   text-shadow: none;
-  filter: blur(var(--ExtraLineBlurAmount, 0px));
+  --RomanizedSidecarBlurAmount: var(--DerivedTextBlurAmount, 0px);
+  filter: blur(var(--RomanizedSidecarBlurAmount));
   background: none;
 }
 
 #SpicyLyricsPage
   .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
   .line.Active
-  :is(.furigana-reading, .romanized-below, .romanized-syllable) {
+  .furigana-reading {
   /* Main-lyric glow reaches 12px/50% in line mode and 6px/35% in ordinary
      syllable mode. Reusing it unchanged on half-size readings muddies their
      counters, so keep the same timing owner with a bounded smaller footprint. */
-  --derived-text-shadow-blur-radius: clamp(
+  --FuriganaTextShadowBlurRadius: clamp(
     2px,
     calc(var(--text-shadow-blur-radius, 4px) * 0.5),
     6px
   );
-  --derived-text-shadow-opacity: clamp(
+  --FuriganaTextShadowOpacity: clamp(
     0%,
     calc(var(--text-shadow-opacity, 0%) * 0.55),
     28%
   );
-  text-shadow: 0 0 var(--derived-text-shadow-blur-radius)
-    rgba(255, 255, 255, var(--derived-text-shadow-opacity));
+  text-shadow: 0 0 var(--FuriganaTextShadowBlurRadius)
+    rgba(255, 255, 255, var(--FuriganaTextShadowOpacity));
+}
+
+/* Keep the romaji glow in its own role even while it shares the same visual
+   endpoint. Furigana paint changes must not silently redefine sidecar paint. */
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
+  .line.Active
+  :is(.romanized-below, .romanized-syllable) {
+  --RomanizedTextShadowBlurRadius: clamp(
+    2px,
+    calc(var(--text-shadow-blur-radius, 4px) * 0.5),
+    6px
+  );
+  --RomanizedTextShadowOpacity: clamp(
+    0%,
+    calc(var(--text-shadow-opacity, 0%) * 0.55),
+    28%
+  );
+  text-shadow: 0 0 var(--RomanizedTextShadowBlurRadius)
+    rgba(255, 255, 255, var(--RomanizedTextShadowOpacity));
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below.romanization-placeholder {
@@ -488,14 +510,17 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   margin-inline-end: -0.125em;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  --RomanizedGradientColor: 255, 255, 255;
+  --RomanizedGradientDegrees: 90deg;
+  --RomanizedGradientAlpha: var(--gradient-alpha, 0.85);
+  --RomanizedGradientAlphaEnd: 0.35;
+  --RomanizedGradientOffset: var(--gradient-offset, 0%);
   background-image: linear-gradient(
-    var(--gradient-degrees, 90deg),
-    rgba(255, 255, 255, var(--gradient-alpha, 0.85)) var(--extra-gradient-position, -40%),
-    rgba(255, 255, 255, var(--gradient-alpha-end, 0.35)) calc(var(--extra-gradient-position, -40%) + 40% + var(--gradient-offset, 0%))
+    var(--RomanizedGradientDegrees),
+    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlpha)) var(--extra-gradient-position, -40%),
+    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlphaEnd)) calc(var(--extra-gradient-position, -40%) + 40% + var(--RomanizedGradientOffset))
   );
   --extra-gradient-position: -40%;
-  --gradient-degrees: 90deg;
-  --gradient-alpha-end: 0.35;
   text-shadow: inherit;
 }
 
@@ -507,11 +532,9 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below
   .romanized-syllable.reading-origin-provider-explicit {
-  background-image: linear-gradient(
-    var(--gradient-degrees, 90deg),
-    rgba(255, 207, 128, var(--gradient-alpha, 0.9)) var(--extra-gradient-position, -40%),
-    rgba(255, 207, 128, var(--gradient-alpha-end, 0.4)) calc(var(--extra-gradient-position, -40%) + 40% + var(--gradient-offset, 0%))
-  );
+  --RomanizedGradientColor: 255, 207, 128;
+  --RomanizedGradientAlpha: var(--gradient-alpha, 0.9);
+  --RomanizedGradientAlphaEnd: 0.4;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below {
@@ -525,7 +548,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   -webkit-text-fill-color: rgba(255, 255, 255, 0.45);
   font-style: normal;
   text-shadow: none;
-  filter: blur(var(--ExtraLineBlurAmount, 0px));
+  --TranslatedSidecarBlurAmount: var(--DerivedTextBlurAmount, 0px);
+  filter: blur(var(--TranslatedSidecarBlurAmount));
   background: none;
 }
 

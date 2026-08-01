@@ -172,7 +172,7 @@ test("resting RTL paint uses one shaped glyph fill instead of overlapping shadow
 test("every derived row follows the line's unfocused blur once", () => {
   assert.match(
     mainCss,
-    /--ExtraLineBlurAmount:\s*clamp\(\s*0px,\s*calc\(var\(--BlurAmount,\s*0px\)\s*\*\s*0\.46\),\s*3\.25px\s*\)/u,
+    /--DerivedTextBlurAmount:\s*clamp\(\s*0px,\s*calc\(var\(--BlurAmount,\s*0px\)\s*\*\s*0\.46\),\s*3\.25px\s*\)/u,
   );
   assert.match(
     mixedCss,
@@ -187,16 +187,18 @@ test("every derived row follows the line's unfocused blur once", () => {
     /\.line\.Active\s*\{[\s\S]*?--BlurAmount:\s*0px\s*!important/u,
   );
 
-  for (const selector of [
-    "#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading",
-    "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
-    "#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below",
-  ]) {
-    assert.match(
-      ruleBody(selector),
-      /filter:\s*blur\(var\(--ExtraLineBlurAmount,\s*0px\)\)/u,
-    );
-  }
+  assert.match(
+    ruleBody("#SpicyLyricsPage .LyricsContainer .LyricsContent .furigana-reading"),
+    /--FuriganaBlurAmount:\s*var\(--DerivedTextBlurAmount,\s*0px\);[\s\S]*?filter:\s*blur\(var\(--FuriganaBlurAmount\)\)/u,
+  );
+  assert.match(
+    ruleBody("#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below"),
+    /--RomanizedSidecarBlurAmount:\s*var\(--DerivedTextBlurAmount,\s*0px\);[\s\S]*?filter:\s*blur\(var\(--RomanizedSidecarBlurAmount\)\)/u,
+  );
+  assert.match(
+    ruleBody("#SpicyLyricsPage .LyricsContainer .LyricsContent .translated-below"),
+    /--TranslatedSidecarBlurAmount:\s*var\(--DerivedTextBlurAmount,\s*0px\);[\s\S]*?filter:\s*blur\(var\(--TranslatedSidecarBlurAmount\)\)/u,
+  );
 
   assert.doesNotMatch(
     ruleBody(
@@ -209,8 +211,13 @@ test("every derived row follows the line's unfocused blur once", () => {
 test("synced furigana and romaji glow only with their active lyric owner", () => {
   assert.match(
     mainCss,
-    /\.line\.Active[\s\S]*?:is\(\.furigana-reading,\s*\.romanized-below,\s*\.romanized-syllable\)\s*\{[\s\S]*?--derived-text-shadow-blur-radius:\s*clamp\([\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)\s*\*\s*0\.5[\s\S]*?--derived-text-shadow-opacity:\s*clamp\([\s\S]*?var\(--text-shadow-opacity,\s*0%\)\s*\*\s*0\.55[\s\S]*?28%/u,
+    /\.line\.Active\s+\.furigana-reading\s*\{[\s\S]*?--FuriganaTextShadowBlurRadius:\s*clamp\([\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)\s*\*\s*0\.5[\s\S]*?--FuriganaTextShadowOpacity:\s*clamp\([\s\S]*?var\(--text-shadow-opacity,\s*0%\)\s*\*\s*0\.55[\s\S]*?28%/u,
   );
+  assert.match(
+    mainCss,
+    /\.line\.Active\s+:is\(\.romanized-below,\s*\.romanized-syllable\)\s*\{[\s\S]*?--RomanizedTextShadowBlurRadius:\s*clamp\([\s\S]*?var\(--text-shadow-blur-radius,\s*4px\)\s*\*\s*0\.5[\s\S]*?--RomanizedTextShadowOpacity:\s*clamp\([\s\S]*?var\(--text-shadow-opacity,\s*0%\)\s*\*\s*0\.55[\s\S]*?28%/u,
+  );
+  assert.doesNotMatch(mainCss, /:is\(\.furigana-reading,\s*\.romanized-below/u);
   assert.match(
     animatorSource,
     /function applyWordGlowState[\s\S]*?word\.HTMLElement[\s\S]*?word\.RomajiElement[\s\S]*?"--text-shadow-blur-radius"[\s\S]*?"--text-shadow-opacity"/u,
@@ -264,6 +271,14 @@ test("timed romaji and line sidecars follow paint-only extra gradient state", ()
     /\.HasExtraSidecars\s*=\s*appendSyllableRomanizedBelow/u,
   );
   assert.match(mainCss, /var\(--extra-gradient-position, -40%\)/u);
+  assert.match(
+    mainCss,
+    /\.romanized-syllable\s*\{[\s\S]*?--RomanizedGradientDegrees:\s*90deg;[\s\S]*?--RomanizedGradientAlpha:[\s\S]*?--RomanizedGradientAlphaEnd:/u,
+  );
+  assert.match(
+    mainCss,
+    /\.romanized-syllable\.reading-origin-provider-explicit\s*\{[\s\S]*?--RomanizedGradientColor:\s*255,\s*207,\s*128;[\s\S]*?--RomanizedGradientAlphaEnd:\s*0\.4/u,
+  );
 });
 
 test("the extra sweep is wider without changing the base lyric range", () => {
