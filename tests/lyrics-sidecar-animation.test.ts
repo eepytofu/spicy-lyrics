@@ -125,6 +125,14 @@ test("derived lyric roles keep explicit weight and readable resting paint", () =
   assert.match(translation, /font-style:\s*normal/u);
 });
 
+test("timed romanization preserves end-glyph ink without changing layout advance", () => {
+  const syllable = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below .romanized-syllable",
+  );
+  assert.match(syllable, /padding-inline-end:\s*0\.125em/u);
+  assert.match(syllable, /margin-inline-end:\s*-0\.125em/u);
+});
+
 test("every derived row follows the line's unfocused blur once", () => {
   assert.match(
     mainCss,

@@ -476,6 +476,12 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below .romanized-syllable {
+  /* Tone-marked glyphs can paint beyond their typographic advance while the
+     per-unit background-clip mask stops at the element box. Reserve enough
+     logical-end paint room for that ink, then cancel the added layout advance
+     so reading spacing, wrapping, and timed-unit geometry stay unchanged. */
+  padding-inline-end: 0.125em;
+  margin-inline-end: -0.125em;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   background-image: linear-gradient(
