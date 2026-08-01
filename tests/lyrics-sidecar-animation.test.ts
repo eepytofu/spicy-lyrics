@@ -154,10 +154,18 @@ test("clipped furigana-row words and whole-line sidecars protect block-end ink w
 });
 
 test("every derived row follows the line's unfocused blur once", () => {
+  const line = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .line",
+  );
+  const lineWithSidecars = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .line.HasExtras",
+  );
   assert.match(
-    mainCss,
+    line,
     /--DerivedTextBlurAmount:\s*clamp\(\s*0px,\s*calc\(var\(--BlurAmount,\s*0px\)\s*\*\s*0\.46\),\s*3\.25px\s*\)/u,
   );
+  assert.doesNotMatch(lineWithSidecars, /--DerivedTextBlurAmount/u);
+  assert.match(lineWithSidecars, /display:\s*block/u);
   assert.match(
     mixedCss,
     /\.line\.NotSung[\s\S]*?text-shadow:\s*0 0 var\(--BlurAmount,\s*0\)/u,
