@@ -133,6 +133,26 @@ test("timed romanization preserves end-glyph ink without changing layout advance
   assert.match(syllable, /margin-inline-end:\s*-0\.125em/u);
 });
 
+test("clipped furigana-row words and whole-line sidecars protect block-end ink without changing flow", () => {
+  const furiganaWord = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-furigana",
+  );
+  assert.match(furiganaWord, /--lyric-clip-block-end-guard:\s*0\.125em/u);
+  assert.match(
+    furiganaWord,
+    /padding-block-end:\s*var\(--lyric-clip-block-end-guard\)/u,
+  );
+  assert.match(
+    furiganaWord,
+    /margin-block-end:\s*calc\(var\(--lyric-clip-block-end-guard\)\s*\*\s*-1\)/u,
+  );
+
+  assert.match(
+    mainCss,
+    /\.translated-below:not\(\.translation-placeholder\)\s*\{[\s\S]*?--lyric-clip-block-end-guard:\s*0\.125em;[\s\S]*?padding-block-end:\s*var\(--lyric-clip-block-end-guard\);[\s\S]*?margin-block-end:\s*calc\(var\(--lyric-clip-block-end-guard\)\s*\*\s*-1\);/u,
+  );
+});
+
 test("every derived row follows the line's unfocused blur once", () => {
   assert.match(
     mainCss,
