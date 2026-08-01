@@ -147,6 +147,57 @@
   --gradient-degrees: -90deg !important;
 }
 
+/* A zero-offset translucent shadow repaints overlapping parts of shaped RTL
+   glyphs more than once, which exposes bright seams in Arabic and other joined
+   scripts. Resting RTL lines use one solid glyph fill and the existing line
+   blur as a filter; active karaoke keeps its directional clipped gradient. */
+#SpicyLyricsPage.SpicyRenderer
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .line.rtl:is(.NotSung, .Sung)
+  > .lyric-base-flow,
+#SpicyLyricsPage.SpicyRenderer
+  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
+  .line.rtl:is(.NotSung, .Sung)
+  > :is(.word, .word-group, .letterGroup) {
+  filter: blur(var(--BlurAmount, 0px));
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.NotSung,
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.NotSung .word,
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.NotSung .letter {
+  color: rgba(
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-alpha-end)
+  );
+  -webkit-text-fill-color: rgba(
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-alpha-end)
+  );
+  text-shadow: none;
+}
+
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.Sung,
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.Sung .word,
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl.Sung .letter {
+  color: rgba(
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-alpha)
+  );
+  -webkit-text-fill-color: rgba(
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-color),
+    var(--gradient-alpha)
+  );
+  text-shadow: none;
+}
+
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl,
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl .word,
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.rtl .letter,
