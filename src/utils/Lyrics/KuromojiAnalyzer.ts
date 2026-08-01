@@ -1,5 +1,5 @@
-import kuromoji from "kuromoji/build/kuromoji.js";
 import { createRetryableLazyInitializer } from "./Analyzer/LazyInitializer.ts";
+import { buildKuromojiBrowserTokenizer } from "./Analyzer/KuromojiBrowserLoader.ts";
 
 export type KuromojiToken = {
   surface_form?: string;
@@ -24,16 +24,7 @@ export type KuromojiToken = {
 let Analyzer: any;
 const lazyInitialization = createRetryableLazyInitializer(async () => {
   if (Analyzer === undefined) {
-    Analyzer = await new Promise<any>((resolve, reject) => {
-      kuromoji
-        .builder({
-          dicPath: "https://kuromoji.pkgs.spikerko.org",
-        })
-        .build((error: any, analyzer: any) => {
-          if (error) reject(error);
-          else resolve(analyzer);
-        });
-    });
+    Analyzer = await buildKuromojiBrowserTokenizer();
   }
 });
 
