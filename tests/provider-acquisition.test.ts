@@ -6,29 +6,17 @@ import {
   runProviderAcquisition,
 } from "../src/utils/Lyrics/ProviderAcquisition.ts";
 
-test("provider acquisition returns a usable result before the deadline", async () => {
+test("provider acquisition returns a usable result", async () => {
   const result = await runProviderAcquisition(
     async () => ({ kind: "lyrics", result: "lyrics" }),
-    undefined,
-    100,
   );
   assert.deepEqual(result, { kind: "lyrics", result: "lyrics" });
 });
 
-test("provider timeout aborts the adapter and has a distinct outcome", async () => {
-  let aborted = false;
-  const result = await runProviderAcquisition(
-    (signal) => new Promise((resolve) => {
-      signal.addEventListener("abort", () => {
-        aborted = true;
-        resolve({ kind: "no-match" });
-      });
-    }),
-    undefined,
-    5,
-  );
-
-  assert.equal(aborted, true);
+test("typed provider request timeouts keep their distinct outcome", async () => {
+  const result = await runProviderAcquisition(async () => {
+    throw new ProviderResponseError({ kind: "timeout" }, "timed out");
+  });
   assert.deepEqual(result, { kind: "timeout" });
 });
 
@@ -37,7 +25,6 @@ test("parent cancellation is distinct from a timeout", async () => {
   const request = runProviderAcquisition(
     () => new Promise(() => {}),
     parent.signal,
-    100,
   );
   parent.abort();
 

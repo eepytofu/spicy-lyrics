@@ -2,7 +2,6 @@ export {
   assessCandidate,
   candidateScore,
   isAcceptableCandidate,
-  isSelectableCandidate,
   isStrongCandidate,
   matchMetadata,
   type CandidateAssessment,

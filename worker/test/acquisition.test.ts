@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { acquireProvider, type ProviderAdapterRegistry } from "../src/acquisition";
+import { ProviderTimeoutError } from "../src/http/fetch";
 import type { TrackMetadata } from "../src/types";
 
 const track: TrackMetadata = {
@@ -10,17 +11,12 @@ const track: TrackMetadata = {
   durationMs: 180_000,
 };
 
-describe("provider acquisition deadline", () => {
+describe("provider acquisition", () => {
   afterEach(() => vi.useRealTimers());
 
-  it("aborts the adapter and reports an internal deadline as a timeout", async () => {
-    vi.useFakeTimers();
-    let receivedSignal: AbortSignal | undefined;
-    const adapter = vi.fn(async (_track, context) => {
-      receivedSignal = context.signal;
-      return await new Promise<undefined>((_resolve, reject) => {
-        context.signal?.addEventListener("abort", () => reject(context.signal?.reason), { once: true });
-      });
+  it("reports a per-request timeout without imposing a whole-provider deadline", async () => {
+    const adapter = vi.fn(async () => {
+      throw new ProviderTimeoutError("request timed out");
     });
     const adapters: ProviderAdapterRegistry = {
       amlldb: adapter,
@@ -30,10 +26,24 @@ describe("provider acquisition deadline", () => {
       soda: adapter,
     };
 
-    const pending = acquireProvider("qq", track, { deadlineMs: 25 }, adapters);
-    await vi.advanceTimersByTimeAsync(25);
+    await expect(acquireProvider("qq", track, {}, adapters)).resolves.toEqual({ kind: "timeout" });
+  });
 
-    await expect(pending).resolves.toEqual({ kind: "timeout" });
-    expect(receivedSignal?.aborted).toBe(true);
+  it("allows a multi-step provider ladder to run beyond the former five-second cutoff", async () => {
+    vi.useFakeTimers();
+    const adapter = vi.fn(async () => await new Promise<undefined>((resolve) => {
+      setTimeout(() => resolve(undefined), 5_500);
+    }));
+    const adapters: ProviderAdapterRegistry = {
+      amlldb: adapter,
+      qq: adapter,
+      kugou: adapter,
+      netease: adapter,
+      soda: adapter,
+    };
+    const pending = acquireProvider("netease", track, {}, adapters);
+    await vi.advanceTimersByTimeAsync(5_500);
+
+    await expect(pending).resolves.toEqual({ kind: "no-match" });
   });
 });

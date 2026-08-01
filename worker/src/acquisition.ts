@@ -14,11 +14,8 @@ import type {
 import {
   isProviderTimeoutError,
   ProviderRateLimitError,
-  ProviderTimeoutError,
   ProviderUpstreamError,
 } from "./http/fetch";
-
-const DEFAULT_PROVIDER_DEADLINE_MS = 5000;
 
 export type WorkerProviderId = ProviderId | "amlldb";
 
@@ -83,22 +80,13 @@ export async function acquireProvider(
   adapters: ProviderAdapterRegistry = providerAdapters,
 ): Promise<ProviderAcquisitionOutcome> {
   if (context.signal?.aborted) return { kind: "aborted" };
-  const parentSignal = context.signal;
-  const controller = new AbortController();
-  const abortFromParent = () => controller.abort(parentSignal?.reason);
-  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
-  const deadline = setTimeout(
-    () => controller.abort(new ProviderTimeoutError("Provider deadline exceeded")),
-    context.deadlineMs ?? DEFAULT_PROVIDER_DEADLINE_MS,
-  );
   try {
-    const payload = await adapters[provider](track, { ...context, signal: controller.signal });
-    if (parentSignal?.aborted) return { kind: "aborted" };
-    if (isProviderTimeoutError(controller.signal.reason)) return { kind: "timeout" };
+    const payload = await adapters[provider](track, context);
+    if (context.signal?.aborted) return { kind: "aborted" };
     return payload ? { kind: "lyrics", payload } : { kind: "no-match" };
   } catch (error) {
-    if (parentSignal?.aborted) return { kind: "aborted" };
-    if (isProviderTimeoutError(error) || isProviderTimeoutError(controller.signal.reason) || isAbortError(error)) {
+    if (context.signal?.aborted) return { kind: "aborted" };
+    if (isProviderTimeoutError(error) || isAbortError(error)) {
       return { kind: "timeout" };
     }
     if (error instanceof ProviderRateLimitError) {
@@ -106,8 +94,5 @@ export async function acquireProvider(
     }
     if (error instanceof ProviderUpstreamError) return { kind: "upstream-error", status: error.status };
     return { kind: "error", error };
-  } finally {
-    clearTimeout(deadline);
-    parentSignal?.removeEventListener("abort", abortFromParent);
   }
 }

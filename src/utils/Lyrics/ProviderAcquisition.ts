@@ -34,18 +34,12 @@ function abortError(): DOMException {
 export async function runProviderAcquisition<Result>(
   task: (signal: AbortSignal) => Promise<ProviderAcquisitionOutcome<Result>>,
   parentSignal?: AbortSignal,
-  timeoutMs = 6500,
 ): Promise<ProviderAcquisitionOutcome<Result>> {
   if (parentSignal?.aborted) return { kind: "aborted" };
 
   const controller = new AbortController();
-  let timedOut = false;
   const onParentAbort = () => controller.abort();
   parentSignal?.addEventListener("abort", onParentAbort, { once: true });
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
 
   const aborted = new Promise<never>((_, reject) => {
     controller.signal.addEventListener("abort", () => reject(abortError()), { once: true });
@@ -55,12 +49,11 @@ export async function runProviderAcquisition<Result>(
     return await Promise.race([task(controller.signal), aborted]);
   } catch (error) {
     if (controller.signal.aborted) {
-      return { kind: timedOut ? "timeout" : "aborted" };
+      return { kind: "aborted" };
     }
     if (error instanceof ProviderResponseError) return error.outcome;
     return { kind: "error", error };
   } finally {
-    clearTimeout(timer);
     parentSignal?.removeEventListener("abort", onParentAbort);
   }
 }

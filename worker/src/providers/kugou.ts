@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isSelectableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -231,7 +231,7 @@ export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSig
 export const kugouProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchKugouSongs(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isSelectableCandidate(assessKugouSong(track, song))) continue;
+    if (!isAcceptableCandidate(assessKugouSong(track, song))) continue;
     for (const candidate of await searchKugouCandidates(track, song, context.signal)) {
       throwIfAborted(context.signal);
       if (!isKugouCandidateCompatible(track, song, candidate)) continue;

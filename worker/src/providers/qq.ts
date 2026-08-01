@@ -3,7 +3,7 @@ import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../conver
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isSelectableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
 export function decryptQrc(hex: string): string | undefined {
@@ -308,7 +308,7 @@ export const qqProvider: LyricsProvider = async (track, context = {}) => {
   let canUseLegacyFallback = true;
   for (const song of await searchQq(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isSelectableCandidate(assessSearchSong(track, song))) continue;
+    if (!isAcceptableCandidate(assessSearchSong(track, song))) continue;
     const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track, context.signal)), "search");
     if (current) return current;
     if (canUseLegacyFallback) {

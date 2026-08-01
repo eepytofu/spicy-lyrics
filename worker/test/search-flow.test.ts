@@ -318,6 +318,54 @@ describe("provider search flow", () => {
     expect((result as any)?.Content.at(-1)?.EndTime).toBe(239.4);
   });
 
+  it("fetches a provider-ranked native-script NetEase title from romanized Spotify metadata", async () => {
+    let lyricCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [{
+          baseInfo: { simpleSongData: {
+            id: 2_648_541_142,
+            name: "一梦红尘",
+            ar: [{ name: "Risa Yuzuki" }, { name: "BlackY" }],
+            al: { name: "ELYSIAN" },
+            dt: 219_440,
+          } },
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/eapi/cloudsearch/pc")) {
+        return new Response(JSON.stringify({ result: { songs: [] } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      lyricCalls += 1;
+      return new Response(JSON.stringify({
+        lrc: { lyric: "[00:00.000]红尘一梦\n[00:10.000]梦醒皆空" },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const result = await neteaseProvider({
+      id: "spotify:track:6MhJdRWkzRgBX5rNlzuVig",
+      title: "Yī mèng hóngchén",
+      artists: ["Risa Yuzuki", "BlackY"],
+      album: "ELYSIAN",
+      durationMs: 219_000,
+    });
+
+    expect(lyricCalls).toBe(1);
+    expect(result?.Type).toBe("Line");
+    expect(result?.SourceMatch).toMatchObject({
+      title: "一梦红尘",
+      artists: ["Risa Yuzuki", "BlackY"],
+      album: "ELYSIAN",
+      durationMs: 219_440,
+      coherent: true,
+      method: "batch-search-eapi-lyric",
+      evidence: { title: 0, artists: 1, album: 1, duration: 0.9, versionConflict: false },
+    });
+  });
+
   it("uses NetEase transNames as localized artist aliases", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       if (String(input).includes("/eapi/batch")) {

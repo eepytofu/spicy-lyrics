@@ -3,7 +3,6 @@ import {
   assessCandidate,
   candidateScore,
   isAcceptableCandidate,
-  isSelectableCandidate,
   isStrongCandidate,
   matchMetadata,
   normalize,
@@ -378,29 +377,24 @@ describe("provider candidate matching", () => {
     expect(netease.score).toBeGreaterThan(kugou.score);
   });
 
-  it("does not select a title-only hit without independent corroboration", () => {
-    const titleOnly = assessCandidate(track("Signal", ["Lead"]), {
-      title: "Signal",
-      artists: [],
-    });
-    const durationBacked = assessCandidate(track("Signal", ["Lead"]), {
-      title: "Signal",
-      artists: [],
-      durationMs: 240_000,
-    });
-    const localizedBacked = assessCandidate({
-      ...track("大東北我的家鄉(DJ何鵬版)", ["何玉"], 246_806),
-      album: "大東北我的家鄉",
+  it("keeps a provider-ranked native-script title when the remaining metadata agrees", () => {
+    const assessment = assessCandidate({
+      ...track("Yī mèng hóngchén", ["Risa Yuzuki", "BlackY"], 219_000),
+      album: "ELYSIAN",
     }, {
-      title: "大东北我的家乡 (DJ版)",
-      artists: ["何玉"],
-      album: "大东北我的家乡",
-      durationMs: 246_806,
+      title: "一梦红尘",
+      artists: ["Risa Yuzuki", "BlackY"],
+      album: "ELYSIAN",
+      durationMs: 219_440,
     });
 
-    expect(isAcceptableCandidate(titleOnly)).toBe(true);
-    expect(isSelectableCandidate(titleOnly)).toBe(false);
-    expect(isSelectableCandidate(durationBacked)).toBe(true);
-    expect(isSelectableCandidate(localizedBacked)).toBe(true);
+    expect(assessment.evidence).toMatchObject({
+      title: 0,
+      artists: 1,
+      album: 1,
+      duration: 0.9,
+      versionConflict: false,
+    });
+    expect(isAcceptableCandidate(assessment)).toBe(true);
   });
 });

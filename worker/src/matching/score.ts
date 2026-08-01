@@ -303,20 +303,6 @@ export function isAcceptableCandidate(assessment: CandidateAssessment, minimumSc
   return assessment.coherent && assessment.score >= minimumScore;
 }
 
-export function isSelectableCandidate(assessment: CandidateAssessment): boolean {
-  const corroborationCount = [
-    (assessment.evidence.artists ?? 0) >= 0.85,
-    (assessment.evidence.duration ?? 0) >= 0.8,
-    (assessment.evidence.album ?? 0) >= 0.85,
-  ].filter(Boolean).length;
-  return isAcceptableCandidate(assessment)
-    && !assessment.evidence.versionConflict
-    && (
-      (assessment.evidence.title >= 0.9 && corroborationCount >= 1)
-      || (assessment.evidence.title >= 0.72 && corroborationCount >= 2)
-    );
-}
-
 export function isStrongCandidate(assessment: CandidateAssessment): boolean {
   const corroborated = (assessment.evidence.artists ?? 0) >= 0.85
     || ((assessment.evidence.album ?? 0) >= 0.85 && (assessment.evidence.duration ?? 0) >= 0.8);

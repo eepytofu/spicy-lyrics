@@ -2,7 +2,7 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isSelectableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
@@ -189,7 +189,7 @@ function hasNeteaseLyrics(body: any): boolean {
 export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchNetease(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isSelectableCandidate(assessSong(track, song))) continue;
+    if (!isAcceptableCandidate(assessSong(track, song))) continue;
     let lyricMethod = "eapi-lyric";
     let body = await eapi<any>("https://interface3.music.163.com/eapi/song/lyric/v1", "/api/song/lyric/v1", {
       id: song.id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0,

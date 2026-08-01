@@ -13,7 +13,7 @@ import { parseQrc } from "./qq";
 import {
   assessCandidate,
   fetchWithTimeout,
-  isSelectableCandidate,
+  isAcceptableCandidate,
   isStrongCandidate,
   matchMetadata,
   readResponseJson,
@@ -246,13 +246,13 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchSoda(track, clientParams, context.signal)) {
     throwIfAborted(context.signal);
     const searchAssessment = assessSodaSong(track, song);
-    if (!isSelectableCandidate(searchAssessment)) continue;
+    if (!isAcceptableCandidate(searchAssessment) || searchAssessment.evidence.versionConflict) continue;
     const body = await fetchSodaDetail(song, clientParams, context.signal);
     if (!body) continue;
     const detail = sodaSong(body.track);
     if (!detail) continue;
     const detailAssessment = assessSodaSong(track, detail);
-    if (!isSelectableCandidate(detailAssessment)) continue;
+    if (!isAcceptableCandidate(detailAssessment) || detailAssessment.evidence.versionConflict) continue;
     const result = convertSodaLyrics(body, detail.durationMs ?? song.durationMs ?? track.durationMs);
     if (!result) continue;
     const ProviderCredits = dedupeProviderCredits([
