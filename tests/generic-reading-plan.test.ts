@@ -1,11 +1,45 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildTimedGenericPlan } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
+import {
+  buildTimedContextReadingPlan,
+  buildTimedGenericPlan,
+} from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
 import {
   buildCjkReadingContextText,
   romanizeChineseDominantCjkText,
 } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
 import { buildMandarinWordLayout, romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
+
+test("sentence-context Arabic reading keeps one logical unit across provider timing spans", () => {
+  const group = {
+    StartTime: 0,
+    EndTime: 2,
+    Syllables: [
+      { Text: "بضعف ", StartTime: 0, EndTime: 1 },
+      { Text: "أوى", StartTime: 1, EndTime: 2 },
+    ],
+  };
+  const plan = buildTimedContextReadingPlan(
+    group,
+    "biduef 'awaa",
+    "Arabic",
+    "remoteFallback",
+  );
+
+  assert.ok(plan);
+  assert.equal(plan.joinedDisplayText, "biduef 'awaa");
+  assert.equal(plan.readingUnits.length, 1);
+  assert.equal(plan.readingUnits[0].provenance, "remoteFallback");
+  assert.deepEqual(plan.readingUnits[0].timingRefs, ["0"]);
+  assert.deepEqual(
+    plan.timedReadingUnits.map((unit) => unit.logicalGroupId),
+    ["Arabic-context"],
+  );
+  assert.deepEqual(
+    plan.timedReadingUnits.map((unit) => unit.animationTimingRefs),
+    [["0", "1"]],
+  );
+});
 
 test("Chinese timed readings remove provider boundaries before contextual Pinyin", () => {
   const source = Array.from("空杯如行舟浪荡醉梦里走");

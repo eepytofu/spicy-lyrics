@@ -18,6 +18,8 @@ import {
   KoreanTextTest,
   CyrillicTextTest,
   GreekTextTest,
+  ArabicTextTest,
+  RomanizableScriptTextTest,
   cleanInvisibles,
   cleanInvisiblesPreserveEdges,
 } from "./Fork/index.ts";
@@ -39,6 +41,12 @@ import {
   romanizeCyrillic,
   romanizeKoreanForDisplay,
 } from "./Fork/Romanization.ts";
+import {
+  ARABIC_ROMANIZATION_ATTEMPT_VERSION,
+  applyArabicScriptRomanizations,
+  collectArabicScriptPhrases,
+} from "./Fork/ArabicRomanization.ts";
+import { batchRomanizeArabicScriptPhrases } from "./Fork/GoogleRomanizationClient.ts";
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
 import { analyzeJapaneseLine, buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
 import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
@@ -51,6 +59,7 @@ import {
 } from "./Processing/Japanese/JapanesePackageProcessor.ts";
 import {
   buildLineFallbackPlan,
+  buildTimedContextReadingPlan,
   buildTimedGenericPlan,
 } from "./Processing/GenericReadingProcessor.ts";
 import {
@@ -65,16 +74,18 @@ import {
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
 import {
   preserveProviderReading,
+  preserveProviderReadingWithoutResidual,
   restoreProviderReading,
-  shouldUseConfiguredLocalReading,
+  restoreProviderReadingWithoutResidual,
+  shouldPreferGeneratedReading,
 } from "./Processing/ReadingPrecedence.ts";
-import type { ParsedLine } from "./Processing/Model.ts";
+import type { ParsedLine, ReadingProvenance } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v52: reprocess Greek romanization with the bundled v2 behavior.
-export const LYRICS_PROCESSING_VERSION = 52;
+// v57: prefer generated Arabic-script readings and retain usable provider text as fallback.
+export const LYRICS_PROCESSING_VERSION = 57;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 
@@ -88,16 +99,32 @@ const ItemChineseTest = /[一-鿿]/;
 const ItemKoreanTest = KoreanTextTest;
 const ItemCyrillicTest = /[Ѐ-ӿԀ-ԯⷠ-ⷿꙀ-ꚟ]/;
 const ItemGreekTest = GreekTextTest;
+const ItemArabicTest = ArabicTextTest;
 const ScriptResidualTests: Record<RomanizationBranch, RegExp> = {
   Japanese: ItemJapaneseTest,
   Chinese: ItemChineseTest,
   Korean: ItemKoreanTest,
   Cyrillic: ItemCyrillicTest,
   Greek: ItemGreekTest,
+  Arabic: ItemArabicTest,
 };
 
+const preserveUsableProviderReading = (
+  entry: any,
+  scripts: readonly RomanizationBranch[],
+): string | undefined => scripts.includes("Arabic")
+  ? preserveProviderReadingWithoutResidual(entry, ItemArabicTest)
+  : preserveProviderReading(entry);
+
+const restoreUsableProviderReading = (
+  entry: any,
+  scripts: readonly RomanizationBranch[],
+): boolean => scripts.includes("Arabic")
+  ? restoreProviderReadingWithoutResidual(entry, ItemArabicTest)
+  : restoreProviderReading(entry);
+
 // Any original (non-Latin) romanizable script — used in dev to flag residue.
-const ResidualScriptTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
+const ResidualScriptTest = RomanizableScriptTextTest;
 
 const romanizeChineseText = async (text: string, primaryLanguage: string): Promise<string> => {
   if (chineseTranslitMode === "jyutping") {
@@ -220,6 +247,7 @@ const detectPresentScripts = (
   if (KoreanTextTest.test(scriptText)) present.add("Korean");
   if (CyrillicTextTest.test(scriptText)) present.add("Cyrillic");
   if (GreekTextTest.test(scriptText)) present.add("Greek");
+  if (ArabicTextTest.test(scriptText)) present.add("Arabic");
 
   const hint = romanizationBranchFromLanguage(language, iso2Language);
   if (hint && !present.has(hint)) {
@@ -302,10 +330,11 @@ const joinSyllables = (syllables: any[], compact = false): string => {
 const romanizeLineText = async (
   text: string,
   docContext: ScriptBranchDocContext,
-  language: string
+  language: string,
+  arabicReadings: ReadonlyMap<string, string>,
 ): Promise<string | undefined> => {
   const entry: RomanizeEntry = { target: { Text: text }, line: {}, lineText: text };
-  const changed = await romanizeEntry(entry, docContext, language, false);
+  const changed = await romanizeEntry(entry, docContext, language, arabicReadings, false);
   return changed ? entry.target.TransliteratedText : undefined;
 };
 
@@ -313,6 +342,7 @@ const postProcessSyllableRomanization = async (
   lyrics: any,
   docContext: ScriptBranchDocContext,
   language: string,
+  arabicReadings: ReadonlyMap<string, string>,
   allowChineseProviderJapaneseRepair: boolean
 ) => {
   if (lyrics.Type !== "Syllable") return;
@@ -342,6 +372,7 @@ const postProcessSyllableRomanization = async (
       const japaneseMap =
         isJapaneseLine && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
       const effectiveLineText = japaneseMap?.lineText ?? lineText;
+      const isArabicLine = ItemArabicTest.test(effectiveLineText);
       const repairJapaneseDisplay =
         allowChineseProviderJapaneseRepair &&
         allowsChineseProviderJapaneseRepair(effectiveLineText);
@@ -418,7 +449,40 @@ const postProcessSyllableRomanization = async (
         }
         return;
       }
-      const fullRomaji = await romanizeLineText(effectiveLineText, docContext, language);
+      const providerGroupReading = isArabicLine
+        ? preserveProviderReadingWithoutResidual(group, ItemArabicTest)
+        : preserveProviderReading(group);
+      const providerSyllableReadings = syllables.map((syllable: any) => isArabicLine
+        ? preserveProviderReadingWithoutResidual(syllable, ItemArabicTest)
+        : preserveProviderReading(syllable));
+      const hasProviderSyllableReading = providerSyllableReadings.some(Boolean);
+      let fullRomaji: string | undefined;
+      let readingProvenance: ReadingProvenance = "local";
+      let readingUsesLineContext = false;
+      const generatedLineReading = await romanizeLineText(
+        effectiveLineText,
+        docContext,
+        language,
+        arabicReadings,
+      );
+      if (isArabicLine && generatedLineReading) {
+        fullRomaji = generatedLineReading;
+        readingProvenance = "remoteFallback";
+        readingUsesLineContext = true;
+      } else if (providerGroupReading) {
+        fullRomaji = providerGroupReading;
+        readingProvenance = "provider";
+        readingUsesLineContext = true;
+      } else if (hasProviderSyllableReading) {
+        fullRomaji = syllables.reduce((output: string, syllable: any, index: number) => {
+          const reading = providerSyllableReadings[index] || syllable.Text || "";
+          if (index === 0) return reading;
+          return `${output}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${reading}`;
+        }, "");
+        readingProvenance = "provider";
+      } else {
+        fullRomaji = generatedLineReading;
+      }
       if (!fullRomaji) return;
 
       group.TransliteratedText = fullRomaji;
@@ -438,12 +502,14 @@ const postProcessSyllableRomanization = async (
           cjkLineRoute === "Chinese" && chineseTranslitMode === "pinyin" && joinMandarinWords
             ? buildMandarinWordLayout(effectiveLineText)
             : undefined;
-        const plan = buildTimedGenericPlan(
-          group,
-          fullRomaji,
-          isChineseLine ? "Chinese" : "Generic",
-          { mandarinWordLayout }
-        );
+        const plan = isArabicLine && readingUsesLineContext
+          ? buildTimedContextReadingPlan(group, fullRomaji, "Arabic", readingProvenance)
+          : buildTimedGenericPlan(
+            group,
+            fullRomaji,
+            isChineseLine ? "Chinese" : "Generic",
+            { mandarinWordLayout, provenance: readingProvenance },
+          );
         if (plan) {
           group.ReadingRenderPlan = plan;
           delete group.RomanizedText;
@@ -468,6 +534,7 @@ const romanizeEntry = async (
   entry: RomanizeEntry,
   docContext: ScriptBranchDocContext,
   primaryLanguage: string,
+  arabicReadings: ReadonlyMap<string, string>,
   annotateJapanese: boolean = true,
   allowChineseProviderJapaneseRepair: boolean = false
 ): Promise<boolean> => {
@@ -485,17 +552,17 @@ const romanizeEntry = async (
       ? { ...docContext, cjkDominantBranch: "Japanese" as const }
       : docContext;
   const targetScripts = scriptBranchForLine(target.Text || "", targetDocContext);
-  const useConfiguredLocalReading = shouldUseConfiguredLocalReading(
+  const preferGeneratedReading = shouldPreferGeneratedReading(
     target.Text || "",
     targetScripts
   );
-  const providerReading = preserveProviderReading(target);
+  const providerReading = preserveUsableProviderReading(target, targetScripts);
   const repairJapaneseDisplay =
     allowChineseProviderJapaneseRepair &&
     allowsChineseProviderJapaneseRepair(entry.lineText || target.Text || "");
 
-  if (providerReading && !useConfiguredLocalReading) {
-    restoreProviderReading(target);
+  if (providerReading && !preferGeneratedReading) {
+    restoreUsableProviderReading(target, targetScripts);
     return true;
   }
 
@@ -559,6 +626,14 @@ const romanizeEntry = async (
         text = romanizeGreekText(text);
         changed = true;
       }
+    } else if (script === "Arabic") {
+      if (ItemArabicTest.test(text)) {
+        const romanized = applyArabicScriptRomanizations(text, arabicReadings);
+        if (romanized !== text) {
+          text = romanized;
+          changed = true;
+        }
+      }
     }
   }
 
@@ -576,19 +651,25 @@ const romanizeEntry = async (
         targetScripts.map((script) => ScriptResidualTests[script])
       )
     ) {
-      return restoreProviderReading(target);
+      return restoreUsableProviderReading(target, targetScripts);
     }
     target.TransliteratedText = text;
     target.RomanizedText = text;
     line.HasTransliterations = true;
   }
 
-  return changed || restoreProviderReading(target);
+  return changed || restoreUsableProviderReading(target, targetScripts);
+};
+
+type ProcessLyricsOptions = {
+  awaitTranslation?: boolean;
+  signal?: AbortSignal;
+  allowRemoteRomanization?: boolean;
 };
 
 export const ProcessLyrics = async (
   lyrics: any,
-  options: { awaitTranslation?: boolean } = {}
+  options: ProcessLyricsOptions = {}
 ) => {
   const sourceDocument = ensureSourceLyricDocument(lyrics);
   if (!sourceDocument.parity.valid) {
@@ -653,7 +734,8 @@ export const ProcessLyrics = async (
   }
   const entries = gathered.entries;
   for (const entry of entries) {
-    preserveProviderReading(entry.target);
+    const entryScripts = scriptBranchForLine(entry.lineText || entry.target?.Text || "", docContext);
+    preserveUsableProviderReading(entry.target, entryScripts);
     const cjkLineRoute = resolveCjkLineRoute(
       entry.lineText || entry.target?.Text || "",
       docContext
@@ -664,10 +746,28 @@ export const ProcessLyrics = async (
     }
   }
 
+  let arabicPhrases: string[] = [];
+  if (presentScripts.includes("Arabic")) {
+    const sourceTexts = lyrics.Type === "Syllable"
+      ? new Set(entries.map((entry) => entry.lineText))
+      : new Set(entries.map((entry) => entry.target?.Text || ""));
+    arabicPhrases = Array.from(
+      new Set(Array.from(sourceTexts).flatMap(collectArabicScriptPhrases)),
+    );
+  }
+  const shouldRequestRemoteRomanization =
+    options.allowRemoteRomanization === true && arabicPhrases.length > 0;
+  const arabicReadings = shouldRequestRemoteRomanization
+    ? await batchRomanizeArabicScriptPhrases(arabicPhrases, { signal: options.signal })
+    : new Map<string, string>();
+  if (shouldRequestRemoteRomanization) {
+    lyrics.RemoteRomanizationAttemptVersion = ARABIC_ROMANIZATION_ATTEMPT_VERSION;
+  }
+
   let appliedRomanization = false;
   const needsRomanizationOrJapaneseReading = entries.some(
     (entry) =>
-      shouldUseConfiguredLocalReading(
+      shouldPreferGeneratedReading(
         entry.target?.Text || "",
         scriptBranchForLine(entry.lineText || entry.target?.Text || "", docContext)
       ) ||
@@ -683,6 +783,7 @@ export const ProcessLyrics = async (
           entry,
           docContext,
           language,
+          arabicReadings,
           lyrics.Type !== "Syllable",
           allowChineseProviderJapaneseRepair
         )
@@ -696,6 +797,7 @@ export const ProcessLyrics = async (
       lyrics,
       docContext,
       language,
+      arabicReadings,
       allowChineseProviderJapaneseRepair
     );
     if (lyrics.Type !== "Syllable") {

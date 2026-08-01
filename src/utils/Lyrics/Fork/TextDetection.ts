@@ -23,6 +23,17 @@ export const CyrillicTextTest = /[\u0400-\u04FF\u0500-\u052F\u2DE0-\u2DFF\uA640-
 // Greek (Basic + Extended)
 export const GreekTextTest = /[\u0370-\u03FF\u1F00-\u1FFF]/;
 
+// Arabic script, including letters used by Arabic, Persian, Urdu, Pashto,
+// Kurdish, and other languages. Script detection must not imply a language or
+// dialect classification.
+export const ArabicTextTest = /\p{Script=Arabic}/u;
+
+// One owner for cheap pipeline gating and residual checks. Keep this aligned
+// with RomanizationBranch so a supported processor cannot be skipped before
+// ProcessLyrics gets a chance to route it.
+export const RomanizableScriptTextTest =
+  /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]|\p{Script=Arabic}/u;
+
 // Devanagari
 export const DevanagariTextTest = /[\u0900-\u097F]/;
 
@@ -56,9 +67,9 @@ export function cleanInvisiblesPreserveEdges(text: string): string {
  * Detect the primary script type in text.
  * Returns the first matching script type found.
  */
-export type ScriptType = "japanese" | "chinese" | "korean" | "cyrillic" | "greek" | "latin" | "unknown";
+export type ScriptType = "japanese" | "chinese" | "korean" | "cyrillic" | "greek" | "arabic" | "latin" | "unknown";
 
-export type RomanizationBranch = "Japanese" | "Chinese" | "Korean" | "Cyrillic" | "Greek";
+export type RomanizationBranch = "Japanese" | "Chinese" | "Korean" | "Cyrillic" | "Greek" | "Arabic";
 export type CjkReadingBranch = Extract<RomanizationBranch, "Japanese" | "Chinese">;
 export type CjkLineRoute = CjkReadingBranch | "MixedChinese";
 
@@ -68,6 +79,7 @@ export const SCRIPT_PRIORITY: RomanizationBranch[] = [
   "Korean",
   "Cyrillic",
   "Greek",
+  "Arabic",
 ];
 
 export function detectScript(text: string): ScriptType {
@@ -76,6 +88,7 @@ export function detectScript(text: string): ScriptType {
   if (KoreanTextTest.test(text)) return "korean";
   if (CyrillicTextTest.test(text)) return "cyrillic";
   if (GreekTextTest.test(text)) return "greek";
+  if (ArabicTextTest.test(text)) return "arabic";
   if (/[a-zA-Z]/.test(text)) return "latin";
   return "unknown";
 }
@@ -250,6 +263,7 @@ export function scriptBranchForLine(
   if (KoreanTextTest.test(text)) present.add("Korean");
   if (CyrillicTextTest.test(text)) present.add("Cyrillic");
   if (GreekTextTest.test(text)) present.add("Greek");
+  if (ArabicTextTest.test(text)) present.add("Arabic");
 
   return SCRIPT_PRIORITY.filter((script) => present.has(script));
 }

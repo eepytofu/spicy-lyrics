@@ -29,6 +29,8 @@ export {
   JapaneseTextTest,
   CyrillicTextTest,
   GreekTextTest,
+  ArabicTextTest,
+  RomanizableScriptTextTest,
   DevanagariTextTest,
   GurmukhiTextTest,
   BengaliTextTest,

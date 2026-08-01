@@ -964,6 +964,45 @@ test("timed mixed-script romaji gets a visual gap without changing timing units"
   );
 });
 
+test("one sentence-context reading renders once across several timing owners", () => {
+  const line = new FakeElement();
+  const animatorEntries = [
+    { StartTime: 0, EndTime: 1 },
+    { StartTime: 1, EndTime: 2 },
+  ];
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [{ Text: "بضعف " }, { Text: "أوى" }],
+    "بضعف أوى",
+    undefined,
+    undefined,
+    undefined,
+    animatorEntries,
+    {
+      ...plan,
+      joinedDisplayText: "biduef 'awaa",
+      timedReadingUnits: [
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 8 },
+          text: "biduef 'awaa",
+          logicalGroupId: "Arabic-context",
+          animationTimingRefs: ["0", "1"],
+        },
+      ],
+    },
+    { useRomanized: true, isJapaneseLyrics: false },
+  );
+
+  const row = line.children.find((child) => child.className.includes("reading-plan-row"));
+  assert.ok(row);
+  assert.equal(row.textContent, "biduef 'awaa");
+  assert.equal(row.children.length, 1);
+  assert.equal(animatorEntries[0].RomajiStartTime, 0);
+  assert.equal(animatorEntries[0].RomajiEndTime, 2);
+  assert.equal(animatorEntries[1].RomajiElement, undefined);
+});
+
 test("an explicit Chinese reading route overrides an embedded kana island", () => {
   assert.equal(isJapaneseEntry({
     Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",

@@ -6,12 +6,17 @@ import { fileURLToPath } from "node:url";
 const readSource = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
-test("romanization visibility queues a cached display refresh without fetching first", () => {
+test("enabling romanization reuses the current source cache through the display queue", () => {
   const source = readSource("../src/components/Pages/PageView.ts");
   assert.match(
     source,
-    /romanizationToggle\.addEventListener\("click", \(\) => \{\s*setRomanizedStatus\(!isRomanized\);\s*queueDisplaySettingsRefresh\(\);\s*\}\);/u,
+    /const enableRomanization = !isRomanized;[\s\S]*?setRomanizedStatus\(enableRomanization\);[\s\S]*?invalidateLyricsPipeline\(\);[\s\S]*?queueDisplaySettingsRefresh\(\{ reprocessCurrent: enableRomanization \}\);/u,
   );
+  const toggleStart = source.indexOf('romanizationToggle.addEventListener("click"');
+  const toggleEnd = source.indexOf("});", toggleStart);
+  const toggleBlock = source.slice(toggleStart, toggleEnd + 3);
+  assert.doesNotMatch(toggleBlock, /queueProcessingSettingsRefresh/u);
+  assert.doesNotMatch(toggleBlock, /LyricsStore\.RemoveItem/u);
 });
 
 test("display refresh accepts only current-track cached lyrics and current revisions", () => {
@@ -20,13 +25,14 @@ test("display refresh accepts only current-track cached lyrics and current revis
   assert.match(source, /targetRevision !== displaySettingsRevision/u);
   assert.match(source, /SpotifyPlayer\.GetUri\(\) !== uri/u);
   assert.match(source, /if \(!lyrics\) \{\s*lyrics = await fetchLyrics\(uri\);\s*\}/u);
+  assert.match(source, /if \(!reprocessCurrent && raw/u);
 });
 
 test("a failed display refresh is logged without retrying the same revision forever", () => {
   const source = readSource("../src/components/Pages/PageView.ts");
   assert.match(
     source,
-    /try \{\s*await rerenderCurrentLyrics\(targetRevision\);\s*\} catch \(error\) \{\s*pageLogger\.warn\("Failed to refresh lyrics after a display setting changed", error\);\s*\}\s*appliedDisplaySettingsRevision = targetRevision;/u,
+    /try \{\s*await rerenderCurrentLyrics\(targetRevision, reprocessCurrent\);\s*\} catch \(error\) \{\s*pageLogger\.warn\("Failed to refresh lyrics after a display setting changed", error\);\s*\}\s*appliedDisplaySettingsRevision = targetRevision;/u,
   );
 });
 

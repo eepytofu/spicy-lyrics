@@ -18,7 +18,12 @@ import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
 import { Query } from "../API/Query.ts";
-import { LYRICS_PROCESSING_VERSION, ProcessLyrics, READING_PLAN_SCHEMA_VERSION } from "./ProcessLyrics.ts";
+import {
+  LYRICS_PROCESSING_VERSION,
+  ProcessLyrics,
+  READING_PLAN_SCHEMA_VERSION,
+} from "./ProcessLyrics.ts";
+import { ARABIC_ROMANIZATION_ATTEMPT_VERSION } from "./Fork/ArabicRomanization.ts";
 import {
   chineseTones,
   chineseTranslitMode,
@@ -40,7 +45,7 @@ import {
   TRANSLATION_SIDECAR_SCHEMA_VERSION,
   translateLyrics,
 } from "./Fork/Translation.ts";
-import { $chineseCharacterForm } from "../uiState.ts";
+import { $chineseCharacterForm, $romanization } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { fetchLyricsFromProviders } from "./ExternalSources.ts";
 import {
@@ -56,6 +61,10 @@ import {
   LyricsRequestCoordinator,
   type LyricsRequestSession,
 } from "./LyricsRequestSession.ts";
+import {
+  ArabicTextTest,
+  RomanizableScriptTextTest,
+} from "./Fork/TextDetection.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -186,7 +195,11 @@ async function finishProcessingInBackground(
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
-    await ProcessLyrics(lyrics, { awaitTranslation: false });
+    await ProcessLyrics(lyrics, {
+      awaitTranslation: false,
+      signal: session.signal,
+      allowRemoteRomanization: $romanization.get(),
+    });
     if (!session.isCurrent()) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
@@ -205,8 +218,6 @@ async function finishProcessingInBackground(
   await finishTranslationInBackground(trackId, lyrics, session);
 }
 
-const RomanizableScriptQuickTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
-const ObviousNonEnglishScriptQuickTest = /[぀-ヿ一-鿿가-힯ᄀ-ᇿ㄰-㆏Ѐ-ԯͰ-Ͽἀ-῿]/;
 const NonAsciiLatinQuickTest = /[À-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
 function collectLyricsText(lyrics: any): string[] {
@@ -232,7 +243,12 @@ function detectChineseQuick(lyrics: any): boolean {
 }
 
 function hasRomanizationWorkQuick(lyrics: any): boolean {
-  return RomanizableScriptQuickTest.test(collectLyricsText(lyrics).join(""));
+  return RomanizableScriptTextTest.test(collectLyricsText(lyrics).join(""));
+}
+
+function hasRemoteRomanizationWorkQuick(lyrics: any): boolean {
+  return ArabicTextTest.test(collectLyricsText(lyrics).join(""))
+    && lyrics?.RemoteRomanizationAttemptVersion !== ARABIC_ROMANIZATION_ATTEMPT_VERSION;
 }
 
 function hasTranslationWorkQuick(lyrics: any): boolean {
@@ -241,7 +257,7 @@ function hasTranslationWorkQuick(lyrics: any): boolean {
   if (!text) return false;
 
   if (translationTargetLang === "en") {
-    if (ObviousNonEnglishScriptQuickTest.test(text) || NonAsciiLatinQuickTest.test(text)) return true;
+    if (RomanizableScriptTextTest.test(text) || NonAsciiLatinQuickTest.test(text)) return true;
     const compact = text.replace(/[^\p{L}\s']/gu, " ").replace(/\s+/g, " ").trim();
     if (compact.length < 24) return false;
     const detected = franc(compact);
@@ -299,9 +315,11 @@ async function ensureProcessingVersion(
     normalizeProviderTranslations(lyrics);
   }
 
-  const processingContextKey = currentProcessingContextKey();
-
   if (!lyrics) return { lyrics, translationPending: false };
+
+  const processingContextKey = currentProcessingContextKey();
+  const needsRemoteRomanization =
+    $romanization.get() && hasRemoteRomanizationWorkQuick(lyrics);
 
   // ProcessingPending === true means a previous session cached raw lyrics and
   // died before its background processing finished — treat as stale and
@@ -311,6 +329,7 @@ async function ensureProcessingVersion(
     && lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
     && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
     && lyrics.ProcessingContextKey === processingContextKey
+    && !needsRemoteRomanization
   ) {
     return {
       lyrics,
@@ -333,7 +352,11 @@ async function ensureProcessingVersion(
     toContext: processingContextKey,
   });
   const translationPending = hasTranslationWorkQuick(lyrics);
-  await ProcessLyrics(lyrics, { awaitTranslation: false });
+  await ProcessLyrics(lyrics, {
+    awaitTranslation: false,
+    signal: session.signal,
+    allowRemoteRomanization: $romanization.get(),
+  });
   if (!session.isCurrent()) return { lyrics, translationPending: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
@@ -407,7 +430,9 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     captureSourceTranslations(lyrics);
 
     if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
-      await ProcessLyrics(lyrics);
+      await ProcessLyrics(lyrics, {
+        allowRemoteRomanization: $romanization.get(),
+      });
     } else {
       markProcessedWithoutBackground(lyrics);
     }

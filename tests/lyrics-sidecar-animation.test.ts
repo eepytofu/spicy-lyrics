@@ -265,6 +265,26 @@ test("timed romaji and line sidecars follow paint-only extra gradient state", ()
   );
 });
 
+test("Latin reading sidecars stay LTR inside RTL source lines", () => {
+  const romanized = ruleBody(
+    "#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below",
+  );
+  assert.match(romanized, /direction:\s*ltr/u);
+  assert.match(romanized, /unicode-bidi:\s*isolate/u);
+  assert.match(
+    mainCss,
+    /\.romanized-syllable\s*\{[\s\S]*?--RomanizedGradientDegrees:\s*90deg/u,
+  );
+  assert.match(
+    mainCss,
+    /\.line\.rtl\s*>\s*\.romanized-below\s*\{[\s\S]*?text-align:\s*right;[\s\S]*?margin-top:\s*calc\(0\.15em\s*\+\s*var\(--bottom,\s*0px\)\s*\*\s*2\)/u,
+  );
+  assert.match(
+    mainCss,
+    /\.line\.rtl[\s\S]*?>\s*\.romanized-below\.reading-plan-row\s*\{[\s\S]*?justify-content:\s*flex-end/u,
+  );
+});
+
 test("the extra sweep is wider without changing the base lyric range", () => {
   assert.equal(ExtraGradientUnsungPosition, -40);
   assert.equal(ExtraGradientSungPosition, 100);

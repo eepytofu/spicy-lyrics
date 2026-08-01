@@ -1,4 +1,7 @@
-import type { RomanizationBranch } from "../Fork/TextDetection.ts";
+import {
+  ArabicTextTest,
+  type RomanizationBranch,
+} from "../Fork/TextDetection.ts";
 
 type ReadingEntry = {
   Text?: string;
@@ -14,6 +17,10 @@ const LocalReadingTests: Partial<Record<RomanizationBranch, RegExp>> = {
   Cyrillic: /[\u0400-\u052f\u2de0-\u2dff\ua640-\ua69f]/u,
 };
 
+const RemoteGeneratedReadingTests: Partial<Record<RomanizationBranch, RegExp>> = {
+  Arabic: ArabicTextTest,
+};
+
 function readingText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
@@ -25,6 +32,14 @@ export function shouldUseConfiguredLocalReading(
   return branches.some((branch) => LocalReadingTests[branch]?.test(targetText) === true);
 }
 
+export function shouldPreferGeneratedReading(
+  targetText: string,
+  branches: readonly RomanizationBranch[]
+): boolean {
+  return shouldUseConfiguredLocalReading(targetText, branches) ||
+    branches.some((branch) => RemoteGeneratedReadingTests[branch]?.test(targetText) === true);
+}
+
 export function preserveProviderReading(entry: ReadingEntry): string | undefined {
   const existing = readingText(entry.ProviderRomanizedText);
   if (existing) return existing;
@@ -34,9 +49,33 @@ export function preserveProviderReading(entry: ReadingEntry): string | undefined
   return current;
 }
 
+export function preserveProviderReadingWithoutResidual(
+  entry: ReadingEntry,
+  residualScript: RegExp,
+): string | undefined {
+  const reading = preserveProviderReading(entry);
+  if (!reading || !residualScript.test(reading)) return reading;
+  // Keep the exact provider value as evidence, but do not leave a same-script
+  // echo in the display aliases where it can masquerade as a reading.
+  delete entry.RomanizedText;
+  delete entry.TransliteratedText;
+  return undefined;
+}
+
 export function restoreProviderReading(entry: ReadingEntry): boolean {
   const provider = readingText(entry.ProviderRomanizedText);
   if (!provider) return false;
+  entry.RomanizedText = provider;
+  entry.TransliteratedText = provider;
+  return true;
+}
+
+export function restoreProviderReadingWithoutResidual(
+  entry: ReadingEntry,
+  residualScript: RegExp,
+): boolean {
+  const provider = readingText(entry.ProviderRomanizedText);
+  if (!provider || residualScript.test(provider)) return false;
   entry.RomanizedText = provider;
   entry.TransliteratedText = provider;
   return true;

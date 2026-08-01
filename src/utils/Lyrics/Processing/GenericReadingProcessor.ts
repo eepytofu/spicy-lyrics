@@ -1,6 +1,6 @@
 import { buildCanonicalLine } from "./Canonical.ts";
 import { buildRenderPlan, validateRenderPlan } from "./RenderPlan.ts";
-import type { ParsedLine, ReadingAnnotation, RenderPlan } from "./Model.ts";
+import type { ParsedLine, ReadingAnnotation, ReadingProvenance, RenderPlan } from "./Model.ts";
 
 function align(chunks: string[], display: string): string[] {
   const out = [...chunks];
@@ -69,7 +69,47 @@ type TimedGenericPlanOptions = {
     tokenCount: number;
     continuationTokenIndices: ReadonlySet<number>;
   };
+  provenance?: ReadingProvenance;
 };
+
+type TimedReadingSyllable = {
+  Text?: string;
+  RomanizedText?: string;
+  TransliteratedText?: string;
+  StartTime?: number;
+  EndTime?: number;
+  IsPartOfWord?: boolean;
+};
+
+type TimedReadingGroup = {
+  StartTime?: number;
+  EndTime?: number;
+  Syllables?: TimedReadingSyllable[];
+};
+
+function buildParsedTimedLine(
+  group: TimedReadingGroup,
+  processor: string,
+): { parsed: ParsedLine; syllables: TimedReadingSyllable[] } | undefined {
+  const syllables = group?.Syllables;
+  if (!Array.isArray(syllables) || syllables.length === 0) return undefined;
+  return {
+    syllables,
+    parsed: {
+      id: `${processor}-${group.StartTime ?? 0}-${group.EndTime ?? 0}`,
+      displayText: syllables.map((syllable) => syllable.Text || "").join(""),
+      paragraphProvenance: "unavailable",
+      spans: syllables.map((syllable, index) => ({
+        id: String(index),
+        rawText: syllable.Text || "",
+        cleanText: syllable.Text || "",
+        startMs: Number(syllable.StartTime || 0),
+        endMs: Number(syllable.EndTime || 0),
+        providerPartOfWord: syllable.IsPartOfWord === true,
+      })),
+    },
+  };
+}
 
 function withTimedBoundaries(
   units: string[],
@@ -147,30 +187,63 @@ function alignChineseTimedUnits(
 }
 
 export function buildTimedGenericPlan(
-  group: any,
+  group: TimedReadingGroup,
   display: string,
   processor: string,
   options: TimedGenericPlanOptions = {},
 ): RenderPlan | undefined {
-  const syllables = group?.Syllables;
-  if (!Array.isArray(syllables) || syllables.length === 0 || !display) return undefined;
-  const parsed: ParsedLine = { id: `${processor}-${group.StartTime ?? 0}-${group.EndTime ?? 0}`,
-    displayText: syllables.map((s: any) => s.Text || "").join(""), paragraphProvenance: "unavailable",
-    spans: syllables.map((s: any, i: number) => ({ id: String(i), rawText: s.Text || "", cleanText: s.Text || "",
-      startMs: Number(s.StartTime || 0), endMs: Number(s.EndTime || 0), providerPartOfWord: s.IsPartOfWord === true })) };
+  if (!display) return undefined;
+  const timedLine = buildParsedTimedLine(group, processor);
+  if (!timedLine) return undefined;
+  const { parsed, syllables } = timedLine;
   const canonical = buildCanonicalLine(parsed);
-  const rawChunks = syllables.map((s: any) => (s.RomanizedText || s.TransliteratedText || s.Text || "").trim());
-  const sourceTexts = syllables.map((s: any) => s.Text || "");
+  const rawChunks = syllables.map((syllable) =>
+    (syllable.RomanizedText || syllable.TransliteratedText || syllable.Text || "").trim()
+  );
+  const sourceTexts = syllables.map((syllable) => syllable.Text || "");
   const chunks = processor === "Chinese"
     ? alignChineseTimedUnits(rawChunks, display, sourceTexts, options)
     : align(rawChunks, display);
-  const annotation: ReadingAnnotation = { processor, mode: "local", provenance: "local",
+  const provenance = options.provenance || "local";
+  const annotation: ReadingAnnotation = { processor, mode: provenance, provenance,
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",
-      logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId] })) };
+      logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId], provenance })) };
   const plan = buildRenderPlan(parsed, canonical, [annotation]);
   if (!validateRenderPlan(plan).valid) return undefined;
   return processor === "Chinese" ? { ...plan, primaryScript: "Chinese" } : plan;
+}
+
+export function buildTimedContextReadingPlan(
+  group: TimedReadingGroup,
+  display: string,
+  processor: string,
+  provenance: ReadingProvenance = "local",
+): RenderPlan | undefined {
+  if (!display) return undefined;
+  const timedLine = buildParsedTimedLine(group, processor);
+  if (!timedLine) return undefined;
+  const { parsed } = timedLine;
+  const canonical = buildCanonicalLine(parsed);
+  const timingRefs = parsed.spans.map((span) => span.id);
+  const annotation: ReadingAnnotation = {
+    processor,
+    mode: provenance,
+    provenance,
+    units: [{
+      canonicalRange: { startCp: 0, endCp: Array.from(canonical.text).length },
+      text: display,
+      kind: "transformed",
+      logicalGroupId: `${processor}-context`,
+      // The sidecar is one visual unit owned by the first timed span. Its
+      // animation window still covers every source timing owner.
+      timingRefs: [timingRefs[0]],
+      animationTimingRefs: timingRefs,
+      provenance,
+    }],
+  };
+  const plan = buildRenderPlan(parsed, canonical, [annotation]);
+  return validateRenderPlan(plan).valid ? plan : undefined;
 }
 
 export function buildLineFallbackPlan(source: string, display: string, id: string): RenderPlan {

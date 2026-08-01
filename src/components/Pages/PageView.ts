@@ -1,4 +1,8 @@
-import fetchLyrics, { LyricsStore, ShowQueueLoader } from "../../utils/Lyrics/fetchLyrics.ts";
+import fetchLyrics, {
+  invalidateLyricsPipeline,
+  LyricsStore,
+  ShowQueueLoader,
+} from "../../utils/Lyrics/fetchLyrics.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
 import { bindCoalescedSourceSettingsRefresh } from "../../utils/Lyrics/SourceSettingsRefresh.ts";
 import {
@@ -654,8 +658,10 @@ function AppendViewControls(ReAppend: boolean = false) {
           });
         }
         romanizationToggle.addEventListener("click", () => {
-          setRomanizedStatus(!isRomanized);
-          queueDisplaySettingsRefresh();
+          const enableRomanization = !isRomanized;
+          setRomanizedStatus(enableRomanization);
+          invalidateLyricsPipeline();
+          queueDisplaySettingsRefresh({ reprocessCurrent: enableRomanization });
         });
       } catch (err) {
         controlsLogger.warn("Failed to setup Romanization tooltip", err);
@@ -843,15 +849,19 @@ function AppendViewControls(ReAppend: boolean = false) {
 let displaySettingsRevision = 0;
 let appliedDisplaySettingsRevision = 0;
 let displaySettingsRefreshRunning = false;
+let displaySettingsReprocessingPending = false;
 
-async function rerenderCurrentLyrics(targetRevision: number): Promise<void> {
+async function rerenderCurrentLyrics(
+  targetRevision: number,
+  reprocessCurrent: boolean,
+): Promise<void> {
   if (!PageContainer || !PageView.IsOpened) return;
   const uri = SpotifyPlayer.GetUri();
   if (!uri) return;
 
   let lyrics: [object | string, number] | null = null;
   const raw = $currentLyricsData.get();
-  if (raw && !raw.startsWith("NO_LYRICS:")) {
+  if (!reprocessCurrent && raw && !raw.startsWith("NO_LYRICS:")) {
     try {
       const cachedLyrics = JSON.parse(raw);
       if (cachedLyrics?.uri === uri) {
@@ -889,8 +899,10 @@ async function runQueuedDisplaySettingsRefresh(): Promise<void> {
   try {
     while (appliedDisplaySettingsRevision < displaySettingsRevision) {
       const targetRevision = displaySettingsRevision;
+      const reprocessCurrent = displaySettingsReprocessingPending;
+      displaySettingsReprocessingPending = false;
       try {
-        await rerenderCurrentLyrics(targetRevision);
+        await rerenderCurrentLyrics(targetRevision, reprocessCurrent);
       } catch (error) {
         pageLogger.warn("Failed to refresh lyrics after a display setting changed", error);
       }
@@ -904,7 +916,10 @@ async function runQueuedDisplaySettingsRefresh(): Promise<void> {
   }
 }
 
-function queueDisplaySettingsRefresh(): void {
+function queueDisplaySettingsRefresh(
+  options: { reprocessCurrent?: boolean } = {},
+): void {
+  if (options.reprocessCurrent) displaySettingsReprocessingPending = true;
   displaySettingsRevision++;
   void runQueuedDisplaySettingsRefresh();
 }

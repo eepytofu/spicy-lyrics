@@ -436,6 +436,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 #SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below {
   display: block;
   width: 100%;
+  direction: ltr;
+  unicode-bidi: isolate;
   margin-top: 0.15em;
   font-size: calc(var(--DefaultLyricsSize) * var(--japanese-romaji-ratio));
   font-weight: 700;
@@ -446,6 +448,21 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   --RomanizedSidecarBlurAmount: var(--DerivedTextBlurAmount, 0px);
   filter: blur(var(--RomanizedSidecarBlurAmount));
   background: none;
+}
+
+/* Keep Latin readings LTR and anchored beneath their RTL source. RTL base
+   words cancel block-end paint padding from flow, so restore it for the row. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent .line.rtl > .romanized-below {
+  text-align: right;
+  margin-top: calc(0.15em + var(--bottom, 0px) * 2);
+}
+
+#SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
+  .line.rtl
+  > .romanized-below.reading-plan-row {
+  justify-content: flex-end;
 }
 
 #SpicyLyricsPage
