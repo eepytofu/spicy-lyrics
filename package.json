@@ -22,7 +22,6 @@
     "@kawarp/core": "^1.2.0",
     "@nanostores/react": "^1.1.0",
     "@pinyin-pro/data": "1.3.1",
-    "@spicemod/creator": "0.0.35",
     "@tanstack/react-query": "^5.100.14",
     "@tanstack/virtual-core": "^3.16.0",
     "@types/react": "^19.2.15",
@@ -48,6 +47,7 @@
     "transliter": "^3.0.0"
   },
   "devDependencies": {
+    "@spicemod/creator": "0.0.35",
     "@types/bun": "latest",
     "@types/d3-ease": "^3.0.2",
     "@types/semver": "^7.7.1",

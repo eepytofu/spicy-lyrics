@@ -25,7 +25,7 @@ export default defineConfig({
   framework: "react",
   linter: "oxlint",
   template: "extension",
-  packageManager: "bun",
+  packageManager: "npm",
   cssId: "slstyles",
   devModeVarName: "__SLdev__m",
   esbuildOptions: {
