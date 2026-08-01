@@ -81,9 +81,6 @@ export const READING_PLAN_SCHEMA_VERSION = 4;
 // Constants
 const romanizationLogger = new Logger("Lyrics Romanization");
 
-const getLyricsPageContainer = (): HTMLElement | null =>
-  typeof document === "undefined" ? null : document.querySelector<HTMLElement>("#SpicyLyricsPage");
-
 // Per-item (1-char) presence tests. Once a script is confirmed present in the
 // whole song, a single matching character in an item is enough to romanize it.
 const ItemJapaneseTest = /[぀-ヿ一-鿿]/;
@@ -614,7 +611,7 @@ const romanizeEntry = async (
 
 export const ProcessLyrics = async (
   lyrics: any,
-  options: { updatePageClasses?: boolean; awaitTranslation?: boolean } = {}
+  options: { awaitTranslation?: boolean } = {}
 ) => {
   const sourceDocument = ensureSourceLyricDocument(lyrics);
   if (!sourceDocument.parity.valid) {
@@ -625,7 +622,6 @@ export const ProcessLyrics = async (
   }
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
-  const updatePageClasses = options.updatePageClasses !== false;
   const awaitTranslation = options.awaitTranslation !== false;
   const hadApiTransliterations = lyrics.HasTransliterations === true;
   let gathered = gatherText(lyrics);
@@ -758,34 +754,9 @@ export const ProcessLyrics = async (
   lyrics.HasTransliterations =
     hadApiTransliterations || appliedRomanization || hasAnyTransliteration;
 
-  if (updatePageClasses) {
-    const pageContainer = getLyricsPageContainer();
-    if (lyrics.HasTransliterations === true) {
-      pageContainer?.classList.add("Lyrics_RomanizationAvailable");
-    } else {
-      pageContainer?.classList.remove("Lyrics_RomanizationAvailable");
-    }
-
-    const detectedChinese = presentScripts.includes("Chinese");
-    lyrics.DetectedChinese = detectedChinese;
-    if (detectedChinese) {
-      pageContainer?.classList.add("Lyrics_ChineseDetected");
-    } else {
-      pageContainer?.classList.remove("Lyrics_ChineseDetected");
-    }
-  }
+  lyrics.DetectedChinese = presentScripts.includes("Chinese");
 
   if (awaitTranslation) {
-    lyrics.DetectedChinese = presentScripts.includes("Chinese");
-
     await translateLyrics(lyrics);
-    if (updatePageClasses) {
-      const pageContainer = getLyricsPageContainer();
-      if (lyrics.IncludesTranslation === true) {
-        pageContainer?.classList.add("Lyrics_TranslationAvailable");
-      } else {
-        pageContainer?.classList.remove("Lyrics_TranslationAvailable");
-      }
-    }
   }
 };

@@ -6,9 +6,10 @@ import {
   type WorkerProviderId,
 } from "../src/acquisition";
 import { createWorkerHandler, parseTrackMetadata } from "../src/http/handler";
+import { ProviderRateLimitError, ProviderUpstreamError } from "../src/http/fetch";
 
 const trackQuery =
-  "?title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
+  "?request_version=10&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
 
 function adapters(
   provider: WorkerProviderId,
@@ -63,7 +64,13 @@ describe("Worker HTTP boundary", () => {
         )
       ).status,
     ).toBe(400);
-    expect((await handler(request("qq", "?title=Song&duration=240"))).status).toBe(400);
+    expect((await handler(request("qq", "?request_version=10&title=Song&duration=240"))).status).toBe(400);
+  });
+
+  it("rejects stale request contracts and oversized metadata", async () => {
+    const handler = createWorkerHandler();
+    expect((await handler(request("qq", trackQuery.replace("request_version=10", "request_version=9")))).status).toBe(426);
+    expect((await handler(request("qq", `${trackQuery}&artist_name=${"x".repeat(257)}`))).status).toBe(400);
   });
 
   it("parses repeated artist fields", () => {
@@ -104,7 +111,9 @@ describe("Worker HTTP boundary", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("Content-Type")).toContain("application/json");
-    expect(response.headers.get("Cache-Control")).toBe("public, max-age=3600");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("public, max-age=3600, stale-if-error=86400");
+    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v10");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(await response.json()).toMatchObject({ Type: "Static", source: "qq" });
   });
@@ -148,6 +157,21 @@ describe("Worker HTTP boundary", () => {
     expect(timeout.status).toBe(504);
     expect(timeout.headers.get("Cache-Control")).toBe("no-store");
 
+    const rateLimited = await createWorkerHandler(
+      adapters("qq", async () => {
+        throw new ProviderRateLimitError("limited", "5");
+      }),
+    )(request());
+    expect(rateLimited.status).toBe(429);
+    expect(rateLimited.headers.get("Retry-After")).toBe("5");
+
+    const upstreamFailed = await createWorkerHandler(
+      adapters("qq", async () => {
+        throw new ProviderUpstreamError("failed", 503);
+      }),
+    )(request());
+    expect(upstreamFailed.status).toBe(502);
+
     const controller = new AbortController();
     controller.abort();
     const aborted = await createWorkerHandler(
@@ -167,8 +191,22 @@ describe("Worker HTTP boundary", () => {
     expect(failed.status).toBe(502);
     expect(failed.headers.get("Cache-Control")).toBe("no-store");
     expect(consoleError).toHaveBeenCalledWith(
-      "[worker] qq failed",
-      expect.any(Error),
+      "[worker] provider request failed",
+      { provider: "qq", category: "provider-error" },
+    );
+    consoleError.mockRestore();
+  });
+
+  it("rejects malformed successful payloads without exposing the body", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await createWorkerHandler(
+      adapters("qq", async () => ({ format: "json", lyrics: {} as any })),
+    )(request());
+    expect(response.status).toBe(502);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(consoleError).toHaveBeenCalledWith(
+      "[worker] invalid provider response",
+      { provider: "qq", category: "invalid-payload" },
     );
     consoleError.mockRestore();
   });

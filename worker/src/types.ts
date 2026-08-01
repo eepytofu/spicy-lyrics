@@ -55,6 +55,7 @@ export type ProviderMatchMetadata = {
 
 export type ProviderRequestContext = {
   signal?: AbortSignal;
+  deadlineMs?: number;
 };
 
 export type LyricsProvider = (

@@ -28,21 +28,18 @@ const OnSpotifyReady = new Promise<void>((resolve) => {
 });
 
 // Get Spotify Access Token Function
+const TOKEN_REFRESH_SKEW_MS = 2_000;
 let tokenProviderResponse: TokenProviderResponse | undefined;
 let accessTokenPromise: Promise<string> | undefined;
 
 const GetSpotifyAccessToken = (): Promise<string> => {
-  if (tokenProviderResponse) {
-    const timeUntilRefresh = tokenProviderResponse.expiresAtTime - Date.now();
-    if (timeUntilRefresh <= 2) {
-      tokenProviderResponse = undefined;
-      accessTokenPromise = new Promise((resolve) => setTimeout(resolve, timeUntilRefresh)).then(() => {
-        accessTokenPromise = undefined;
-        return GetSpotifyAccessToken();
-      });
-      return accessTokenPromise;
-    }
+  if (
+    tokenProviderResponse &&
+    tokenProviderResponse.expiresAtTime - Date.now() > TOKEN_REFRESH_SKEW_MS
+  ) {
+    return Promise.resolve(tokenProviderResponse.accessToken);
   }
+  tokenProviderResponse = undefined;
 
   if (accessTokenPromise) {
     return accessTokenPromise;
@@ -51,23 +48,27 @@ const GetSpotifyAccessToken = (): Promise<string> => {
   accessTokenPromise = SpotifyInternalFetch.get("sp://oauth/v2/token")
     .then((result: TokenProviderResponse) => {
       tokenProviderResponse = result;
-      accessTokenPromise = Promise.resolve(result.accessToken);
-      return GetSpotifyAccessToken();
+      return result.accessToken;
     })
-    .catch((error: Error) => {
-      if (error.message.includes("Resolver not found")) {
-        if (!SpotifyPlatform.Session) {
-          console.warn("Failed to find SpotifyPlatform.Session for fetching token");
-        } else {
-          tokenProviderResponse = {
-            accessToken: SpotifyPlatform.Session.accessToken,
-            expiresAtTime: SpotifyPlatform.Session.accessTokenExpirationTimestampMs,
-            tokenType: "Bearer",
-          };
-          accessTokenPromise = Promise.resolve(tokenProviderResponse.accessToken);
-        }
+    .catch((error: unknown) => {
+      if (!(error instanceof Error) || !error.message.includes("Resolver not found")) {
+        throw error;
       }
-      return GetSpotifyAccessToken();
+
+      if (!SpotifyPlatform.Session) {
+        console.warn("Failed to find SpotifyPlatform.Session for fetching token");
+        throw error;
+      }
+
+      tokenProviderResponse = {
+        accessToken: SpotifyPlatform.Session.accessToken,
+        expiresAtTime: SpotifyPlatform.Session.accessTokenExpirationTimestampMs,
+        tokenType: "Bearer",
+      };
+      return tokenProviderResponse.accessToken;
+    })
+    .finally(() => {
+      accessTokenPromise = undefined;
     });
 
   return accessTokenPromise;

@@ -11,6 +11,14 @@ import type {
   ProviderRequestContext,
   TrackMetadata,
 } from "./types";
+import {
+  isProviderTimeoutError,
+  ProviderRateLimitError,
+  ProviderTimeoutError,
+  ProviderUpstreamError,
+} from "./http/fetch";
+
+const DEFAULT_PROVIDER_DEADLINE_MS = 5000;
 
 export type WorkerProviderId = ProviderId | "amlldb";
 
@@ -37,6 +45,8 @@ export type ProviderAcquisitionOutcome =
   | { kind: "no-match" }
   | { kind: "timeout" }
   | { kind: "aborted" }
+  | { kind: "rate-limited"; retryAfter?: string }
+  | { kind: "upstream-error"; status: number }
   | { kind: "error"; error: unknown };
 
 function nativeAdapter(provider: LyricsProvider): ProviderAdapter {
@@ -73,13 +83,31 @@ export async function acquireProvider(
   adapters: ProviderAdapterRegistry = providerAdapters,
 ): Promise<ProviderAcquisitionOutcome> {
   if (context.signal?.aborted) return { kind: "aborted" };
+  const parentSignal = context.signal;
+  const controller = new AbortController();
+  const abortFromParent = () => controller.abort(parentSignal?.reason);
+  parentSignal?.addEventListener("abort", abortFromParent, { once: true });
+  const deadline = setTimeout(
+    () => controller.abort(new ProviderTimeoutError("Provider deadline exceeded")),
+    context.deadlineMs ?? DEFAULT_PROVIDER_DEADLINE_MS,
+  );
   try {
-    const payload = await adapters[provider](track, context);
-    if (context.signal?.aborted) return { kind: "aborted" };
+    const payload = await adapters[provider](track, { ...context, signal: controller.signal });
+    if (parentSignal?.aborted) return { kind: "aborted" };
+    if (isProviderTimeoutError(controller.signal.reason)) return { kind: "timeout" };
     return payload ? { kind: "lyrics", payload } : { kind: "no-match" };
   } catch (error) {
-    if (context.signal?.aborted) return { kind: "aborted" };
-    if (isAbortError(error)) return { kind: "timeout" };
+    if (parentSignal?.aborted) return { kind: "aborted" };
+    if (isProviderTimeoutError(error) || isProviderTimeoutError(controller.signal.reason) || isAbortError(error)) {
+      return { kind: "timeout" };
+    }
+    if (error instanceof ProviderRateLimitError) {
+      return { kind: "rate-limited", ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}) };
+    }
+    if (error instanceof ProviderUpstreamError) return { kind: "upstream-error", status: error.status };
     return { kind: "error", error };
+  } finally {
+    clearTimeout(deadline);
+    parentSignal?.removeEventListener("abort", abortFromParent);
   }
 }

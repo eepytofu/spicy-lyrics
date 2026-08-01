@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   acquireProviderOutcomes,
+  ProviderResponseError,
   runProviderAcquisition,
 } from "../src/utils/Lyrics/ProviderAcquisition.ts";
 
@@ -41,6 +42,18 @@ test("parent cancellation is distinct from a timeout", async () => {
   parent.abort();
 
   assert.deepEqual(await request, { kind: "aborted" });
+});
+
+test("typed server failures keep their actionable acquisition outcome", async () => {
+  const rateLimited = await runProviderAcquisition(async () => {
+    throw new ProviderResponseError({ kind: "rate-limited", retryAfterMs: 3000 }, "limited");
+  });
+  const upstream = await runProviderAcquisition(async () => {
+    throw new ProviderResponseError({ kind: "upstream-error", status: 502 }, "failed");
+  });
+
+  assert.deepEqual(rateLimited, { kind: "rate-limited", retryAfterMs: 3000 });
+  assert.deepEqual(upstream, { kind: "upstream-error", status: 502 });
 });
 
 test("strict acquisition stops on an Apple queued outcome", async () => {

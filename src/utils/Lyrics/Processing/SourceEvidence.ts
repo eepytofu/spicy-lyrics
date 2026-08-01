@@ -159,17 +159,44 @@ function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidenc
 }
 
 function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
-  const evidence = value as SourceLyricsEvidence | undefined;
-  return evidence?.schemaVersion === SOURCE_EVIDENCE_SCHEMA_VERSION &&
-    ["Static", "Line", "Syllable"].includes(evidence.lyricsType) &&
-    Array.isArray(evidence.lines);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const evidence = value as Record<string, unknown>;
+  const optionalString = (entry: unknown) => entry === undefined || typeof entry === "string";
+  const finiteNumber = (entry: unknown) => typeof entry === "number" && Number.isFinite(entry);
+  const timingOwner = (entry: unknown): entry is SourceTimingOwner => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;
+    const owner = entry as Record<string, unknown>;
+    return typeof owner.id === "string" && owner.id.length > 0
+      && typeof owner.providerText === "string"
+      && finiteNumber(owner.startTime)
+      && finiteNumber(owner.endTime)
+      && (owner.isPartOfWord === undefined || typeof owner.isPartOfWord === "boolean");
+  };
+  const line = (entry: unknown): entry is SourceEvidenceLine => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;
+    const candidate = entry as Record<string, unknown>;
+    return typeof candidate.id === "string" && candidate.id.length > 0
+      && typeof candidate.providerText === "string"
+      && optionalString(candidate.providerTranslation)
+      && finiteNumber(candidate.startTime)
+      && finiteNumber(candidate.endTime)
+      && (candidate.role === "lead" || candidate.role === "background")
+      && Array.isArray(candidate.timingOwners)
+      && candidate.timingOwners.every(timingOwner);
+  };
+  return evidence.schemaVersion === SOURCE_EVIDENCE_SCHEMA_VERSION
+    && ["Static", "Line", "Syllable"].includes(String(evidence.lyricsType))
+    && optionalString(evidence.providerId)
+    && optionalString(evidence.providerName)
+    && Array.isArray(evidence.lines)
+    && evidence.lines.every(line);
 }
 
 export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEvidence | undefined {
   if (!lyrics || !["Static", "Line", "Syllable"].includes(lyrics.Type || "")) {
     return undefined;
   }
-  if (isSourceLyricsEvidence(lyrics.SourceEvidence)) {
+  if (isSourceLyricsEvidence(lyrics.SourceEvidence) && lyrics.SourceEvidence.lyricsType === lyrics.Type) {
     return deepFreezeEvidence(lyrics.SourceEvidence);
   }
 

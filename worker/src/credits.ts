@@ -47,7 +47,7 @@ export function dedupeProviderCredits(
       ? credit.userId
       : undefined;
     const normalized = { ...credit, name, ...(userId ? { userId } : {}) };
-    const key = `${normalized.provider}\u0000${normalized.role}\u0000${normalized.name.toLocaleLowerCase()}\u0000${normalized.userId ?? ""}`;
+    const key = `${normalized.provider}\u0000${normalized.role}\u0000${normalized.name.toLowerCase()}\u0000${normalized.userId ?? ""}`;
     if (seen.has(key)) return [];
     seen.add(key);
     return [normalized];

@@ -25,11 +25,13 @@ import {
   type LyricsMatchMetadata,
 } from "./LyricsCandidateSelector.ts";
 import { externalSourceRequestUrl } from "./ExternalSourceRequest.ts";
+import { parseLrcDocument } from "./LrcParser.ts";
 import { normalizedDisplayText } from "./TextCompare.ts";
 import {
   acquireProviderOutcomes,
   runProviderAcquisition,
   type ProviderAcquisitionOutcome,
+  ProviderResponseError,
 } from "./ProviderAcquisition.ts";
 
 type TrackLyricsInfo = {
@@ -241,17 +243,6 @@ async function fetchMusixmatch(info: TrackLyricsInfo): Promise<ExternalLyricsRes
   const plain = mxmPlain(calls); return plain ? stamp(buildStatic(plain, "musixmatch", "Musixmatch"), "musixmatch", undefined, match) : null;
 }
 
-function parseLrc(text: string): { synced: TimedLine[]; plain: string[] } {
-  const synced: TimedLine[] = []; const plain: string[] = [];
-  for (const row of text.split(/\r?\n/)) {
-    const matches = [...row.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)]; const content = clean(row.replace(/\[[^\]]+\]/g, ""));
-    if (!content) continue;
-    if (!matches.length) plain.push(content);
-    for (const match of matches) synced.push({ text: content, startTimeMs: Math.round((Number(match[1]) * 60 + Number(match[2])) * 1000) });
-  }
-  return { synced, plain };
-}
-
 async function fetchLrclib(info: TrackLyricsInfo, signal: AbortSignal): Promise<ExternalLyricsResult | null> {
   const query = new URLSearchParams({ track_name: info.title, artist_name: info.artist, album_name: info.album, duration: String(info.durationMs / 1000) });
   const response = await fetch(`https://lrclib.net/api/get?${query}`, {
@@ -263,7 +254,7 @@ async function fetchLrclib(info: TrackLyricsInfo, signal: AbortSignal): Promise<
   const body = await response.json();
   const match: LyricsMatchMetadata = { title: body?.trackName ?? info.title, artists: body?.artistName ? [body.artistName] : info.artists, album: body?.albumName, durationMs: Number(body?.duration) > 0 ? Number(body.duration) * 1000 : undefined, confidence: 0.9, method: "metadata-query" };
   if (body?.instrumental) return stamp(buildStatic(["♪ Instrumental ♪"], "lrclib", "LRCLIB"), "lrclib", undefined, match);
-  if (body?.syncedLyrics) { const parsed = parseLrc(body.syncedLyrics); if (parsed.synced.length) return stamp(buildLine(parsed.synced, info.durationMs, "lrclib", "LRCLIB"), "lrclib", undefined, match); }
+  if (body?.syncedLyrics) { const parsed = parseLrcDocument(body.syncedLyrics); if (parsed.synced.length) return stamp(buildLine(parsed.synced, info.durationMs, "lrclib", "LRCLIB"), "lrclib", undefined, match); }
   return body?.plainLyrics ? stamp(buildStatic(body.plainLyrics.split(/\r?\n/), "lrclib", "LRCLIB"), "lrclib", undefined, match) : null;
 }
 
@@ -276,6 +267,30 @@ function responseMatch(response: Response): LyricsMatchMetadata | undefined {
 
 async function parseServerResponse(response: Response, info: TrackLyricsInfo, provider: LyricsSourceProviderId, label: string): Promise<ExternalLyricsResult | null> {
   if (response.status === 404 || response.status === 204) return null;
+  if (response.status === 499) {
+    throw new ProviderResponseError({ kind: "aborted" }, `${label} request was aborted`);
+  }
+  if (response.status === 504) {
+    throw new ProviderResponseError({ kind: "timeout" }, `${label} request timed out`);
+  }
+  if (response.status === 429) {
+    const retryAfterSeconds = Number(response.headers.get("Retry-After"));
+    throw new ProviderResponseError(
+      {
+        kind: "rate-limited",
+        ...(Number.isFinite(retryAfterSeconds) && retryAfterSeconds >= 0
+          ? { retryAfterMs: retryAfterSeconds * 1000 }
+          : {}),
+      },
+      `${label} request was rate limited`,
+    );
+  }
+  if (response.status === 426 || response.status >= 500) {
+    throw new ProviderResponseError(
+      { kind: "upstream-error", status: response.status },
+      `${label} upstream failed with status ${response.status}`,
+    );
+  }
   if (!response.ok) throw new Error(`${label} request failed with status ${response.status}`);
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const match = responseMatch(response);
@@ -289,7 +304,7 @@ async function parseServerResponse(response: Response, info: TrackLyricsInfo, pr
     annotateTtmlTranslationLanguages(text, lyrics);
     return stamp(lyrics, provider, label, match);
   }
-  const parsed = parseLrc(text);
+  const parsed = parseLrcDocument(text);
   return parsed.synced.length ? stamp(buildLine(parsed.synced, info.durationMs, provider, label), provider, label, match) : stamp(buildStatic(parsed.plain, provider, label), provider, label, match);
 }
 
@@ -404,8 +419,14 @@ function reportProviderFailure(
 ): void {
   if (outcome.kind === "timeout") {
     console.warn(`[SpicyLyrics] ${provider} acquisition timed out`);
+  } else if (outcome.kind === "rate-limited") {
+    console.warn(`[SpicyLyrics] ${provider} acquisition was rate limited`);
+  } else if (outcome.kind === "upstream-error") {
+    console.warn(`[SpicyLyrics] ${provider} upstream returned status ${outcome.status}`);
   } else if (outcome.kind === "error") {
-    console.error(`[SpicyLyrics] ${provider} acquisition failed`, outcome.error);
+    console.error(`[SpicyLyrics] ${provider} acquisition failed`, {
+      category: outcome.error instanceof SyntaxError ? "invalid-response" : "request-error",
+    });
   }
 }
 

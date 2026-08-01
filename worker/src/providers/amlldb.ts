@@ -1,5 +1,5 @@
 import type { ProviderMatchMetadata, ProviderRequestContext, TrackMetadata } from "../types";
-import { candidateScore, fetchWithTimeout, matchMetadata, simplify } from "./shared";
+import { candidateScore, fetchWithTimeout, matchMetadata, readResponseJson, readResponseText, simplify } from "./shared";
 
 type FetchLike = typeof fetch;
 type SearchResult = {
@@ -25,7 +25,7 @@ async function fetchTtml(fetchImpl: FetchLike, url: string, signal?: AbortSignal
     ? await fetchWithTimeout(url, { headers, signal })
     : await fetchImpl(url, { headers, signal });
   if (!response.ok) return undefined;
-  const text = await response.text();
+  const text = await readResponseText(response);
   return looksLikeTtml(text) ? text : undefined;
 }
 
@@ -46,7 +46,7 @@ async function search(fetchImpl: FetchLike, track: TrackMetadata, signal?: Abort
     };
     const response = fetchImpl === fetch ? await fetchWithTimeout(searchUrl, init) : await fetchImpl(searchUrl, init);
     if (!response.ok) continue;
-    for (const result of await response.json() as SearchResult[]) {
+    for (const result of await readResponseJson<SearchResult[]>(response)) {
       if (result.file) found.set(result.file, result);
     }
     if ([...found.values()].some((result) => resultScore(track, result) >= 75)) break;

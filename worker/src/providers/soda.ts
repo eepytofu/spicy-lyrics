@@ -13,11 +13,13 @@ import { parseQrc } from "./qq";
 import {
   assessCandidate,
   fetchWithTimeout,
-  isAcceptableCandidate,
+  isSelectableCandidate,
   isStrongCandidate,
   matchMetadata,
+  readResponseJson,
   searchQueries,
   throwIfAborted,
+  throwIfProviderRequestFailed,
 } from "./shared";
 
 const SODA_USER_AGENT = "LunaPC/2.1.0(12292405)";
@@ -139,15 +141,15 @@ export async function searchSoda(
     try {
       const response = await fetchWithTimeout(url.toString(), { headers: sodaHeaders, signal });
       if (!response.ok) continue;
-      const body = await response.json<any>();
+      const body = await readResponseJson<any>(response);
       if (!successfulSodaBody(body)) continue;
       for (const item of (body?.result_groups ?? []).flatMap((group: any) => group?.data ?? [])) {
         if (item?.meta?.item_type !== "track") continue;
         const song = sodaSong(item?.entity?.track);
         if (song) found.set(song.id, song);
       }
-    } catch {
-      throwIfAborted(signal);
+    } catch (error) {
+      throwIfProviderRequestFailed(error, signal);
       /* try the next metadata query */
     }
     if ([...found.values()].some((song) => isStrongCandidate(assessSodaSong(track, song)))) break;
@@ -177,11 +179,11 @@ export async function fetchSodaDetail(
       signal,
     });
     if (!response.ok) return undefined;
-    const body = await response.json<any>();
+    const body = await readResponseJson<any>(response);
     if (!successfulSodaBody(body) || String(body?.track?.id ?? "") !== song.id) return undefined;
     return body;
-  } catch {
-    throwIfAborted(signal);
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return undefined;
   }
 }
@@ -244,13 +246,13 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchSoda(track, clientParams, context.signal)) {
     throwIfAborted(context.signal);
     const searchAssessment = assessSodaSong(track, song);
-    if (!isAcceptableCandidate(searchAssessment) || searchAssessment.evidence.versionConflict) continue;
+    if (!isSelectableCandidate(searchAssessment)) continue;
     const body = await fetchSodaDetail(song, clientParams, context.signal);
     if (!body) continue;
     const detail = sodaSong(body.track);
     if (!detail) continue;
     const detailAssessment = assessSodaSong(track, detail);
-    if (!isAcceptableCandidate(detailAssessment) || detailAssessment.evidence.versionConflict) continue;
+    if (!isSelectableCandidate(detailAssessment)) continue;
     const result = convertSodaLyrics(body, detail.durationMs ?? song.durationMs ?? track.durationMs);
     if (!result) continue;
     const ProviderCredits = dedupeProviderCredits([

@@ -9,3 +9,7 @@ enabled = true
 
 [observability]
 enabled = true
+head_sampling_rate = 0.1
+
+[observability.logs]
+invocation_logs = false

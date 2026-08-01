@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, searchQueries, throwIfAborted, versionTags } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isSelectableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -11,7 +11,7 @@ export function decryptKrc(encoded: string): string | undefined {
   try {
     const input = Buffer.from(encoded, "base64"); if (input.subarray(0, 4).toString("ascii") !== "krc1") return undefined;
     const zipped = Buffer.alloc(input.length - 4); for (let index = 4; index < input.length; index += 1) zipped[index - 4] = input[index] ^ KEY[(index - 4) % KEY.length];
-    return inflateSync(zipped).toString("utf8").replace(/^\uFEFF/u, "");
+    return inflateSync(zipped, { maxOutputLength: 2 * 1024 * 1024 }).toString("utf8").replace(/^\uFEFF/u, "");
   } catch { return undefined; }
 }
 
@@ -27,11 +27,22 @@ export function parseKrc(value: string): TimedLine[] {
   } catch { /* malformed optional sidecar */ }
   const lines: TimedLine[] = [];
   const offset = lyricOffset(value);
+  let timedRowIndex = 0;
   for (const row of value.split(/\r?\n/)) {
     const header = /^\[(\d+),(\d+)\](.*)$/.exec(row.trim()); if (!header) continue;
+    const sidecarIndex = timedRowIndex;
+    timedRowIndex += 1;
     const lineStart = Math.max(0, Number(header[1]) + offset);
     const words = parseLeadingTimedWords(header[3], /<(\d+),(\d+),(?:\d+)>/g, lineStart);
-    if (words.length) { const index = lines.length; lines.push({ startMs: lineStart, durationMs: Number(header[2]), words, translation: translations[index]?.[0], romanization: romanizations[index]?.[0] }); }
+    if (words.length) {
+      lines.push({
+        startMs: lineStart,
+        durationMs: Number(header[2]),
+        words,
+        translation: translations[sidecarIndex]?.[0],
+        romanization: romanizations[sidecarIndex]?.[0],
+      });
+    }
   }
   return lines;
 }
@@ -137,10 +148,10 @@ export async function searchKugouSongs(track: Parameters<LyricsProvider>[0], sig
         signal,
       });
       if (!response.ok) return;
-      const body = await response.json<any>();
+      const body = await readResponseJson<any>(response);
       addResults(body?.data?.lists ?? body?.data?.info ?? [], catalog);
-    } catch {
-      throwIfAborted(signal);
+    } catch (error) {
+      throwIfProviderRequestFailed(error, signal);
       /* try the next catalog/query */
     }
   };
@@ -181,7 +192,7 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
   });
   if (!response.ok) return [];
   let body: any;
-  try { body = await response.json<any>(); }
+  try { body = await readResponseJson<any>(response); }
   catch { return []; }
   return (body?.candidates ?? [])
     .map((candidate: any) => ({
@@ -205,7 +216,7 @@ export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSig
   });
   if (!response.ok) return undefined;
   let body: any;
-  try { body = await response.json<any>(); }
+  try { body = await readResponseJson<any>(response); }
   catch { return undefined; }
   return decryptKrc(body?.content ?? "");
 }
@@ -213,7 +224,7 @@ export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSig
 export const kugouProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchKugouSongs(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessKugouSong(track, song))) continue;
+    if (!isSelectableCandidate(assessKugouSong(track, song))) continue;
     for (const candidate of await searchKugouCandidates(track, song, context.signal)) {
       throwIfAborted(context.signal);
       if (!isKugouCandidateCompatible(track, song, candidate)) continue;

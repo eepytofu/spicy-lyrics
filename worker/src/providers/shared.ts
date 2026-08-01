@@ -2,6 +2,7 @@ export {
   assessCandidate,
   candidateScore,
   isAcceptableCandidate,
+  isSelectableCandidate,
   isStrongCandidate,
   matchMetadata,
   type CandidateAssessment,
@@ -9,4 +10,10 @@ export {
 } from "../matching/score";
 export { normalize, simplify, versionTags } from "../matching/normalize";
 export { searchQueries } from "../matching/queries";
-export { fetchWithTimeout, throwIfAborted } from "../http/fetch";
+export {
+  fetchWithTimeout,
+  readResponseJson,
+  readResponseText,
+  throwIfAborted,
+  throwIfProviderRequestFailed,
+} from "../http/fetch";

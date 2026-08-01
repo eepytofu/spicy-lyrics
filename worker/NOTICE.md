@@ -10,7 +10,7 @@ A copy of GPLv3 is included at [LICENSES/GPL-3.0-only.txt](LICENSES/GPL-3.0-only
 
 ## Lyricify Lyrics Helper
 
-The shared query and candidate-matching design, plus provider flows for QQ Music, KuGou, NetEase Cloud Music, and Soda Music, are adapted from [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper), Copyright 2023 XY Wang (WXRIW), under the Apache License 2.0. The code is adapted to Spicy Lyrics' data model and matching safeguards.
+The shared query and candidate-matching design, plus provider flows for QQ Music, KuGou, NetEase Cloud Music, and Soda Music, are adapted from [WXRIW/Lyricify-Lyrics-Helper at revision `983709b`](https://github.com/WXRIW/Lyricify-Lyrics-Helper/commit/983709b2519f7c5ba32206424896533d14159c97), Copyright 2023 XY Wang (WXRIW), under the Apache License 2.0. The code is adapted to Spicy Lyrics' data model and matching safeguards.
 
 A copy of Apache License 2.0 is included at [LICENSES/Apache-2.0.txt](LICENSES/Apache-2.0.txt).
 

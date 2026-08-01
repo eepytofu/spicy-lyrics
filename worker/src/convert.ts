@@ -145,6 +145,81 @@ export function toStaticLyrics(text: string, provider: ProviderId): NativeLyrics
   };
 }
 
+function alignSidecars<T>(
+  targets: readonly { startMs: number }[],
+  sidecars: readonly T[],
+  startMs: (sidecar: T) => number,
+  text: (sidecar: T) => string | undefined,
+): Array<string | undefined> {
+  const rows = targets.length + 1;
+  const columns = sidecars.length + 1;
+  const matches = Array.from({ length: rows }, () => Array(columns).fill(0));
+  const costs = Array.from({ length: rows }, () => Array(columns).fill(0));
+  const actions = Array.from({ length: rows }, () => Array<"target" | "sidecar" | "match" | undefined>(columns));
+  for (let targetIndex = 1; targetIndex < rows; targetIndex += 1) actions[targetIndex][0] = "target";
+  for (let sidecarIndex = 1; sidecarIndex < columns; sidecarIndex += 1) actions[0][sidecarIndex] = "sidecar";
+
+  const better = (
+    candidateMatches: number,
+    candidateCost: number,
+    currentMatches: number,
+    currentCost: number,
+  ) => candidateMatches > currentMatches
+    || (candidateMatches === currentMatches && candidateCost < currentCost);
+
+  for (let targetIndex = 1; targetIndex < rows; targetIndex += 1) {
+    for (let sidecarIndex = 1; sidecarIndex < columns; sidecarIndex += 1) {
+      matches[targetIndex][sidecarIndex] = matches[targetIndex - 1][sidecarIndex];
+      costs[targetIndex][sidecarIndex] = costs[targetIndex - 1][sidecarIndex];
+      actions[targetIndex][sidecarIndex] = "target";
+
+      if (better(
+        matches[targetIndex][sidecarIndex - 1],
+        costs[targetIndex][sidecarIndex - 1],
+        matches[targetIndex][sidecarIndex],
+        costs[targetIndex][sidecarIndex],
+      )) {
+        matches[targetIndex][sidecarIndex] = matches[targetIndex][sidecarIndex - 1];
+        costs[targetIndex][sidecarIndex] = costs[targetIndex][sidecarIndex - 1];
+        actions[targetIndex][sidecarIndex] = "sidecar";
+      }
+
+      const distance = Math.abs(targets[targetIndex - 1].startMs - startMs(sidecars[sidecarIndex - 1]));
+      if (distance < 1500) {
+        const candidateMatches = matches[targetIndex - 1][sidecarIndex - 1] + 1;
+        const candidateCost = costs[targetIndex - 1][sidecarIndex - 1] + distance;
+        if (better(
+          candidateMatches,
+          candidateCost,
+          matches[targetIndex][sidecarIndex],
+          costs[targetIndex][sidecarIndex],
+        )) {
+          matches[targetIndex][sidecarIndex] = candidateMatches;
+          costs[targetIndex][sidecarIndex] = candidateCost;
+          actions[targetIndex][sidecarIndex] = "match";
+        }
+      }
+    }
+  }
+
+  const output = Array<string | undefined>(targets.length).fill(undefined);
+  let targetIndex = targets.length;
+  let sidecarIndex = sidecars.length;
+  while (targetIndex > 0 || sidecarIndex > 0) {
+    const action = actions[targetIndex][sidecarIndex];
+    if (action === "match") {
+      output[targetIndex - 1] = text(sidecars[sidecarIndex - 1]);
+      targetIndex -= 1;
+      sidecarIndex -= 1;
+    } else if (action === "sidecar") {
+      sidecarIndex -= 1;
+    } else {
+      targetIndex -= 1;
+    }
+  }
+  return output;
+}
+
 export function toLineLyrics(
   lrc: string,
   durationMs: number,
@@ -156,14 +231,11 @@ export function toLineLyrics(
   if (!rows.length || isInstrumentalSentinelDocument(rows.map((row) => row.text), provider)) return undefined;
   const translations = translation ? parseLrc(translation) : [];
   const romanizations = romanization ? parseLrc(romanization) : [];
-  const closest = (items: Array<{ startMs: number; text: string }>, start: number) => {
-    let best: { startMs: number; text: string } | undefined; let distance = 1500;
-    for (const item of items) { const next = Math.abs(item.startMs - start); if (next < distance) { best = item; distance = next; } }
-    return best?.text;
-  };
+  const translatedRows = alignSidecars(rows, translations, (row) => row.startMs, (row) => row.text);
+  const romanizedRows = alignSidecars(rows, romanizations, (row) => row.startMs, (row) => row.text);
   const Content = rows.map((row, index) => {
-    const translated = cleanSidecarText(closest(translations, row.startMs), provider);
-    const romanized = cleanSidecarText(closest(romanizations, row.startMs), provider);
+    const translated = cleanSidecarText(translatedRows[index], provider);
+    const romanized = cleanSidecarText(romanizedRows[index], provider);
     return {
       Type: "Vocal", Text: row.text, StartTime: row.startMs / 1000,
       EndTime: Math.max(row.startMs, rows[index + 1]?.startMs ?? durationMs) / 1000, OppositeAligned: false,
@@ -186,12 +258,13 @@ export function toLineLyrics(
 export function attachSidecars(lines: TimedLine[], translation?: string, romanization?: string): TimedLine[] {
   const translations = translation ? parseLrc(translation) : [];
   const romanizations = romanization ? parseLrc(romanization) : [];
-  const closest = (items: Array<{ startMs: number; text: string }>, start: number) => {
-    let best: { startMs: number; text: string } | undefined; let distance = 1500;
-    for (const item of items) { const next = Math.abs(item.startMs - start); if (next < distance) { best = item; distance = next; } }
-    return best?.text;
-  };
-  return lines.map((line) => ({ ...line, translation: closest(translations, line.startMs), romanization: closest(romanizations, line.startMs) }));
+  const translatedRows = alignSidecars(lines, translations, (row) => row.startMs, (row) => row.text);
+  const romanizedRows = alignSidecars(lines, romanizations, (row) => row.startMs, (row) => row.text);
+  return lines.map((line, index) => ({
+    ...line,
+    translation: translatedRows[index],
+    romanization: romanizedRows[index],
+  }));
 }
 
 export function attachTimedSidecars(
@@ -199,21 +272,12 @@ export function attachTimedSidecars(
   translations: TimedLine[] = [],
   romanizations: TimedLine[] = [],
 ): TimedLine[] {
-  const closest = (items: TimedLine[], start: number) => {
-    let best: TimedLine | undefined;
-    let distance = 1500;
-    for (const item of items) {
-      const next = Math.abs(item.startMs - start);
-      if (next < distance) {
-        best = item;
-        distance = next;
-      }
-    }
-    return best?.words.map((word) => word.text).join("").trim() || undefined;
-  };
-  return lines.map((line) => ({
+  const timedText = (line: TimedLine) => line.words.map((word) => word.text).join("").trim() || undefined;
+  const translatedRows = alignSidecars(lines, translations, (line) => line.startMs, timedText);
+  const romanizedRows = alignSidecars(lines, romanizations, (line) => line.startMs, timedText);
+  return lines.map((line, index) => ({
     ...line,
-    translation: closest(translations, line.startMs),
-    romanization: closest(romanizations, line.startMs),
+    translation: translatedRows[index],
+    romanization: romanizedRows[index],
   }));
 }

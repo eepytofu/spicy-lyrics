@@ -186,7 +186,7 @@ async function finishProcessingInBackground(
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
-    await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: false });
+    await ProcessLyrics(lyrics, { awaitTranslation: false });
     if (!session.isCurrent()) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
@@ -333,7 +333,7 @@ async function ensureProcessingVersion(
     toContext: processingContextKey,
   });
   const translationPending = hasTranslationWorkQuick(lyrics);
-  await ProcessLyrics(lyrics, { updatePageClasses: false, awaitTranslation: false });
+  await ProcessLyrics(lyrics, { awaitTranslation: false });
   if (!session.isCurrent()) return { lyrics, translationPending: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
@@ -407,7 +407,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     captureSourceTranslations(lyrics);
 
     if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
-      await ProcessLyrics(lyrics, { updatePageClasses: false });
+      await ProcessLyrics(lyrics);
     } else {
       markProcessedWithoutBackground(lyrics);
     }

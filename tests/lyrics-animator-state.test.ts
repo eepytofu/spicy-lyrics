@@ -61,9 +61,9 @@ test("animation state keeps exact start/end and zero-duration semantics", () => 
   assert.equal(getProgressPercentage(101, 100, 100), 1);
 });
 
-test("idle lyric geometry does not shrink words, emphasis groups, or glyph boxes", () => {
-  assert.equal(IdleLyricsScale, 1);
-  assert.equal(IdleEmphasisGroupScale, 1);
+test("idle emphasis keeps the outer motion without shrinking each glyph box", () => {
+  assert.equal(IdleLyricsScale, 0.95);
+  assert.equal(IdleEmphasisGroupScale, 0.95);
   assert.equal(IdleEmphasisLetterScale, 1);
   assert.match(
     emphasizeSource,

@@ -2,7 +2,7 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries, throwIfAborted } from "./shared";
+import { assessCandidate, fetchWithTimeout, isSelectableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
@@ -24,9 +24,9 @@ async function eapi<T>(endpoint: string, path: string, payload: unknown, signal?
       body: new URLSearchParams({ params: encryptEapi(path, payload) }).toString(),
       signal,
     });
-    return response.ok ? await response.json<T>() : undefined;
-  } catch {
-    throwIfAborted(signal);
+    return response.ok ? await readResponseJson<T>(response) : undefined;
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return undefined;
   }
 }
@@ -174,10 +174,10 @@ async function fetchLegacyNeteaseLyrics(songId: number, signal?: AbortSignal): P
       signal,
     });
     if (!response.ok) return undefined;
-    const body = await response.json<any>();
+    const body = await readResponseJson<any>(response);
     return body?.code === 200 ? body : undefined;
-  } catch {
-    throwIfAborted(signal);
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return undefined;
   }
 }
@@ -189,7 +189,7 @@ function hasNeteaseLyrics(body: any): boolean {
 export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
   for (const song of await searchNetease(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessSong(track, song))) continue;
+    if (!isSelectableCandidate(assessSong(track, song))) continue;
     let lyricMethod = "eapi-lyric";
     let body = await eapi<any>("https://interface3.music.163.com/eapi/song/lyric/v1", "/api/song/lyric/v1", {
       id: song.id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0,

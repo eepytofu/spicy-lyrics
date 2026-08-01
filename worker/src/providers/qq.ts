@@ -3,13 +3,15 @@ import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../conver
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, searchQueries, simplify, throwIfAborted } from "./shared";
+import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isSelectableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
 export function decryptQrc(hex: string): string | undefined {
   try {
     const decrypted = decryptQrcBytes(hex);
-    return decrypted ? inflateSync(Buffer.from(decrypted)).toString("utf8").replace(/^\uFEFF/u, "") : undefined;
+    return decrypted
+      ? inflateSync(Buffer.from(decrypted), { maxOutputLength: 2 * 1024 * 1024 }).toString("utf8").replace(/^\uFEFF/u, "")
+      : undefined;
   } catch { return undefined; }
 }
 
@@ -142,10 +144,10 @@ async function searchQqCatalogFallback(query: string, signal?: AbortSignal): Pro
       signal,
     });
     if (!response.ok) return [];
-    const json = await response.json<any>();
+    const json = await readResponseJson<any>(response);
     return json?.code === 0 && json?.subcode === 0 ? json?.data?.song?.list ?? [] : [];
-  } catch {
-    throwIfAborted(signal);
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return [];
   }
 }
@@ -155,7 +157,7 @@ async function searchQqLegacy(track: Parameters<LyricsProvider>[0], signal?: Abo
   url.search = new URLSearchParams({ SONGNAME: track.title, SINGERNAME: track.artists[0] ?? "", TYPE: "2", RANGE_MIN: "1", RANGE_MAX: "20" }).toString();
   const response = await fetchWithTimeout(url.toString(), { headers: { Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" }, signal });
   if (!response.ok) return [];
-  const xml = await response.text();
+  const xml = await readResponseText(response);
   return [...xml.matchAll(/<songinfo\s+id="(\d+)"[^>]*>([\s\S]*?)<\/songinfo>/g)].map((match) => {
     const field = (name: string) => decodeCdata(new RegExp(`<${name}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${name}>`).exec(match[2])?.[1] ?? "");
     return { id: Number(match[1]), title: field("name"), artists: [field("singername")], album: field("albumname") };
@@ -170,11 +172,11 @@ export async function searchQq(track: Parameters<LyricsProvider>[0], signal?: Ab
     let response: Response | undefined;
     try {
       response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json;charset=utf-8", Referer: "https://c.y.qq.com/", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body), signal });
-    } catch { throwIfAborted(signal); }
+    } catch (error) { throwIfProviderRequestFailed(error, signal); }
     let desktopSearchUnavailable = !response?.ok;
     let json: any;
     if (response?.ok) {
-      try { json = await response.json<any>(); }
+      try { json = await readResponseJson<any>(response); }
       catch { desktopSearchUnavailable = true; }
     }
     if (!desktopSearchUnavailable && Number(json?.req_1?.code ?? 0) === 0) {
@@ -209,13 +211,13 @@ export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsPro
   let response: Response;
   try {
     response = await fetchWithTimeout("https://u.y.qq.com/cgi-bin/musicu.fcg", { method: "POST", headers: { "Content-Type": "application/json", Referer: "https://y.qq.com", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(body), signal });
-  } catch {
-    throwIfAborted(signal);
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return undefined;
   }
   if (!response.ok) return undefined;
   let json: any;
-  try { json = await response.json<any>(); }
+  try { json = await readResponseJson<any>(response); }
   catch { return undefined; }
   if (json?.code !== 0 || json?.[key]?.code !== 0) return undefined;
   const data = json[key].data;
@@ -255,12 +257,12 @@ export async function fetchQqLegacyLyrics(song: SearchSong, signal?: AbortSignal
       body: new URLSearchParams({ version: "15", miniversion: "82", lrctype: "4", musicid: String(song.id) }),
       signal,
     });
-  } catch {
-    throwIfAborted(signal);
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
     return undefined;
   }
   if (!response.ok) return undefined;
-  const xml = await response.text();
+  const xml = await readResponseText(response);
   const bundle = {
     primary: decodeQqLyricField(extractLegacyQqField(xml, "content")),
     translation: decodeQqLyricField(extractLegacyQqField(xml, "contentts")),
@@ -306,7 +308,7 @@ export const qqProvider: LyricsProvider = async (track, context = {}) => {
   let canUseLegacyFallback = true;
   for (const song of await searchQq(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessSearchSong(track, song))) continue;
+    if (!isSelectableCandidate(assessSearchSong(track, song))) continue;
     const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track, context.signal)), "search");
     if (current) return current;
     if (canUseLegacyFallback) {

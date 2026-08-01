@@ -1,5 +1,5 @@
-const IdleLyricsScale = 1;
-const IdleEmphasisGroupScale = 1;
+const IdleLyricsScale = 0.95;
+const IdleEmphasisGroupScale = 0.95;
 const IdleEmphasisLetterScale = 1;
 const timeOffset = 0;
 const DurationTimeOffset = 0;

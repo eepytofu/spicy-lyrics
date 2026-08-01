@@ -268,6 +268,30 @@ describe("native word-sync conversion", () => {
     expect(attachTimedSidecars(primary, translation)[0].translation).toBe("you");
   });
 
+  it("keeps KRC sidecars aligned when an earlier timed row has no words", () => {
+    const language = Buffer.from(JSON.stringify({
+      content: [
+        { type: 1, lyricContent: [["T0"], ["T1"], ["T2"]] },
+        { type: 0, lyricContent: [["R0"], ["R1"], ["R2"]] },
+      ],
+    })).toString("base64");
+    const lines = parseKrc([
+      `[language:${language}]`,
+      "[0,1000]",
+      "[1000,1000]<0,1000,0>A",
+      "[2000,1000]<0,1000,0>B",
+    ].join("\n"));
+
+    expect(lines.map((line) => [
+      line.words.map((word) => word.text).join(""),
+      line.translation,
+      line.romanization,
+    ])).toEqual([
+      ["A", "T1", "R1"],
+      ["B", "T2", "R2"],
+    ]);
+  });
+
   it("parses KRC relative word timings", () => {
     const lines = parseKrc("[1000,1000]<0,400,0>你<400,600,0>好");
     expect(lines[0].words[1].startMs).toBe(1400);
@@ -405,5 +429,14 @@ describe("native word-sync conversion", () => {
       name: "AIみどり",
       provider: "qq",
     });
+  });
+
+  it("aligns each sidecar row at most once", () => {
+    const lines = attachSidecars([
+      { startMs: 1000, durationMs: 100, words: [{ text: "one", startMs: 1000, durationMs: 100 }] },
+      { startMs: 1100, durationMs: 100, words: [{ text: "two", startMs: 1100, durationMs: 100 }] },
+    ], "[00:01.05]translation");
+
+    expect(lines.map((line) => line.translation).filter(Boolean)).toEqual(["translation"]);
   });
 });

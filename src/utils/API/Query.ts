@@ -1,6 +1,12 @@
 import Defaults from "../../components/Global/Defaults.ts";
 import Session from "../../components/Global/Session.ts";
 import Logger from "../Logger.ts";
+import {
+  redactQueryHeaders,
+  summarizeQueries,
+  summarizeQueryResponse,
+  summarizeQueryResult,
+} from "./QueryLog.ts";
 
 export type Query = {
   operation: string;
@@ -34,10 +40,10 @@ export async function Query(
   const clientVersion = Session.SpicyLyrics.GetCurrentVersion();
 
   queryLogger.info("Sending API query request", {
-    queries,
+    queries: summarizeQueries(queries),
     host,
     clientVersion: clientVersion?.Text,
-    headers,
+    headers: redactQueryHeaders(headers),
   });
 
   try {
@@ -64,12 +70,15 @@ export async function Query(
     }
 
     const data = await res.json();
-    queryLogger.debug("Response data", data);
+    queryLogger.debug("Response summary", summarizeQueryResponse(data));
     const results: Map<string, QueryObjectResult> = new Map();
 
     for (const job of data.queries) {
       results.set(job.operationId, job.result);
-      queryLogger.debug("Query result set", { operationId: job.operationId, result: job.result });
+      queryLogger.debug("Query result set", {
+        operationId: job.operationId,
+        result: summarizeQueryResult(job.result),
+      });
     }
 
     return {
@@ -79,7 +88,11 @@ export async function Query(
         if (!result) {
           queryLogger.warn("Query result not found for operationId", operationId, Array.from(results.keys()));
         } else {
-          queryLogger.debug("Query result retrieved for operationId", operationId, result);
+          queryLogger.debug(
+            "Query result retrieved for operationId",
+            operationId,
+            summarizeQueryResult(result),
+          );
         }
         return result;
       },

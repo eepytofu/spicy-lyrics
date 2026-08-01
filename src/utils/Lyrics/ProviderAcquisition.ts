@@ -4,7 +4,22 @@ export type ProviderAcquisitionOutcome<Result> =
   | { kind: "no-match" }
   | { kind: "timeout" }
   | { kind: "aborted" }
+  | { kind: "rate-limited"; retryAfterMs?: number }
+  | { kind: "upstream-error"; status: number }
   | { kind: "error"; error: unknown };
+
+export class ProviderResponseError extends Error {
+  readonly outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "upstream-error" | "timeout" | "aborted" }>;
+
+  constructor(
+    outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "upstream-error" | "timeout" | "aborted" }>,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProviderResponseError";
+    this.outcome = outcome;
+  }
+}
 
 export type ProviderAcquisitionRecord<Provider, Result> = {
   provider: Provider;
@@ -42,6 +57,7 @@ export async function runProviderAcquisition<Result>(
     if (controller.signal.aborted) {
       return { kind: timedOut ? "timeout" : "aborted" };
     }
+    if (error instanceof ProviderResponseError) return error.outcome;
     return { kind: "error", error };
   } finally {
     clearTimeout(timer);

@@ -107,3 +107,32 @@ test("rehydrated cache evidence is frozen again without recapturing display text
   assert.equal(evidence.lines[0].providerText, "梦见ては");
   assert.equal(Object.isFrozen(evidence.lines[0].timingOwners[0]), true);
 });
+
+test("invalid nested or mismatched persisted evidence is recaptured", () => {
+  const lyrics = {
+    Type: "Line",
+    Content: [{ Text: "authoritative source", StartTime: 1, EndTime: 2 }],
+    SourceEvidence: {
+      schemaVersion: SOURCE_EVIDENCE_SCHEMA_VERSION,
+      lyricsType: "Static",
+      lines: [{
+        id: "lead:0",
+        providerText: "stale display text",
+        startTime: 0,
+        endTime: 1,
+        role: "lead",
+        timingOwners: [{
+          id: "lead:0:span:0",
+          providerText: "stale display text",
+          startTime: "not-a-number",
+          endTime: 1,
+        }],
+      }],
+    },
+  };
+
+  const evidence = ensureSourceEvidence(lyrics)!;
+  assert.equal(evidence.lyricsType, "Line");
+  assert.equal(evidence.lines[0].providerText, "authoritative source");
+  assert.equal(evidence.lines[0].timingOwners[0].startTime, 1);
+});

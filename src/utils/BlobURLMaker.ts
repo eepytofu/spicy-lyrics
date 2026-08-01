@@ -4,11 +4,10 @@ export default async function BlobURLMaker(url: string): Promise<string | null> 
   if (!url) throw new Error("SpicyLyrics: BlobURLMaker: url Missing");
   const existingBlobURL = BlobURLCache.get(url);
   if (existingBlobURL) {
-    const expiresAt = existingBlobURL.expiresAt;
-    if (expiresAt < Date.now()) {
-      BlobURLCache.delete(url);
+    if (existingBlobURL.expiresAt >= Date.now()) {
+      return existingBlobURL.blobUrl;
     }
-    return existingBlobURL.blobUrl;
+    BlobURLCache.delete(url);
   }
   try {
     const response = await fetch(url);
