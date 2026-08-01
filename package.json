@@ -30,7 +30,7 @@
     "cyrillic-romanization": "^1.2.1",
     "d3-ease": "^3.0.1",
     "franc-all": "^7.2.0",
-    "greek-transliteration": "1.0.0",
+    "greek-transliteration": "2.0.0",
     "idb": "^8.0.3",
     "korean-pronunciation": "^1.0.1",
     "kuromoji": "0.1.2",

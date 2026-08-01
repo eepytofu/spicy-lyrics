@@ -73,8 +73,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v51: reprocess Japanese readings after repairing browser dictionary URLs.
-export const LYRICS_PROCESSING_VERSION = 51;
+// v52: reprocess Greek romanization with the bundled v2 behavior.
+export const LYRICS_PROCESSING_VERSION = 52;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 
