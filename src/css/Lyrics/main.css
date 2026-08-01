@@ -378,13 +378,13 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 /* Line timing describes one phrase, not per-word karaoke. The owning line
    switches ruby from its established NotSung dim paint to the completed paint
    as soon as it becomes Active; there is no independent fill clock to delay it.
-   Line ruby uses the owning line's full defocus with a bounded filter ease,
+   Line ruby uses the shared derived-text defocus with a bounded filter ease,
    without taking over line opacity, scale, typography, or the animator-owned
    breathing glow. */
 #SpicyLyricsPage
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .furigana-reading {
-  --FuriganaBlurAmount: var(--BlurAmount, 0px);
+  --FuriganaBlurAmount: var(--DerivedTextBlurAmount, 0px);
   transition: filter 0.3s cubic-bezier(0.37, 0, 0.63, 1);
 }
 
