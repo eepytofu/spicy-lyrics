@@ -292,6 +292,23 @@ describe("native word-sync conversion", () => {
     ]);
   });
 
+  it("preserves every token in KuGou language sidecar rows", () => {
+    const language = Buffer.from(JSON.stringify({
+      content: [
+        { type: 1, lyricContent: [["仿佛", "是", "童话故事"]] },
+        { type: 0, lyricContent: [["ma  ", "ru  ", "de "]] },
+      ],
+    })).toString("base64");
+
+    const [line] = parseKrc([
+      `[language:${language}]`,
+      "[1000,1000]<0,1000,0>まるで御伽の話",
+    ].join("\n"));
+
+    expect(line.translation).toBe("仿佛是童话故事");
+    expect(line.romanization).toBe("ma  ru  de ");
+  });
+
   it("parses KRC relative word timings", () => {
     const lines = parseKrc("[1000,1000]<0,400,0>你<400,600,0>好");
     expect(lines[0].words[1].startMs).toBe(1400);

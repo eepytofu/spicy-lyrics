@@ -15,6 +15,12 @@ export function decryptKrc(encoded: string): string | undefined {
   } catch { return undefined; }
 }
 
+function krcSidecarText(row: unknown): string | undefined {
+  if (!Array.isArray(row)) return undefined;
+  const parts = row.filter((part): part is string => typeof part === "string");
+  return parts.length ? parts.join("") : undefined;
+}
+
 export function parseKrc(value: string): TimedLine[] {
   const translations: string[][] = []; const romanizations: string[][] = [];
   const language = /^\[language:(.+)\]$/m.exec(value)?.[1];
@@ -39,8 +45,8 @@ export function parseKrc(value: string): TimedLine[] {
         startMs: lineStart,
         durationMs: Number(header[2]),
         words,
-        translation: translations[sidecarIndex]?.[0],
-        romanization: romanizations[sidecarIndex]?.[0],
+        translation: krcSidecarText(translations[sidecarIndex]),
+        romanization: krcSidecarText(romanizations[sidecarIndex]),
       });
     }
   }
