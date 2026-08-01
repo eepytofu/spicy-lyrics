@@ -10,7 +10,7 @@ import {
 const mainCss = readFileSync(
   new URL("../src/css/Lyrics/main.css", import.meta.url),
   "utf8",
-);
+).replace(/\r\n/gu, "\n");
 const mixedCss = readFileSync(
   new URL("../src/css/Lyrics/Mixed.css", import.meta.url),
   "utf8",
@@ -348,14 +348,36 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
   );
 });
 
-test("line furigana keeps direct fill separate from breathing glow", () => {
+test("line furigana follows Active line paint without delaying glow", () => {
   assert.match(
     mainCss,
-    /--furigana-fill-current:\s*rgba\([\s\S]*?--line-furigana-fill-progress,\s*0/u,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?--FuriganaBlurAmount:\s*var\(--BlurAmount,\s*0px\);[\s\S]*?transition:\s*filter 0\.3s cubic-bezier\(0\.37,\s*0,\s*0\.63,\s*1\)/u,
+  );
+  const lineFurigana = ruleBody(
+    '.SpicyLyricsScrollContainer[data-lyrics-type="Line"]\n  .furigana-reading',
+  );
+  assert.doesNotMatch(lineFurigana, /transition:\s*all/u);
+  assert.doesNotMatch(lineFurigana, /transition:[^}]*(?:color|text-shadow)/u);
+  assert.doesNotMatch(lineFurigana, /font-size|line-height|transform|scale/u);
+  const notSungLineFurigana = ruleBody(
+    '.line.NotSung\n  .furigana-reading',
+  );
+  assert.match(notSungLineFurigana, /color:\s*var\(--furigana-fill-dim\)/u);
+  assert.match(
+    notSungLineFurigana,
+    /-webkit-text-fill-color:\s*var\(--furigana-fill-dim\)/u,
   );
   assert.match(
     mainCss,
-    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?var\(--furigana-fill-current\)/u,
+    /#SpicyLyricsPage:not\(\.SimpleLyricsMode\)\s+\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.line\.NotSung\s+\.furigana-reading/u,
+  );
+  assert.match(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.line\.Active\s+\.furigana-reading\s*\{[\s\S]*?--FuriganaTextShadowBlurRadius:\s*var\(--text-shadow-blur-radius,\s*4px\);[\s\S]*?--FuriganaTextShadowOpacity:\s*var\(--text-shadow-opacity,\s*0%\)/u,
+  );
+  assert.doesNotMatch(
+    mainCss,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\][^{}]*\.line\.Sung[^{}]*\.furigana-reading\s*\{/u,
   );
   assert.doesNotMatch(
     mainCss,
@@ -369,11 +391,11 @@ test("line furigana keeps direct fill separate from breathing glow", () => {
     animatorSource,
     /setStyleIfChanged\(line\.HTMLElement,\s*"--text-shadow-opacity",\s*`\$\{currentGlow \* 50\}%`/u,
   );
-  assert.match(
+  assert.doesNotMatch(mainCss, /--line-furigana-fill-progress/u);
+  assert.doesNotMatch(
     animatorSource,
-    /line\.HasFurigana[\s\S]*?"--line-furigana-fill-progress"[\s\S]*?lineFuriganaFillProgress/u,
+    /lineFuriganaFillProgress|--line-furigana-fill-progress/u,
   );
-  assert.match(lineApplyerSource, /HasFurigana:\s*hasFurigana/u);
   assert.doesNotMatch(mainCss, /--line-furigana-brightness/u);
   assert.doesNotMatch(animatorSource, /--line-furigana-brightness/u);
   assert.match(

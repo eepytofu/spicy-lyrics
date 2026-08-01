@@ -231,15 +231,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
     var(--furigana-color-rgb),
     var(--furigana-dim-alpha)
   );
-  --furigana-fill-current: rgba(
-    var(--furigana-color-rgb),
-    calc(
-      var(--furigana-dim-alpha) +
-        (
-          var(--furigana-bright-alpha) - var(--furigana-dim-alpha)
-        ) * var(--line-furigana-fill-progress, 0)
-    )
-  );
   /* The bright syllable layer is composited over the real dim layer. Use only
      the incremental alpha required to reach the same endpoint as the main
      lyric instead of painting the full bright alpha twice. */
@@ -384,24 +375,25 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-shadow: none;
 }
 
-/* Line timing describes one phrase, not per-word karaoke. Its ruby uses one
-   uniform clock-driven fill while glow remains spring-driven. Keeping those
-   owners separate makes initial playback, click-to-seek, and replay paint the
-   same frame without turning the whole reading bright at Active entry. */
-#SpicyLyricsPage:not(.SimpleLyricsMode)
+/* Line timing describes one phrase, not per-word karaoke. The owning line
+   switches ruby from its established NotSung dim paint to the completed paint
+   as soon as it becomes Active; there is no independent fill clock to delay it.
+   Line ruby uses the owning line's full defocus with a bounded filter ease,
+   without taking over line opacity, scale, typography, or the animator-owned
+   breathing glow. */
+#SpicyLyricsPage
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .furigana-reading {
-  color: var(--furigana-fill-current);
-  -webkit-text-fill-color: var(--furigana-fill-current);
+  --FuriganaBlurAmount: var(--BlurAmount, 0px);
+  transition: filter 0.3s cubic-bezier(0.37, 0, 0.63, 1);
 }
 
-/* Simple line mode already renders the complete main line rather than running
-   its glow spring, so its ruby uses the same completed fill. */
-#SpicyLyricsPage.SimpleLyricsMode
+#SpicyLyricsPage:not(.SimpleLyricsMode)
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .line.NotSung
   .furigana-reading {
-  color: var(--furigana-fill-bright);
-  -webkit-text-fill-color: var(--furigana-fill-bright);
+  color: var(--furigana-fill-dim);
+  -webkit-text-fill-color: var(--furigana-fill-dim);
 }
 
 /* A source-authored reading such as 天(そら) is pronunciation evidence, not
@@ -487,6 +479,17 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   );
   text-shadow: 0 0 var(--FuriganaTextShadowBlurRadius)
     rgba(255, 255, 255, var(--FuriganaTextShadowOpacity));
+}
+
+/* Line ruby is one phrase-level sidecar, so its Active glow follows the exact
+   line spring. Sung deliberately does not match this selector: the parent
+   completed-line opacity remains the sole owner of its post-playback state. */
+#SpicyLyricsPage
+  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
+  .line.Active
+  .furigana-reading {
+  --FuriganaTextShadowBlurRadius: var(--text-shadow-blur-radius, 4px);
+  --FuriganaTextShadowOpacity: var(--text-shadow-opacity, 0%);
 }
 
 /* Keep the romaji glow in its own role even while it shares the same visual

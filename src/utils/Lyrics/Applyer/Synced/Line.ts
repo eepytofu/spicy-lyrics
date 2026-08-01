@@ -129,7 +129,6 @@ export function ApplyLineLyrics(
       EndTime: ConvertTime(lineEndTime),
       TotalTime: ConvertTime(lineEndTime) - ConvertTime(line.StartTime),
       HasExtraSidecars: hasExtraSidecars,
-      HasFurigana: hasFurigana,
     });
 
     if (line.OppositeAligned) {

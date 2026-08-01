@@ -123,7 +123,6 @@ export interface LyricsLine {
   EndTime: number;
   TotalTime?: number;
   HasExtraSidecars?: boolean;
-  HasFurigana?: boolean;
   Status?: string;
   DotLine?: boolean;
   Syllables?: {

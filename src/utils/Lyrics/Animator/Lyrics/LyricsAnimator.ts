@@ -31,7 +31,6 @@ import {
   gradientTargetsAt,
   getElementState,
   getProgressPercentage,
-  lineFuriganaFillProgress,
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
@@ -1517,20 +1516,6 @@ export function Animate(position: number): void {
         line.EndTime,
       );
       applyLineState(line.HTMLElement, lineState);
-      if (!line.DotLine && line.HasFurigana) {
-        setStyleIfChanged(
-          line.HTMLElement,
-          "--line-furigana-fill-progress",
-          String(
-            lineFuriganaFillProgress(
-              lineState,
-              percentage,
-              $simpleLyricsMode.get(),
-            ),
-          ),
-          0.001,
-        );
-      }
       if (line.DotLine) {
         setClassPresence(
           line.HTMLElement,
