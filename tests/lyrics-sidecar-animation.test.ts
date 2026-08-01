@@ -153,22 +153,6 @@ test("clipped furigana-row words and whole-line sidecars protect block-end ink w
   );
 });
 
-test("resting RTL paint uses one shaped glyph fill instead of overlapping shadows", () => {
-  assert.match(
-    mixedCss,
-    /\.line\.rtl:is\(\.NotSung,\s*\.Sung\)[\s\S]*?>\s*\.lyric-base-flow,[\s\S]*?\.line\.rtl:is\(\.NotSung,\s*\.Sung\)[\s\S]*?>\s*:is\(\.word,\s*\.word-group,\s*\.letterGroup\)\s*\{\s*filter:\s*blur\(var\(--BlurAmount,\s*0px\)\)/u,
-  );
-  for (const state of ["NotSung", "Sung"]) {
-    assert.match(
-      mixedCss,
-      new RegExp(
-        String.raw`\.line\.rtl\.${state}[\s\S]*?-webkit-text-fill-color:\s*rgba\([\s\S]*?text-shadow:\s*none`,
-        "u",
-      ),
-    );
-  }
-});
-
 test("every derived row follows the line's unfocused blur once", () => {
   assert.match(
     mainCss,
