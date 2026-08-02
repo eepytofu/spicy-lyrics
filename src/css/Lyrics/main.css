@@ -385,7 +385,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .furigana-reading {
   --FuriganaBlurAmount: var(--DerivedTextBlurAmount, 0px);
-  transition: filter 0.3s cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 #SpicyLyricsPage:not(.SimpleLyricsMode)

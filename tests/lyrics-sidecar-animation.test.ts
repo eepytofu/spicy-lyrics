@@ -351,12 +351,13 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
 test("line furigana follows Active line paint without delaying glow", () => {
   assert.match(
     mainCss,
-    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?--FuriganaBlurAmount:\s*var\(--DerivedTextBlurAmount,\s*0px\);[\s\S]*?transition:\s*filter 0\.3s cubic-bezier\(0\.37,\s*0,\s*0\.63,\s*1\)/u,
+    /\.SpicyLyricsScrollContainer\[data-lyrics-type="Line"\]\s+\.furigana-reading\s*\{[\s\S]*?--FuriganaBlurAmount:\s*var\(--DerivedTextBlurAmount,\s*0px\);/u,
   );
   const lineFurigana = ruleBody(
     '.SpicyLyricsScrollContainer[data-lyrics-type="Line"]\n  .furigana-reading',
   );
   assert.doesNotMatch(lineFurigana, /transition:\s*all/u);
+  assert.doesNotMatch(lineFurigana, /transition\s*:/u);
   assert.doesNotMatch(lineFurigana, /transition:[^}]*(?:color|text-shadow)/u);
   assert.doesNotMatch(lineFurigana, /font-size|line-height|transform|scale/u);
   const notSungLineFurigana = ruleBody(
