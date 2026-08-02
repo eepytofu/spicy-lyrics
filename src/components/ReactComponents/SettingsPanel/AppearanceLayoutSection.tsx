@@ -1,10 +1,12 @@
 import { useStore } from "@nanostores/react";
 import {
   $fixHanGlyphVariants,
+  $disableNpvLyrics,
   $hideNpvLyricsWhenUnavailable,
   $lockedMediaBox,
   $popupLyricsAllowed,
   $showNpvDynamicBg,
+  $showVolumeSlider,
   $skipSpicyFont,
   $staticBackgroundBlur,
   $staticBackgroundMode,
@@ -25,6 +27,7 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
   const staticBackground = useStore($staticBackgroundMode);
   const staticBackgroundBlur = useStore($staticBackgroundBlur);
   const dynamicNpv = useStore($showNpvDynamicBg);
+  const disableNpv = useStore($disableNpvLyrics);
   const hideNpvWhenUnavailable = useStore($hideNpvLyricsWhenUnavailable);
   const forceDark = useStore($forceDarkBackground);
   const systemFont = useStore($skipSpicyFont);
@@ -36,6 +39,7 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
   const timelineOutside = useStore($timelineOutsideMediaContent);
   const flatControls = useStore($flatViewControls);
   const globalNav = useStore($isGlobalNav);
+  const showVolumeSlider = useStore($showVolumeSlider);
   if (sectionFilter !== "All" && sectionFilter !== SECTION_NAME) return null;
 
   const background = {
@@ -82,6 +86,16 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
       "Place the timeline in the NowBar header."
     ),
     flat: matches(query, "Flat Controls", "Use flat controls instead of liquid-glass buttons."),
+    volume: matches(
+      query,
+      "Volume Slider",
+      "Show a vertical volume control in Fullscreen, Cinema View, and Popup Lyrics."
+    ),
+    disableNpv: matches(
+      query,
+      "Disable NPV Lyrics",
+      "Never show the lyrics card in Now Playing View."
+    ),
     hideNpv: matches(
       query,
       "Hide NPV Lyrics When Unavailable",
@@ -234,14 +248,36 @@ export default function AppearanceLayoutSection({ query, sectionFilter }: Props)
           <Toggle checked={flatControls} onChange={(value) => $flatViewControls.set(value)} />
         </Row>
       )}
+      {layout.volume && (
+        <Row
+          label="Volume Slider"
+          description="Show a vertical volume control in Fullscreen, Cinema View, and Popup Lyrics."
+        >
+          <Toggle
+            checked={showVolumeSlider}
+            onChange={(value) => $showVolumeSlider.set(value)}
+          />
+        </Row>
+      )}
+      {layout.disableNpv && (
+        <Row
+          label="Disable NPV Lyrics"
+          description="Never show the lyrics card in Now Playing View."
+        >
+          <Toggle checked={disableNpv} onChange={(value) => $disableNpvLyrics.set(value)} />
+        </Row>
+      )}
       {layout.hideNpv && (
         <Row
           label="Hide NPV Lyrics When Unavailable"
           description="Remove the lyrics card from Now Playing View when the current track has no lyrics."
+          disabled={disableNpv}
+          disabledReason="The NPV lyrics card is disabled."
         >
           <Toggle
             checked={hideNpvWhenUnavailable}
             onChange={(value) => $hideNpvLyricsWhenUnavailable.set(value)}
+            disabled={disableNpv}
           />
         </Row>
       )}

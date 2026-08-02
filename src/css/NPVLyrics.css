@@ -76,6 +76,7 @@
 #SpicyLyricsNPVCard .CardBody {
   position: relative;
   height: 225px;
+  flex-shrink: 0;
 }
 
 #SpicyLyricsNPVCard.Collapsed .CardBody {

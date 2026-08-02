@@ -47,9 +47,11 @@ import { ScrollSimplebar } from "../../utils/Scrolling/Simplebar/ScrollSimplebar
 import ApplyDynamicBackground, { KawarpMap } from "../DynamicBG/dynamicBackground.ts";
 import {
   $currentLyricsData,
+  $lineHoverBackground,
   $fixHanGlyphVariants,
   $lyricsContainerExists,
   $minimalLyricsMode,
+  $showVolumeSlider,
   $simpleLyricsMode,
   $simpleLyricsModeRenderingType,
   $skipSpicyFont,
@@ -88,6 +90,7 @@ import { openSettingsPanel } from "../../utils/settings.ts";
 import Logger from "../../utils/Logger.ts";
 import { triggerRemeasureLV } from "../../utils/Lyrics/LyricsVirtualizer.ts";
 import { copyCurrentLyricsToClipboard } from "../../utils/Lyrics/CopyLyrics.ts";
+import { ApplyExperimentClasses, onExperimentChange } from "../../utils/experiments.ts";
 
 const pageLogger = new Logger("Page View");
 const controlsLogger = new Logger("View Controls");
@@ -292,6 +295,10 @@ async function OpenPage(
   if ($minimalLyricsMode.get()) {
     elem.classList.add("MinimalLyricsMode");
   }
+
+  elem.classList.toggle("NoLineHoverBackground", !$lineHoverBackground.get());
+  elem.classList.toggle("ShowVolumeSlider", $showVolumeSlider.get());
+  ApplyExperimentClasses(elem);
 
   const contentBox = elem.querySelector<HTMLElement>(
     ".ContentBox"
@@ -941,6 +948,18 @@ $minimalLyricsMode.listen((v) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("MinimalLyricsMode", v);
   queueDisplaySettingsRefresh();
+});
+
+$lineHoverBackground.listen((value) => {
+  PageContainer?.classList.toggle("NoLineHoverBackground", !value);
+});
+
+$showVolumeSlider.listen((value) => {
+  PageContainer?.classList.toggle("ShowVolumeSlider", value);
+});
+
+onExperimentChange(() => {
+  if (PageContainer) ApplyExperimentClasses(PageContainer);
 });
 
 $skipSpicyFont.listen((v) => {

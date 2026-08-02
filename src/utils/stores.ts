@@ -20,7 +20,7 @@ function saveSettingsBlob(obj: Record<string, any>) {
 
 const _settings: Record<string, any> = readSettingsBlob();
 
-function persistAtom<T>(key: string, defaultValue: T) {
+export function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_settings[key] !== undefined ? _settings[key] : defaultValue);
   store.listen((v) => {
     _settings[key] = v;
@@ -38,10 +38,12 @@ export const $simpleLyricsModeRenderingType = persistAtom<string>(
   "calculate"
 );
 export const $minimalLyricsMode = persistAtom<boolean>("minimalLyricsMode", false);
+export const $lineHoverBackground = persistAtom<boolean>("lineHoverBackground", true);
 export const $skipSpicyFont = persistAtom<boolean>("skipSpicyFont", false);
 export const $systemFontStack = persistAtom<string>("systemFontStack", "");
 export const $fixHanGlyphVariants = persistAtom<boolean>("fixHanGlyphVariants", false);
 export const $showNpvDynamicBg = persistAtom<boolean>("showNpvDynamicBg", true);
+export const $disableNpvLyrics = persistAtom<boolean>("disableNpvLyrics", false);
 export const $hideNpvLyricsWhenUnavailable = persistAtom<boolean>(
   "hideNpvLyricsWhenUnavailable",
   true,
@@ -65,6 +67,7 @@ export const $timelineOutsideMediaContent = persistAtom<boolean>(
   "timelineOutsideMediaContent",
   true
 );
+export const $showVolumeSlider = persistAtom<boolean>("showVolumeSlider", true);
 // Playback timing offset in milliseconds (bipolar: negative = earlier, positive = later)
 export const $playbackOffset = persistAtom<number>("playbackOffset", 0);
 export const $lyricsSourceOrder = persistAtom<string>(

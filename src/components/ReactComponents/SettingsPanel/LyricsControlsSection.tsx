@@ -1,6 +1,7 @@
 import { useStore } from "@nanostores/react";
 import {
   $minimalLyricsMode,
+  $lineHoverBackground,
   $simpleLyricsMode,
   $simpleLyricsModeRenderingType,
 } from "../../../utils/stores.ts";
@@ -28,6 +29,7 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
   const simpleMode = useStore($simpleLyricsMode);
   const renderingType = useStore($simpleLyricsModeRenderingType);
   const minimalMode = useStore($minimalLyricsMode);
+  const lineHoverBackground = useStore($lineHoverBackground);
   const copyFormat = useStore($lyricsCopyFormat);
   const showTranslationButton = useStore($showBuiltInTranslationButton);
   const showChineseButton = useStore($showChineseTranslitButton);
@@ -45,6 +47,11 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
       query,
       "Minimal Lyrics Mode",
       "Hide sung lines in Fullscreen and Cinema Mode."
+    ),
+    hover: matches(
+      query,
+      "Line Hover Background",
+      "Show a highlight behind a lyrics line while hovering."
     ),
   };
   const controlRows = {
@@ -97,6 +104,17 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
           description="Hide sung lines in Fullscreen and Cinema Mode."
         >
           <Toggle checked={minimalMode} onChange={(value) => $minimalLyricsMode.set(value)} />
+        </Row>
+      )}
+      {displayRows.hover && (
+        <Row
+          label="Line Hover Background"
+          description="Show a highlight behind a lyrics line while hovering."
+        >
+          <Toggle
+            checked={lineHoverBackground}
+            onChange={(value) => $lineHoverBackground.set(value)}
+          />
         </Row>
       )}
 

@@ -837,19 +837,23 @@ class LyricsVirtualizer {
     // Diagnostics: distinguishes a smooth-scroll stall, an unscrollable container,
     // and the Wayland failure — a DOM/virtualizer offset desync (observedScrollTop
     // moved but tanstackOffset did not, because the 'scroll' event never dispatched).
-    virtualizerLogger.debug("scrollToIndex applied", {
-      retry,
-      finalScrollTop: Math.round(finalScrollTop),
-      observedScrollTop: Math.round(observedScrollTop),
-      tanstackOffset: tanstackOffsetBefore == null ? null : Math.round(tanstackOffsetBefore),
-      scrollHeight: scrollEl.scrollHeight,
-      clientHeight: scrollEl.clientHeight,
-      maxScroll: scrollEl.scrollHeight - scrollEl.clientHeight,
-      virtualHeight: this._virtualContainer.offsetHeight,
-      scrollBehavior: getComputedStyle(scrollEl).scrollBehavior,
-      hasInstantScroll: scrollEl.classList.contains("InstantScroll"),
-      targetMounted: this._mountedIndices.has(index),
-    });
+    if (virtualizerLogger.isEnabled) {
+      const scrollHeight = scrollEl.scrollHeight;
+      const clientHeight = scrollEl.clientHeight;
+      virtualizerLogger.debug("scrollToIndex applied", {
+        retry,
+        finalScrollTop: Math.round(finalScrollTop),
+        observedScrollTop: Math.round(observedScrollTop),
+        tanstackOffset: tanstackOffsetBefore == null ? null : Math.round(tanstackOffsetBefore),
+        scrollHeight,
+        clientHeight,
+        maxScroll: scrollHeight - clientHeight,
+        virtualHeight: this._virtualContainer.offsetHeight,
+        scrollBehavior: getComputedStyle(scrollEl).scrollBehavior,
+        hasInstantScroll: scrollEl.classList.contains("InstantScroll"),
+        targetMounted: this._mountedIndices.has(index),
+      });
+    }
 
     // Wayland quirk: a programmatic scrollTop write may not dispatch a 'scroll' event,
     // so observeElementOffset never updates scrollOffset and the virtual window stays

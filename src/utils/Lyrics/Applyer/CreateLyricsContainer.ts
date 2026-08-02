@@ -20,9 +20,12 @@ const CreateLyricsContainer = (): LyricsContainerReturnObject => {
 
   lastMapIndex += 1;
   const currentIndex = lastMapIndex;
+  let resizeFrame: number | null = null;
 
   const Resize = () => {
-    requestAnimationFrame(() => {
+    if (resizeFrame !== null) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = null;
       QueueForceScroll();
       ScrollSimplebar?.recalculate();
     });
@@ -33,6 +36,10 @@ const CreateLyricsContainer = (): LyricsContainerReturnObject => {
   });
 
   const Remove = () => {
+    if (resizeFrame !== null) {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = null;
+    }
     ResizeListener.unobserve(Container.parentElement as HTMLElement);
     ResizeListener.disconnect();
     Container.remove();

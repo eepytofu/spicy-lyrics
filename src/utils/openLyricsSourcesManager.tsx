@@ -16,7 +16,14 @@ export async function OpenLyricsSourcesManager() {
     const settingsRoot = ReactDOM.createRoot(settingsContainer);
 
     flushSync(() => {
-      settingsRoot.render(<SettingsPanel />);
+      settingsRoot.render(
+        <SettingsPanel
+          onOpenExperiments={async () => {
+            const { openExperimentsPanel } = await import("./settings.ts");
+            openExperimentsPanel();
+          }}
+        />
+      );
     });
 
     PopupModal.transition({

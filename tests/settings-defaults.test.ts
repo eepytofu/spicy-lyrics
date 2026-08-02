@@ -23,8 +23,32 @@ test("lyrics controls default to Bottom without replacing a saved choice", async
   assert.equal(freshStores.$viewControlsPosition.get(), "Bottom");
   assert.equal(freshStores.$staticBackgroundBlur.get(), 0);
   assert.equal(freshStores.$hideNpvLyricsWhenUnavailable.get(), true);
+  assert.equal(freshStores.$disableNpvLyrics.get(), false);
+  assert.equal(freshStores.$lineHoverBackground.get(), true);
+  assert.equal(freshStores.$showVolumeSlider.get(), true);
 
   settingsBlob = JSON.stringify({ viewControlsPosition: "Top" });
   const existingStores = await import("../src/utils/stores.ts?existing-settings");
   assert.equal(existingStores.$viewControlsPosition.get(), "Top");
+});
+
+test("experiments are persisted and the final slider style defaults on", async () => {
+  let settingsBlob: string | null = null;
+  Object.defineProperty(globalThis, "Spicetify", {
+    configurable: true,
+    value: {
+      LocalStorage: {
+        get: () => settingsBlob,
+        set: (_key: string, value: string) => {
+          settingsBlob = value;
+        },
+      },
+    },
+  });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: {} });
+
+  const experiments = await import("../src/utils/experiments.ts?fresh-experiments");
+  assert.equal(experiments.isExperimentEnabled("newProgressBarStyling"), true);
+  experiments.$experiment("newProgressBarStyling").set(false);
+  assert.equal(JSON.parse(settingsBlob ?? "{}")["experiment:newProgressBarStyling"], false);
 });

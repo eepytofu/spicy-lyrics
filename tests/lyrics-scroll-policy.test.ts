@@ -69,3 +69,14 @@ test("virtual-window DOM writes are batched before synchronous measurements", ()
   assert.ok(appendAt >= 0 && mountBatchAt > appendAt);
   assert.ok(unmountMeasureAt >= 0 && unmountRemoveAt > unmountMeasureAt);
 });
+
+test("disabled virtualizer diagnostics do not evaluate layout reads", () => {
+  const source = readFileSync(
+    new URL("../src/utils/Lyrics/LyricsVirtualizer.ts", import.meta.url),
+    "utf8",
+  );
+  const guardAt = source.indexOf("if (virtualizerLogger.isEnabled)");
+  const computedStyleAt = source.indexOf("getComputedStyle(scrollEl).scrollBehavior");
+
+  assert.ok(guardAt >= 0 && computedStyleAt > guardAt);
+});

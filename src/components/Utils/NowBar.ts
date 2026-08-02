@@ -2,14 +2,14 @@ import BlobURLMaker from "../../utils/BlobURLMaker.ts";
 import { GetCurrentLyricsContainerInstance } from "../../utils/Lyrics/Applyer/CreateLyricsContainer.ts";
 import { SongProgressBar } from "./../../utils/Lyrics/SongProgressBar.ts";
 import { QueueForceScroll, ResetLastLine } from "../../utils/Scrolling/ScrollToActiveLine.ts";
-import { $timelineOutsideMediaContent } from "../../utils/stores.ts";
+import { $showVolumeSlider, $timelineOutsideMediaContent } from "../../utils/stores.ts";
 import { $isNowBarOpen, $nowBarSide } from "../../utils/uiState.ts";
 import Global from "../Global/Global.ts";
 import Session from "../Global/Session.ts";
 import { SpotifyPlayer } from "../Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../Pages/PageView.ts";
 import { Icons } from "../Styling/Icons.ts";
-import Fullscreen, { CleanupMediaBox } from "./Fullscreen.ts";
+import Fullscreen, { CleanupMediaBox, SetControlsDragLock } from "./Fullscreen.ts";
 import { IsPIP } from "./PopupLyrics.ts";
 import { IsCompactMode } from "./CompactMode.ts";
 import { Maid } from "../../modules/Maid.ts";
@@ -29,7 +29,15 @@ interface SongProgressBarInstance {
   GetElement: () => HTMLElement;
 }
 
+interface VolumeControlInstance {
+  Apply: () => void;
+  CleanUp: () => void;
+  SetVolume: (volume: number) => void;
+  IsDragging: () => boolean;
+}
+
 let ActivePlaybackControlsInstance: PlaybackControlsInstance | null = null;
+let ActiveVolumeControlInstance: VolumeControlInstance | null = null;
 const ActiveSongProgressBarInstance_Map = new Map<string, any>();
 let ActiveSetupSongProgressBarInstance: SongProgressBarInstance | null = null;
 
@@ -470,7 +478,9 @@ function OpenNowBar(skipSaving: boolean = false) {
 
         const handleDragStart = (event: MouseEvent | TouchEvent) => {
           isDragging = true;
+          SliderBar.classList.add("Dragging");
           document.body.style.userSelect = "none"; // Prevent text selection during drag
+          SetControlsDragLock(true);
 
           // Add the event listeners for drag movement and end
           document.addEventListener("mousemove", handleDragMove);
@@ -529,6 +539,7 @@ function OpenNowBar(skipSaving: boolean = false) {
         const handleDragEnd = (event: MouseEvent | TouchEvent) => {
           if (!isDragging) return;
           isDragging = false;
+          SliderBar.classList.remove("Dragging");
           document.body.style.userSelect = ""; // Restore text selection
 
           // Remove the event listeners
@@ -567,6 +578,7 @@ function OpenNowBar(skipSaving: boolean = false) {
 
           // After seeking, update the timeline state to reflect the new position
           updateTimelineState();
+          SetControlsDragLock(false);
         };
 
         const timelineMaid = new Maid();
@@ -586,6 +598,12 @@ function OpenNowBar(skipSaving: boolean = false) {
           document.removeEventListener("touchmove", handleDragMove);
           document.removeEventListener("mouseup", handleDragEnd);
           document.removeEventListener("touchend", handleDragEnd);
+          if (isDragging) {
+            isDragging = false;
+            SliderBar.classList.remove("Dragging");
+            document.body.style.userSelect = "";
+            SetControlsDragLock(false);
+          }
         });
 
         // Run initial update
@@ -615,9 +633,123 @@ function OpenNowBar(skipSaving: boolean = false) {
         };
       };
 
+      const SetupVolumeControl = (): VolumeControlInstance | null => {
+        const element = document.createElement("div");
+        element.className = "VolumeControl";
+        element.innerHTML = `<div class="VolumeFill"></div><div class="Handle"></div><div class="VolumeIcon">${Icons.Volume}</div>`;
+        element.querySelectorAll("svg, path").forEach((node) => {
+          (node as SVGElement).style.pointerEvents = "none";
+        });
+        const icon = element.querySelector<HTMLElement>(".VolumeIcon");
+        if (!icon) return null;
+
+        const maid = new Maid();
+        let isDragging = false;
+        let level = 0;
+        const clamp = (value: number) => Math.max(0, Math.min(1, value));
+        const render = (volume: number) => {
+          level = clamp(volume);
+          element.style.setProperty("--VolumeLevel", level.toString());
+          element.classList.toggle("IconOnFill", level >= 0.09);
+          element.classList.toggle("Muted", level <= 0);
+          element.classList.toggle("Low", level > 0 && level < 0.5);
+          element.classList.toggle("High", level >= 0.5);
+        };
+        const commit = (volume: number) => {
+          const next = clamp(volume);
+          const wasMuted = level <= 0;
+          render(next);
+          if (wasMuted && next > 0) Spicetify.Player.setMute?.(false);
+          Spicetify.Player.setVolume(next);
+        };
+        const fromEvent = (event: MouseEvent | TouchEvent) => {
+          const clientY = "touches" in event && event.touches.length
+            ? event.touches[0].clientY
+            : "changedTouches" in event && event.changedTouches.length
+              ? event.changedTouches[0].clientY
+              : (event as MouseEvent).clientY;
+          const rect = element.getBoundingClientRect();
+          return rect.height ? clamp(1 - (clientY - rect.top) / rect.height) : level;
+        };
+        const move = (event: MouseEvent | TouchEvent) => {
+          if (isDragging) commit(fromEvent(event));
+        };
+        const end = (event: MouseEvent | TouchEvent) => {
+          if (!isDragging) return;
+          isDragging = false;
+          element.classList.remove("Dragging");
+          document.body.style.userSelect = "";
+          document.removeEventListener("mousemove", move);
+          document.removeEventListener("touchmove", move);
+          document.removeEventListener("mouseup", end);
+          document.removeEventListener("touchend", end);
+          commit(fromEvent(event));
+          SetControlsDragLock(false);
+        };
+        const start = (event: MouseEvent | TouchEvent) => {
+          if ((event.target as HTMLElement | null)?.closest?.(".VolumeIcon")) return;
+          isDragging = true;
+          element.classList.add("Dragging");
+          document.body.style.userSelect = "none";
+          SetControlsDragLock(true);
+          document.addEventListener("mousemove", move);
+          document.addEventListener("touchmove", move);
+          document.addEventListener("mouseup", end);
+          document.addEventListener("touchend", end);
+          move(event);
+        };
+        const mute = () => {
+          Spicetify.Player.toggleMute();
+          const timer = window.setTimeout(() => {
+            if (!isDragging) render(Spicetify.Player.getVolume() ?? 0);
+          }, 60);
+          maid.Give(() => clearTimeout(timer), "MuteResync");
+        };
+        const wheel = (event: WheelEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          commit(level + (event.deltaY < 0 ? 0.05 : -0.05));
+        };
+
+        element.addEventListener("mousedown", start);
+        element.addEventListener("touchstart", start);
+        icon.addEventListener("click", mute);
+        element.addEventListener("wheel", wheel, { passive: false });
+        maid.Give(() => {
+          element.removeEventListener("mousedown", start);
+          element.removeEventListener("touchstart", start);
+          icon.removeEventListener("click", mute);
+          element.removeEventListener("wheel", wheel);
+          document.removeEventListener("mousemove", move);
+          document.removeEventListener("touchmove", move);
+          document.removeEventListener("mouseup", end);
+          document.removeEventListener("touchend", end);
+          if (isDragging) {
+            document.body.style.userSelect = "";
+            SetControlsDragLock(false);
+          }
+        });
+        render(Spicetify.Player.getVolume() ?? 0);
+
+        return {
+          Apply: () => AppendQueue.push(element),
+          CleanUp: () => {
+            maid.Destroy();
+            element.remove();
+          },
+          SetVolume: render,
+          IsDragging: () => isDragging,
+        };
+      };
+
       ActivePlaybackControlsInstance = SetupPlaybackControls();
       if (ActivePlaybackControlsInstance) {
         ActivePlaybackControlsInstance.Apply();
+      }
+
+      if ($showVolumeSlider.get()) {
+        ActiveVolumeControlInstance = SetupVolumeControl();
+        ActiveVolumeControlInstance?.Apply();
       }
 
       ActiveSetupSongProgressBarInstance = SetupSongProgressBar();
@@ -790,6 +922,11 @@ function CleanUpActiveComponents() {
     // // console.log("Cleaned up SongProgressBar instance");
   }
 
+  if (ActiveVolumeControlInstance) {
+    ActiveVolumeControlInstance.CleanUp();
+    ActiveVolumeControlInstance = null;
+  }
+
   if (ActiveSongProgressBarInstance_Map.size > 0) {
     ActiveSongProgressBarInstance_Map?.clear();
     // // console.log("Cleared SongProgressBar instance map");
@@ -809,6 +946,8 @@ function CleanUpActiveComponents() {
 
     const timeline = MediaContent.querySelector(".Timeline");
     if (timeline) MediaContent.removeChild(timeline);
+
+    MediaContent.querySelector(".VolumeControl")?.remove();
   }
 
   // Also remove Timeline if it was placed in the Header
@@ -1356,6 +1495,12 @@ Global.Event.listen("playback:position", (e: number) => {
   }
 });
 
+Global.Event.listen("playback:volume", (volume: number) => {
+  if (!Fullscreen.IsOpen || !$showVolumeSlider.get()) return;
+  if (!ActiveVolumeControlInstance || ActiveVolumeControlInstance.IsDragging()) return;
+  ActiveVolumeControlInstance.SetVolume(volume);
+});
+
 Global.Event.listen("fullscreen:exit", () => {
   CleanUpActiveComponents();
   CleanupMediaBox();
@@ -1381,6 +1526,12 @@ Global.Event.listen("compact-mode:disable", () => {
 
 $timelineOutsideMediaContent.subscribe(() => {
   RepositionTimeline();
+});
+
+$showVolumeSlider.listen(() => {
+  if (!Fullscreen.IsOpen) return;
+  CleanUpActiveComponents();
+  OpenNowBar(true);
 });
 
 export {

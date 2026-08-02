@@ -5,6 +5,7 @@ import LanguagesSection from "./LanguagesSection.tsx";
 import LyricsControlsSection from "./LyricsControlsSection.tsx";
 import SourcesSection from "./SourcesSection.tsx";
 import TranslationsSection from "./TranslationsSection.tsx";
+import ExperimentsSection from "./ExperimentsSection.tsx";
 import { FilterDropdown, SearchBar } from "./components.tsx";
 
 const SECTIONS = [
@@ -14,9 +15,10 @@ const SECTIONS = [
   "Sources",
   "Appearance & Layout",
   "Advanced",
+  "Experiments",
 ];
 
-export default function SettingsPanel() {
+export default function SettingsPanel({ onOpenExperiments }: { onOpenExperiments: () => void }) {
   const [query, setQuery] = useState("");
   const [sectionFilter, setSectionFilter] = useState("All");
 
@@ -33,6 +35,7 @@ export default function SettingsPanel() {
       <SourcesSection query={query} sectionFilter={sectionFilter} />
       <AppearanceLayoutSection query={query} sectionFilter={sectionFilter} />
       <AdvancedSection query={query} sectionFilter={sectionFilter} />
+      <ExperimentsSection query={query} sectionFilter={sectionFilter} onOpen={onOpenExperiments} />
     </div>
   );
 }

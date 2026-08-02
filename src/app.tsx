@@ -544,18 +544,17 @@ async function main() {
 
       nowPlayingBarObserver = new MutationObserver((mutations) => {
         const shouldReapply = mutations.some((mutation) => {
+          if (mutation.type === "attributes") {
+            const name = mutation.attributeName;
+            if (name !== "src" && name !== "class" && name !== "inert") return false;
+          } else if (mutation.type !== "childList") {
+            return false;
+          }
           const target = mutation.target;
           const targetElement =
             target instanceof Element ? target : target.parentElement;
           if (targetElement?.closest("#SpicyLyricsNPVCard")) return false;
-          if (mutation.type === "childList") return true;
-          if (mutation.type !== "attributes") return false;
-          return (
-            mutation.attributeName === "src" ||
-            mutation.attributeName === "style" ||
-            mutation.attributeName === "class" ||
-            mutation.attributeName === "inert"
-          );
+          return true;
         });
 
         if (!shouldReapply) return;
@@ -566,7 +565,9 @@ async function main() {
         subtree: true,
         childList: true,
         attributes: true,
-        attributeFilter: ["src", "style", "class", "inert"],
+        // Lyric animation writes inline styles every frame. Cover and host-state
+        // changes already arrive through src, class, inert, childList, or songchange.
+        attributeFilter: ["src", "class", "inert"],
       });
     };
 
@@ -1006,6 +1007,21 @@ async function main() {
         }
         lastShuffleType = ShuffleType;
       }).Start();
+    }
+
+    {
+      Whentil.When(
+        () => Spicetify.Platform?.PlaybackAPI,
+        () => {
+          Spicetify.Platform.PlaybackAPI?._events?.addListener?.(
+            "volume",
+            (event: { data?: { volume?: number } }) => {
+              const volume = event?.data?.volume;
+              if (typeof volume === "number") Global.Event.evoke("playback:volume", volume);
+            }
+          );
+        }
+      );
     }
 
     {

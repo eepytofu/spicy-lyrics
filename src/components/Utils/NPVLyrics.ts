@@ -11,7 +11,11 @@ import { Icons } from "../Styling/Icons.ts";
 import { Maid } from "../../modules/Maid.ts";
 import Whentil from "../../modules/Whentil.ts";
 import { $npvLyricsExpanded, $npvLyricsOpen } from "../../utils/uiState.ts";
-import { $currentLyricsData, $hideNpvLyricsWhenUnavailable } from "../../utils/stores.ts";
+import {
+  $currentLyricsData,
+  $disableNpvLyrics,
+  $hideNpvLyricsWhenUnavailable,
+} from "../../utils/stores.ts";
 import Logger from "../../utils/Logger.ts";
 import { SpotifyPlayer } from "../Global/SpotifyPlayer.ts";
 import { shouldHideNpvForMissingLyrics } from "./NPVAvailability.ts";
@@ -30,6 +34,7 @@ const watcherMaid = new Maid();
 let evaluateTimer: ReturnType<typeof setTimeout> | null = null;
 let evaluating = false;
 let evaluateAgain = false;
+let stateAnimation: Animation | null = null;
 
 const getNPV = (): HTMLElement | null =>
   document.querySelector<HTMLElement>(".Root__right-sidebar aside.NowPlayingView") ??
@@ -50,6 +55,7 @@ export function RequestNPVCardEvaluate(): void {
 }
 
 function desiredState(): CardState {
+  if ($disableNpvLyrics.get()) return "DORMANT";
   const npv = getNPV();
   if (!npv || !npv.isConnected || npv.closest("[inert]")) return "DORMANT";
   const pageBusyElsewhere =
@@ -143,13 +149,14 @@ function animateStateChange(mutate: () => void): void {
   )
     return;
 
-  card.animate(
+  const morph = card.animate(
     [
       { width: `${firstCard.width}px`, height: `${firstCard.height}px` },
       { width: `${lastCard.width}px`, height: `${lastCard.height}px` },
     ],
     { duration: STATE_ANIM_MS, easing: STATE_ANIM_EASE }
   );
+  if (card.classList.contains("Expanded")) holdEvaluateUntilSettled(morph);
 
   buttons.forEach((button, index) => {
     const first = firstButtons[index];
@@ -312,10 +319,25 @@ async function evaluate(): Promise<void> {
 
 function scheduleEvaluate(): void {
   if (evaluateTimer !== null) return;
+  if (stateAnimation !== null) return;
   evaluateTimer = setTimeout(() => {
     evaluateTimer = null;
     void evaluate();
   }, 100);
+}
+
+function holdEvaluateUntilSettled(animation: Animation): void {
+  if (evaluateTimer !== null) {
+    clearTimeout(evaluateTimer);
+    evaluateTimer = null;
+  }
+  stateAnimation = animation;
+  const settle = () => {
+    if (stateAnimation !== animation) return;
+    stateAnimation = null;
+    scheduleEvaluate();
+  };
+  animation.finished.then(settle, settle);
 }
 
 let observedSidebar: Element | null = null;
@@ -381,6 +403,7 @@ export function initNPVLyrics(): void {
   watcherMaid.Give($npvLyricsExpanded.listen(() => scheduleEvaluate()));
   watcherMaid.Give($currentLyricsData.listen(() => scheduleEvaluate()));
   watcherMaid.Give($hideNpvLyricsWhenUnavailable.listen(() => scheduleEvaluate()));
+  watcherMaid.Give($disableNpvLyrics.listen(() => scheduleEvaluate()));
 
   Whentil.When(
     () =>

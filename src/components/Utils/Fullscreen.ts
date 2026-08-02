@@ -32,6 +32,13 @@ let pageHover = false;
 let mediaBoxHover = false;
 
 let lastPageMouseMove: number | undefined;
+let controlsDragLock = false;
+
+export const SetControlsDragLock = (locked: boolean) => {
+  if (controlsDragLock === locked) return;
+  controlsDragLock = locked;
+  if (!locked) ToggleControls(true);
+};
 
 const Page_MouseMove = () => {
   pageHover = true;
@@ -83,6 +90,7 @@ const RunMediaBoxAnimation = () => {
 };
 
 const ToggleControls = (force: boolean = false) => {
+  if (controlsDragLock) return;
   const now = performance.now();
 
   const getControlsOpacityGoal = () => {
@@ -191,6 +199,7 @@ function CleanupMediaBox() {
   visualsApplied = false;
   mediaBoxHover = false;
   pageHover = false;
+  controlsDragLock = false;
 }
 
 function Open(skipDocumentFullscreen: boolean = false, moveElement: boolean = true) {
