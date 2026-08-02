@@ -9,6 +9,10 @@ import { toast } from "sonner";
 let ShownUpdateNotice = false;
 let WarningInFlight = false;
 
+// This fork reviews upstream changes manually. The original updater navigates
+// to Spikerko's installer and release page, which must not replace this fork.
+const ENABLE_UPSTREAM_UPDATE_NOTICE = false;
+
 function startUpdate() {
   Session.Navigate({ pathname: "/SpicyLyrics/Update" });
 }
@@ -134,7 +138,7 @@ function showUpdateModal(currentVersion: any, latestVersion: any) {
 }
 
 export async function CheckForUpdates(force: boolean = false) {
-  if (isDev) return;
+  if (isDev || !ENABLE_UPSTREAM_UPDATE_NOTICE) return;
   const IsOutdated = await Session.SpicyLyrics.IsOutdated();
   if (IsOutdated) {
     if (!force && ShownUpdateNotice) return;
