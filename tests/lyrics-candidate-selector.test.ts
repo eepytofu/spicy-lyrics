@@ -73,6 +73,51 @@ test("smart mode prefers an agreeing line candidate over a mismatched word candi
   assert.ok((qq?.textAgreementScore ?? 100) < 40);
 });
 
+test("candidate assessments expose structured UI signals without changing reasons", () => {
+  const result = selectLyricsCandidate([
+    candidate("qq", 0, wordLyrics(correctRows), 1),
+    candidate("apple", 1, lineLyrics(correctRows), 1),
+    candidate("soda", 2, lineLyrics(wrongRows), 0.4),
+    candidate("lrclib", 3, staticLyrics(correctRows), 0.9),
+  ], 240_000, "smart");
+  const qq = result.diagnostics.candidates.find((entry) => entry.provider === "qq");
+  const soda = result.diagnostics.candidates.find((entry) => entry.provider === "soda");
+  const lrclib = result.diagnostics.candidates.find((entry) => entry.provider === "lrclib");
+
+  assert.deepEqual(qq?.signals, {
+    confidence: "high",
+    trackMatch: "strong",
+    timingHealth: "healthy",
+    lyricAgreement: "agreeing",
+    timingConsistency: "consistent",
+  });
+  assert.equal(qq?.reasons.includes("strong track match"), true);
+  assert.equal(qq?.reasons.includes("healthy timing"), true);
+  assert.equal(qq?.reasons.includes("lyrics agree with other sources"), true);
+  assert.equal(soda?.signals.trackMatch, "weak");
+  assert.equal(soda?.signals.confidence, "low");
+  assert.equal(soda?.signals.lyricAgreement, "low");
+  assert.equal(lrclib?.signals.timingHealth, "unavailable");
+  assert.equal(lrclib?.reasons.includes("no synced timing"), true);
+});
+
+test("candidate confidence summarizes the existing selection score", () => {
+  const high = selectLyricsCandidate([
+    candidate("high", 0, lineLyrics(correctRows), 1),
+  ], 240_000, "smart").diagnostics.candidates[0];
+  const medium = selectLyricsCandidate([
+    candidate("medium", 0, lineLyrics(correctRows), 0.7),
+  ], 240_000, "smart").diagnostics.candidates[0];
+  const low = selectLyricsCandidate([
+    candidate("low", 0, lineLyrics(correctRows), 0.29),
+  ], 240_000, "smart").diagnostics.candidates[0];
+
+  assert.equal(high.signals.confidence, "high");
+  assert.equal(medium.signals.confidence, "medium");
+  assert.equal(low.signals.confidence, "low");
+  assert.equal(low.rejected, true);
+});
+
 test("smart mode allows a healthy line candidate to beat malformed word timing", () => {
   const malformed = wordLyrics(correctRows);
   malformed.Content[2].Lead.Syllables[0].StartTime = 400;

@@ -2,7 +2,7 @@ import langs from "langs";
 import { shouldDisplayTranslation } from "./TranslationEligibility.ts";
 
 const TRANSLATION_CACHE_KEY = "spicy-lyrics:translationCache";
-const TRANSLATION_CACHE_VERSION = 2;
+const TRANSLATION_CACHE_VERSION = 3;
 const TRANSLATION_CACHE_MAX_ENTRIES = 5000;
 const NO_DISPLAY_TTL_MS = 6 * 60 * 60 * 1000;
 const GOOGLE_INITIAL_BACKOFF_MS = 900;
@@ -84,8 +84,13 @@ function sourceLanguageCode(sourceLang: string): string {
   return langs.where("3", sourceLang)?.["1"] || sourceLang || "auto";
 }
 
-function translationCacheKey(text: string, sourceCode: string, targetLang: string): string {
-  return JSON.stringify([sourceCode, targetLang, text]);
+function translationCacheKey(
+  text: string,
+  sourceCode: string,
+  targetLang: string,
+  cacheNamespace: string,
+): string {
+  return JSON.stringify([cacheNamespace, sourceCode, targetLang, text]);
 }
 
 function putCacheEntry(
@@ -255,9 +260,9 @@ export async function batchTranslate(
   lines: string[],
   sourceLang: string,
   targetLang: string,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; cacheNamespace?: string } = {},
 ): Promise<string[]> {
-  const { signal } = options;
+  const { signal, cacheNamespace = "shared" } = options;
   const sourceCode = sourceLanguageCode(sourceLang);
   const cache = getTranslationCache();
   const results = Array.from({ length: lines.length }, () => "");
@@ -268,7 +273,7 @@ export async function batchTranslate(
     const text = lines[index].trim();
     if (!text || text === "♪") continue;
 
-    const key = translationCacheKey(text, sourceCode, targetLang);
+    const key = translationCacheKey(text, sourceCode, targetLang, cacheNamespace);
     const entry = cache[key];
     if (entry?.kind === "translated") {
       if (shouldDisplayTranslation(text, entry.text)) {
@@ -314,7 +319,7 @@ export async function batchTranslate(
       }
       const originalText = lines[index].trim();
       const translated = stripMarkerEcho(translatedLines.get(offset) || "", offset);
-      const key = translationCacheKey(originalText, sourceCode, targetLang);
+      const key = translationCacheKey(originalText, sourceCode, targetLang, cacheNamespace);
       if (shouldDisplayTranslation(originalText, translated)) {
         results[index] = translated;
         putCacheEntry(cache, key, { kind: "translated", text: translated });
@@ -340,7 +345,7 @@ export async function batchTranslate(
     const response = await requestGoogleTranslation(url, signal);
     if (response.kind === "failed") continue;
 
-    const key = translationCacheKey(originalText, sourceCode, targetLang);
+    const key = translationCacheKey(originalText, sourceCode, targetLang, cacheNamespace);
     if (shouldDisplayTranslation(originalText, response.text)) {
       results[index] = response.text;
       putCacheEntry(cache, key, { kind: "translated", text: response.text });

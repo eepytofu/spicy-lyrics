@@ -86,6 +86,7 @@ import { IsPIP, _IsPIP_after, ClosePopupLyrics } from "../Utils/PopupLyrics.ts";
 import { DeRenderNPVCard, NPVCardOwnsPage } from "../Utils/NPVLyrics.ts";
 import { CleanUpIsByCommunity } from "../../utils/Lyrics/Applyer/Credits/ApplyIsByCommunity.tsx";
 import { OpenLyricsDBPanel } from "../../utils/openLyricsDBPanel.tsx";
+import { OpenChooseLyrics } from "../../utils/openChooseLyrics.tsx";
 import { openSettingsPanel } from "../../utils/settings.ts";
 import Logger from "../../utils/Logger.ts";
 import { triggerRemeasureLV } from "../../utils/Lyrics/LyricsVirtualizer.ts";
@@ -107,6 +108,7 @@ export const Tooltips: {
   CinemaView: TippyInstance | null;
   NowBarSideToggle: TippyInstance | null;
   LyricsManager: TippyInstance | null;
+  ChooseLyrics: TippyInstance | null;
   CopyLyrics: TippyInstance | null;
   Settings: TippyInstance | null;
 } = {
@@ -116,6 +118,7 @@ export const Tooltips: {
   CinemaView: null,
   NowBarSideToggle: null,
   LyricsManager: null,
+  ChooseLyrics: null,
   CopyLyrics: null,
   Settings: null,
 };
@@ -555,6 +558,7 @@ function AppendViewControls(ReAppend: boolean = false) {
             ? `<button id="LyricsManager" class="ViewControl">${Icons.LyricsManager}</button>`
             : ""
         }
+        ${IsPIP ? "" : `<button id="ChooseLyrics" class="ViewControl" aria-label="Choose Lyrics">${Icons.ChooseLyrics}</button>`}
         <button id="CopyLyrics" class="ViewControl">${Icons.CopyLyrics}</button>
         ${IsPIP ? "" : `<button id="SettingsToggle" class="ViewControl">${Icons.Settings}</button>`}
         <button id="Close" class="ViewControl">${Icons.Close}</button>
@@ -815,6 +819,19 @@ function AppendViewControls(ReAppend: boolean = false) {
       }
     }
 
+    const chooseLyricsButton = elem.querySelector("#ChooseLyrics");
+    if (chooseLyricsButton && !isPip) {
+      try {
+        Tooltips.ChooseLyrics = Spicetify.Tippy(chooseLyricsButton, {
+          ...Spicetify.TippyProps,
+          content: "Choose Lyrics",
+        });
+        chooseLyricsButton.addEventListener("click", OpenChooseLyrics);
+      } catch (err) {
+        controlsLogger.warn("Failed to setup Choose Lyrics tooltip", err);
+      }
+    }
+
     const settingsButton = elem.querySelector("#SettingsToggle");
     if (settingsButton && !isPip) {
       try {
@@ -858,6 +875,15 @@ let appliedDisplaySettingsRevision = 0;
 let displaySettingsRefreshRunning = false;
 let displaySettingsReprocessingPending = false;
 
+function lyricRevisionIdFromRaw(raw: string): string | null {
+  if (!raw || raw.startsWith("NO_LYRICS:")) return null;
+  try {
+    return JSON.parse(raw)?.LyricRevision?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function rerenderCurrentLyrics(
   targetRevision: number,
   reprocessCurrent: boolean,
@@ -891,6 +917,12 @@ async function rerenderCurrentLyrics(
   ) {
     return;
   }
+
+  const resultRevisionId = (lyrics?.[0] as any)?.LyricRevision?.id ?? null;
+  if (
+    resultRevisionId
+    && lyricRevisionIdFromRaw($currentLyricsData.get()) !== resultRevisionId
+  ) return;
 
   await ApplyLyrics(lyrics);
   AppendViewControls(true);
@@ -1007,6 +1039,21 @@ const reprocessCurrentLyricsFromSource = async () => {
   const lyricsContent = PageContainer.querySelector(".LyricsContainer .LyricsContent");
   lyricsContent?.classList.add("HiddenTransitioned");
   try {
+    const currentRaw = $currentLyricsData.get();
+    let currentLyrics: any = null;
+    try {
+      currentLyrics = currentRaw && !currentRaw.startsWith("NO_LYRICS:")
+        ? JSON.parse(currentRaw)
+        : null;
+    } catch {
+      currentLyrics = null;
+    }
+    if (currentLyrics?.uri === uri && currentLyrics?.ManualLyricsSelection === true) {
+      invalidateLyricsPipeline();
+      const lyrics = await fetchLyrics(uri);
+      await ApplyLyrics(lyrics);
+      return;
+    }
     $currentLyricsData.set("");
     if (trackId) await LyricsStore.RemoveItem(trackId).catch(() => {});
     const lyrics = await fetchLyrics(uri);
@@ -1075,6 +1122,11 @@ $japaneseReadingMode.listen(() => {
 window.addEventListener("spicy-lyrics:processing-ready", ((event: CustomEvent) => {
   const trackId = event.detail?.trackId;
   if (trackId && trackId !== SpotifyPlayer.GetId()) return;
+  const eventRevisionId = event.detail?.lyrics?.LyricRevision?.id ?? null;
+  if (
+    eventRevisionId
+    && lyricRevisionIdFromRaw($currentLyricsData.get()) !== eventRevisionId
+  ) return;
   ApplyLyrics([event.detail.lyrics, 200]).then(() => {
     AppendViewControls(true);
     setTimeout(() => triggerRemeasureLV(), 60);

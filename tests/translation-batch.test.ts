@@ -108,6 +108,38 @@ test("known source language reaches Google instead of always using auto", async 
   }
 });
 
+test("translation cache is isolated by lyric revision", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  globalThis.fetch = async (url: URL | RequestInfo) => {
+    requests.push(String(url));
+    return {
+      ok: true,
+      json: async () => [[["[[SPX_000]] translated"]]],
+    } as Response;
+  };
+
+  try {
+    clearTranslationCache();
+    assert.deepEqual(
+      await batchTranslate(["source"], "und", "en", { cacheNamespace: "revision:a" }),
+      ["translated"],
+    );
+    assert.deepEqual(
+      await batchTranslate(["source"], "und", "en", { cacheNamespace: "revision:a" }),
+      ["translated"],
+    );
+    assert.deepEqual(
+      await batchTranslate(["source"], "und", "en", { cacheNamespace: "revision:b" }),
+      ["translated"],
+    );
+    assert.equal(requests.length, 2);
+  } finally {
+    clearTranslationCache();
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("only structurally missing batch entries retry individually", async () => {
   const originalFetch = globalThis.fetch;
   const requests: string[] = [];

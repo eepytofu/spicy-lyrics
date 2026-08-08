@@ -169,7 +169,10 @@ export async function translateLyrics(
       indices.map((index) => lineRefs[index].sourceText),
       effectiveSource,
       targetLang,
-      { signal },
+      {
+        signal,
+        cacheNamespace: lyrics?.LyricRevision?.id ?? "unrevisioned",
+      },
     );
     for (let offset = 0; offset < indices.length; offset++) {
       translationsByIndex.set(indices[offset], translations[offset]);

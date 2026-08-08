@@ -19,7 +19,6 @@ import {
   $disabledLyricsSources,
   $externalLyricsWorkerUrl,
   $ignoreMusixmatchWordSync,
-  $lyricsSelectionDiagnostics,
   $lyricsSelectionMode,
   $lyricsSourceOrder,
   $musixmatchToken,
@@ -37,7 +36,6 @@ export default function LyricsSourcesManager() {
   const ignoreMusixmatchWordSync = useStore($ignoreMusixmatchWordSync);
   const prioritizeAppleMusicQuality = useStore($prioritizeAppleMusicQuality);
   const lyricsSelectionMode = useStore($lyricsSelectionMode);
-  const selectionDiagnostics = useStore($lyricsSelectionDiagnostics);
   const musixmatchToken = useStore($musixmatchToken);
   const customServers = parseCustomLyricsServers(customJson);
   const order = normalizeLyricsSourceOrder(storedOrder, customServers);
@@ -123,29 +121,6 @@ export default function LyricsSourcesManager() {
   };
 
   const optionCounts: Partial<Record<LyricsSourceProviderId, number>> = { musixmatch: 2, apple: 1 };
-  const sourceLabel = (provider: string) =>
-    getLyricsSourceDefinition(provider as LyricsSourceProviderId, customServers).label;
-  const selectedSourceLabel = selectionDiagnostics?.selectedProvider
-    ? sourceLabel(selectionDiagnostics.selectedProvider)
-    : "none";
-  const selectionModeLabel =
-    (
-      { smart: "Smart Match", syncType: "Sync Type First", strict: "Strict Priority" } as Record<
-        string,
-        string
-      >
-    )[selectionDiagnostics?.mode ?? ""] ?? "Unknown mode";
-  const selectionSummary = selectionDiagnostics
-    ? selectionDiagnostics.candidates
-        .slice()
-        .sort((left, right) => right.selectionScore - left.selectionScore)
-        .slice(0, 3)
-        .map(
-          (candidate) =>
-            `${sourceLabel(candidate.provider)} score ${candidate.selectionScore}: ${candidate.reasons.join(", ")}`
-        )
-        .join(" | ")
-    : "";
   const toggleOptions = (id: LyricsSourceProviderId) => {
     setExpandedOptions((previous) => {
       const next = new Set(previous);
@@ -198,17 +173,6 @@ export default function LyricsSourcesManager() {
           }}
         />
       </div>
-
-      {selectionDiagnostics && (
-        <div className="sl-sp-source-option-row">
-          <div className="sl-sp-source-copy">
-            <span className="sl-sp-source-label">Last Selection</span>
-            <span className="sl-sp-source-description">
-              Selected: {selectedSourceLabel} | {selectionModeLabel} | {selectionSummary}
-            </span>
-          </div>
-        </div>
-      )}
 
       <div className="sl-sp-source-list">
         {order.map((id, index) => {

@@ -30,9 +30,24 @@ import { normalizedDisplayText } from "./TextCompare.ts";
 import {
   acquireProviderOutcomes,
   runProviderAcquisition,
+  type ProviderAcquisitionRecord,
   type ProviderAcquisitionOutcome,
   ProviderResponseError,
 } from "./ProviderAcquisition.ts";
+import {
+  LyricsCandidateSessionStore,
+  type CandidateSession,
+} from "./LyricsCandidateSession.ts";
+import {
+  ensureLyricRevision,
+  type LyricRevision,
+} from "./LyricRevision.ts";
+import { lyricsSourceCacheSignature } from "./LyricsSourceConfiguration.ts";
+import {
+  completeLyricsSearchOverrides,
+  normalizeLyricsSearchOverrides,
+  type LyricsSearchOverrides,
+} from "./ManualLyricsSearch.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -46,14 +61,24 @@ const DEFAULT_MUSIXMATCH_TOKEN = "21051986b9886beabe1ce01c3ce94c96319411f8f2c122
 const MUSIXMATCH_HEADERS = { authority: "apic-desktop.musixmatch.com", cookie: "x-mxm-token-guid=" };
 const packer = new SLObjPack();
 
-function trackInfo(uri: string): TrackLyricsInfo | null {
+function trackInfo(
+  uri: string,
+  overrides: LyricsSearchOverrides = {},
+): TrackLyricsInfo | null {
   const id = uri.split(":")[2] ?? "";
   const currentUri = SpotifyPlayer.GetUri() ?? "";
   const currentId = SpotifyPlayer.GetId() ?? "";
   if (uri !== currentUri && id !== currentId) return null;
-  const artists = SpotifyPlayer.GetArtists()?.map((entry) => entry.name).filter(Boolean) ?? [];
+  const normalizedOverrides = normalizeLyricsSearchOverrides(overrides);
+  const spotifyArtists = SpotifyPlayer.GetArtists()?.map((entry) => entry.name).filter(Boolean) ?? [];
+  const artist = normalizedOverrides.artist ?? spotifyArtists.join(", ");
+  const artists = normalizedOverrides.artist ? [normalizedOverrides.artist] : spotifyArtists;
   const info = {
-    uri, id, artists, artist: artists.join(", "), title: SpotifyPlayer.GetName() ?? "",
+    uri,
+    id,
+    artists,
+    artist,
+    title: normalizedOverrides.title ?? SpotifyPlayer.GetName() ?? "",
     album: SpotifyPlayer.GetAlbumName() ?? "", durationMs: SpotifyPlayer.GetDuration(),
   };
   return info.id && info.title && info.artist && info.durationMs > 0 ? info : null;
@@ -401,16 +426,42 @@ type ProviderEntry = {
   candidate: LyricsCandidate;
 };
 
-function finalizeSelection(
+export type LyricsCandidateRecord = {
+  provider: LyricsSourceProviderId;
+  result: ExternalLyricsResult;
+  assessment: ReturnType<typeof selectLyricsCandidate>["diagnostics"]["candidates"][number];
+  revision: LyricRevision;
+};
+
+export type LyricsCandidateFailure = {
+  provider: LyricsSourceProviderId;
+  orderIndex: number;
+  kind: Exclude<ProviderAcquisitionOutcome<ExternalLyricsResult>["kind"], "lyrics">;
+  status?: number;
+};
+
+export type LyricsCandidateSession = CandidateSession<
+  LyricsCandidateRecord,
+  LyricsCandidateFailure
+>;
+
+const candidateSessions = new LyricsCandidateSessionStore<
+  LyricsCandidateRecord,
+  LyricsCandidateFailure
+>();
+
+function selectProviderEntry(
   entries: ProviderEntry[],
   durationMs: number,
   mode: ReturnType<typeof $lyricsSelectionMode.get>,
-): ExternalLyricsResult | null {
+): {
+  chosen: ProviderEntry | null;
+  selection: ReturnType<typeof selectLyricsCandidate>;
+} {
   const selection = selectLyricsCandidate(entries.map((entry) => entry.candidate), durationMs, mode, $prioritizeAppleMusicQuality.get());
-  const chosen = entries.find((entry) => entry.candidate === selection.candidate);
-  if (!chosen) return null;
-  chosen.result.lyrics.SelectionDiagnostics = selection.diagnostics;
-  return chosen.result;
+  const chosen = entries.find((entry) => entry.candidate === selection.candidate) ?? null;
+  if (chosen) chosen.result.lyrics.SelectionDiagnostics = selection.diagnostics;
+  return { chosen, selection };
 }
 
 function reportProviderFailure(
@@ -430,14 +481,22 @@ function reportProviderFailure(
   }
 }
 
-export async function fetchLyricsFromProviders(
+type AcquiredProviderEntries = {
+  durationMs: number;
+  records: Array<ProviderAcquisitionRecord<LyricsSourceProviderId, ExternalLyricsResult>>;
+  entries: ProviderEntry[];
+};
+
+async function acquireEntries(
   uri: string,
   order: LyricsSourceProviderId[],
+  mode: "strict" | "concurrent",
   parentSignal?: AbortSignal,
-): Promise<ExternalLyricsResult | null> {
+  overrides: LyricsSearchOverrides = {},
+): Promise<AcquiredProviderEntries | null> {
   if (parentSignal?.aborted) return null;
-  const info = trackInfo(uri); if (!info) return null;
-  const mode = $lyricsSelectionMode.get();
+  const info = trackInfo(uri, overrides);
+  if (!info) return null;
   let sharedSpicyRequest: ReturnType<typeof spicyRaw> | undefined;
   const context: ProviderAdapterContext = {
     info,
@@ -448,31 +507,188 @@ export async function fetchLyricsFromProviders(
   };
   const records = await acquireProviderOutcomes(
     order,
-    mode === "strict" ? "strict" : "concurrent",
+    mode,
     (provider) => runProviderAcquisition(
       (signal) => providerAdapter(provider).acquire(context, signal),
       parentSignal,
     ),
   );
-
   for (const { provider, outcome } of records) reportProviderFailure(provider, outcome);
-  if (records.some(({ outcome }) => outcome.kind === "queued")) {
+  return {
+    durationMs: info.durationMs,
+    records,
+    entries: records.flatMap(({ provider, orderIndex, outcome }): ProviderEntry[] =>
+      outcome.kind === "lyrics"
+        ? [{
+          provider,
+          result: outcome.result,
+          candidate: {
+            provider,
+            orderIndex,
+            lyrics: outcome.result.lyrics,
+            match: outcome.result.match,
+          },
+        }]
+        : []
+    ),
+  };
+}
+
+function acquisitionFailures(
+  records: AcquiredProviderEntries["records"],
+): LyricsCandidateFailure[] {
+  return records.flatMap(({ provider, orderIndex, outcome }): LyricsCandidateFailure[] => {
+    if (outcome.kind === "lyrics") return [];
+    return [{
+      provider,
+      orderIndex,
+      kind: outcome.kind,
+      ...(outcome.kind === "upstream-error" ? { status: outcome.status } : {}),
+    }];
+  });
+}
+
+async function retainCandidateSession(
+  uri: string,
+  acquired: AcquiredProviderEntries,
+  selected: ReturnType<typeof selectProviderEntry>,
+  options: {
+    alternativesLoaded: boolean;
+    automaticRevisionId?: string | null;
+    activeRevisionId?: string | null;
+    searchOverrides?: LyricsSearchOverrides | null;
+  },
+): Promise<LyricsCandidateSession> {
+  const assessments = new Map(
+    selected?.selection.diagnostics.candidates.map((assessment) => [assessment.provider, assessment]) ?? [],
+  );
+  const records = await Promise.all(acquired.entries.map(async (entry) => ({
+    provider: entry.provider,
+    result: entry.result,
+    assessment: assessments.get(entry.provider)!,
+    revision: await ensureLyricRevision(
+      uri,
+      entry.result.lyrics,
+      entry.result.lyrics?.SourceCandidateId ?? entry.provider,
+    ),
+  })));
+  const selectedRecord = selected.chosen
+    ? records[acquired.entries.indexOf(selected.chosen)]
+    : undefined;
+  const automaticRevisionId = options.automaticRevisionId === undefined
+    ? selectedRecord?.revision.id ?? null
+    : options.automaticRevisionId;
+  const activeRevisionId = options.activeRevisionId === undefined
+    ? automaticRevisionId
+    : options.activeRevisionId;
+  return candidateSessions.set({
+    uri,
+    signature: lyricsSourceCacheSignature(),
+    records,
+    failures: acquisitionFailures(acquired.records),
+    recommendedRevisionId: selectedRecord?.revision.id ?? null,
+    automaticRevisionId,
+    activeRevisionId,
+    alternativesLoaded: options.alternativesLoaded,
+    searchOverrides: completeLyricsSearchOverrides(options.searchOverrides ?? {}) ?? null,
+  });
+}
+
+export function getLyricsCandidateSession(uri: string): LyricsCandidateSession | null {
+  return candidateSessions.get(uri, lyricsSourceCacheSignature());
+}
+
+export function setActiveLyricsCandidateRevision(
+  uri: string,
+  revisionId: string | null,
+): void {
+  candidateSessions.setActiveRevision(uri, revisionId);
+}
+
+export function clearLyricsCandidateSessionForTrackChange(uri: string): void {
+  candidateSessions.clearForTrackChange(uri);
+}
+
+export async function loadLyricsCandidates(
+  uri: string,
+  order: LyricsSourceProviderId[],
+  parentSignal?: AbortSignal,
+  current?: {
+    automaticRevisionId?: string | null;
+    activeRevisionId?: string | null;
+  },
+): Promise<LyricsCandidateSession | null> {
+  const acquired = await acquireEntries(uri, order, "concurrent", parentSignal);
+  if (!acquired || parentSignal?.aborted) return null;
+  const selected = selectProviderEntry(
+    acquired.entries,
+    acquired.durationMs,
+    $lyricsSelectionMode.get(),
+  );
+  return retainCandidateSession(uri, acquired, selected, {
+    alternativesLoaded: true,
+    automaticRevisionId: current?.automaticRevisionId,
+    activeRevisionId: current?.activeRevisionId,
+  });
+}
+
+export async function searchLyricsCandidates(
+  uri: string,
+  order: LyricsSourceProviderId[],
+  overrides: LyricsSearchOverrides,
+  parentSignal?: AbortSignal,
+  current?: {
+    automaticRevisionId?: string | null;
+    activeRevisionId?: string | null;
+  },
+): Promise<LyricsCandidateSession | null> {
+  const normalizedOverrides = normalizeLyricsSearchOverrides(overrides);
+  if (!normalizedOverrides.title || !normalizedOverrides.artist || order.length === 0) return null;
+  const acquired = await acquireEntries(
+    uri,
+    order,
+    "concurrent",
+    parentSignal,
+    normalizedOverrides,
+  );
+  if (!acquired || parentSignal?.aborted) return null;
+  const selected = selectProviderEntry(
+    acquired.entries,
+    acquired.durationMs,
+    $lyricsSelectionMode.get(),
+  );
+  return retainCandidateSession(uri, acquired, selected, {
+    alternativesLoaded: true,
+    automaticRevisionId: current?.automaticRevisionId,
+    activeRevisionId: current?.activeRevisionId,
+    searchOverrides: normalizedOverrides,
+  });
+}
+
+export async function fetchLyricsFromProviders(
+  uri: string,
+  order: LyricsSourceProviderId[],
+  parentSignal?: AbortSignal,
+): Promise<ExternalLyricsResult | null> {
+  const mode = $lyricsSelectionMode.get();
+  const acquired = await acquireEntries(
+    uri,
+    order,
+    mode === "strict" ? "strict" : "concurrent",
+    parentSignal,
+  );
+  if (!acquired || parentSignal?.aborted) return null;
+  if (acquired.records.some(({ outcome }) => outcome.kind === "queued")) {
     return { lyrics: null, status: 503 };
   }
-
-  const entries = records.flatMap(({ provider, orderIndex, outcome }): ProviderEntry[] =>
-    outcome.kind === "lyrics"
-      ? [{
-        provider,
-        result: outcome.result,
-        candidate: {
-          provider,
-          orderIndex,
-          lyrics: outcome.result.lyrics,
-          match: outcome.result.match,
-        },
-      }]
-      : []
+  const selected = selectProviderEntry(
+    acquired.entries,
+    acquired.durationMs,
+    mode,
   );
-  return finalizeSelection(entries, info.durationMs, mode);
+  if (!selected.chosen) return null;
+  await retainCandidateSession(uri, acquired, selected, {
+    alternativesLoaded: mode !== "strict",
+  });
+  return selected.chosen.result;
 }

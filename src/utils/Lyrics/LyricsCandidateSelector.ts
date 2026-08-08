@@ -19,6 +19,14 @@ export type LyricsCandidate = {
   match?: LyricsMatchMetadata;
 };
 
+export type LyricsCandidateSignals = {
+  confidence: "high" | "medium" | "low";
+  trackMatch: "strong" | "usable" | "weak";
+  timingHealth: "healthy" | "usable" | "suspicious" | "unavailable";
+  lyricAgreement: "agreeing" | "neutral" | "low";
+  timingConsistency: "consistent" | "divergent";
+};
+
 export type LyricsCandidateAssessment = {
   provider: string;
   format: "Syllable" | "Line" | "Static" | "Unknown";
@@ -32,6 +40,7 @@ export type LyricsCandidateAssessment = {
   syncDetailScore: number;
   priorityScore: number;
   rejected: boolean;
+  signals: LyricsCandidateSignals;
   reasons: string[];
 };
 
@@ -238,15 +247,58 @@ function syncDetailScore(lyrics: any): number {
   return lyrics?.Type === "Syllable" ? 100 : lyrics?.Type === "Line" ? 70 : lyrics?.Type === "Static" ? 20 : 0;
 }
 
-function reasonList(track: number, structural: number, timingAgreement: number, agreement: number, format: LyricsCandidateAssessment["format"]): string[] {
+function candidateSignals(
+  selectionScore: number,
+  track: number,
+  structural: number,
+  timingAgreement: number,
+  agreement: number,
+  format: LyricsCandidateAssessment["format"],
+): LyricsCandidateSignals {
+  return {
+    confidence: selectionScore >= 85 ? "high" : selectionScore >= 60 ? "medium" : "low",
+    trackMatch: track >= 85 ? "strong" : track < 45 ? "weak" : "usable",
+    timingHealth:
+      format === "Static"
+        ? "unavailable"
+        : structural >= 85
+          ? "healthy"
+          : structural < 45
+            ? "suspicious"
+            : "usable",
+    lyricAgreement: agreement >= 78 ? "agreeing" : agreement < 42 ? "low" : "neutral",
+    timingConsistency: timingAgreement < 45 ? "divergent" : "consistent",
+  };
+}
+
+function reasonList(
+  signals: LyricsCandidateSignals,
+  format: LyricsCandidateAssessment["format"],
+): string[] {
   const reasons: string[] = [];
-  reasons.push(track >= 85 ? "strong track match" : track < 45 ? "weak track match" : "usable track match");
-  reasons.push(format === "Static" ? "no synced timing" : structural >= 85 ? "healthy timing" : structural < 45 ? "suspicious timing" : "usable timing");
+  reasons.push(
+    signals.trackMatch === "strong"
+      ? "strong track match"
+      : signals.trackMatch === "weak"
+        ? "weak track match"
+        : "usable track match",
+  );
+  reasons.push(
+    signals.timingHealth === "unavailable"
+      ? "no synced timing"
+      : signals.timingHealth === "healthy"
+        ? "healthy timing"
+        : signals.timingHealth === "suspicious"
+          ? "suspicious timing"
+          : "usable timing",
+  );
   if (format === "Syllable") reasons.push("word-synced timing");
   else if (format === "Line") reasons.push("line-synced timing");
-  if (agreement >= 78) reasons.push("lyrics agree with other sources");
-  else if (agreement < 42) reasons.push("low text agreement");
-  if (format !== "Static" && timingAgreement < 45) reasons.push("line timing differs from agreeing sources");
+  if (signals.lyricAgreement === "agreeing") reasons.push("lyrics agree with other sources");
+  else if (signals.lyricAgreement === "low") reasons.push("low text agreement");
+  if (format !== "Static" && signals.timingConsistency === "divergent") {
+    reasons.push("line timing differs from agreeing sources");
+  }
   return reasons;
 }
 
@@ -273,6 +325,7 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
       && agreement >= 55;
     const malformedWordPenalty = format === "Syllable" && structural < 85 ? 10 : 0;
     const selectionScore = rejected ? 0 : clamp(total + (credibleWordTiming ? 3 : 0) - malformedWordPenalty);
+    const signals = candidateSignals(selectionScore, track, structural, timingAgreement, agreement, format);
     return {
       provider: candidate.provider,
       format,
@@ -286,7 +339,8 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
       syncDetailScore: detail,
       priorityScore: rounded(clamp(priority)),
       rejected,
-      reasons: reasonList(track, structural, timingAgreement, agreement, format),
+      signals,
+      reasons: reasonList(signals, format),
     };
   });
 }
