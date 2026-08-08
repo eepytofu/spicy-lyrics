@@ -87,7 +87,21 @@ function neteaseSong(value: any, searchMethod: Song["searchMethod"]): Song | und
 function addNeteaseSongs(found: Map<number, Song>, values: any[], searchMethod: Song["searchMethod"]): void {
   for (const value of values) {
     const song = neteaseSong(value, searchMethod);
-    if (song && !found.has(song.id)) found.set(song.id, song);
+    if (!song) continue;
+    const existing = found.get(song.id);
+    if (!existing) {
+      found.set(song.id, song);
+      continue;
+    }
+    const titleAliases = metadataNames(existing.titleAliases, song.titleAliases)
+      .filter((alias) => alias !== existing.name);
+    const artistAliases = metadataNames(existing.artistAliases, song.artistAliases)
+      .filter((alias) => !existing.artists.includes(alias));
+    found.set(song.id, {
+      ...existing,
+      ...(titleAliases.length ? { titleAliases } : {}),
+      ...(artistAliases.length ? { artistAliases } : {}),
+    });
   }
 }
 

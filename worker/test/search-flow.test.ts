@@ -1,5 +1,6 @@
 import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { assessCandidate } from "../src/matching/score";
 import {
   isKugouCandidateCompatible,
   kugouProvider,
@@ -396,6 +397,75 @@ describe("provider search flow", () => {
       artists: ["霜月遥"],
       artistAliases: ["霜月はるか"],
     });
+  });
+
+  it("merges richer same-song NetEase aliases without replacing the batch identity", async () => {
+    let requestPaths: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      requestPaths.push(new URL(url).pathname);
+      const song = {
+        id: 1_941_230_174,
+        name: "Killer Neuron",
+        ar: [{ id: 12_417_042, name: "藍月なくる", alias: [], tns: [] }],
+        al: { name: "Indigrotto" },
+        dt: 248_314,
+      };
+      if (url.includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [{
+          baseInfo: { simpleSongData: song },
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (url.includes("/eapi/cloudsearch/pc")) {
+        return new Response(JSON.stringify({ result: { songs: [{
+          ...song,
+          ar: [{
+            id: 12_417_042,
+            name: "藍月なくる",
+            alias: ["Aitsuki Nakuru", "蓝月拿轱辘", "あいつきなくる", "Aitsuki Nakuru"],
+            tns: ["蓝月奈久留"],
+          }],
+          alia: ["Killer Neuron Alt"],
+        }, {
+          ...song,
+          id: 34_765_944,
+          ar: [{ id: 34_765_944, name: "Different Artist", alias: ["Must Not Merge"] }],
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      throw new Error(`Unexpected NetEase request: ${url}`);
+    }));
+
+    const fixture = {
+      id: "spotify-id",
+      title: "Killer Neuron",
+      album: "Indigrotto",
+      durationMs: 248_314,
+    };
+    for (const artist of ["Aitsuki Nakuru", "蓝月奈久留", "蓝月拿轱辘", "あいつきなくる"]) {
+      requestPaths = [];
+      const songs = await searchNetease({ ...fixture, artists: [artist] });
+      const song = songs.find((candidate) => candidate.id === 1_941_230_174);
+      expect(song).toMatchObject({
+        id: 1_941_230_174,
+        name: "Killer Neuron",
+        titleAliases: ["Killer Neuron Alt"],
+        searchMethod: "batch-search",
+        artists: ["藍月なくる"],
+        artistAliases: ["Aitsuki Nakuru", "蓝月拿轱辘", "あいつきなくる", "蓝月奈久留"],
+      });
+      expect(song?.artistAliases).not.toContain("Must Not Merge");
+      expect(requestPaths).toEqual(["/eapi/batch", "/eapi/cloudsearch/pc"]);
+      expect(assessCandidate(
+        { ...fixture, artists: [artist] },
+        {
+          title: song!.name,
+          artists: song!.artists,
+          artistAliases: song!.artistAliases,
+          album: song!.album,
+          durationMs: song!.durationMs,
+        },
+      ).evidence.artists).toBe(1);
+    }
   });
 
   it("uses Lyricify's KuGou mobile catalog first and carries the selected hash and duration into lyric search", async () => {

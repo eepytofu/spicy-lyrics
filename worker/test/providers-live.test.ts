@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { assessCandidate } from "../src/matching/score";
 import { amllDbProvider } from "../src/providers/amlldb";
 import { kugouProvider } from "../src/providers/kugou";
 import { neteaseProvider, searchNetease } from "../src/providers/netease";
@@ -171,6 +172,38 @@ describe("live upstream providers", () => {
     const song = songs.find((candidate) => candidate.name === "瑠璃の鳥");
     expect(song?.artists).toContain("霜月はるか");
     expect(song?.artistAliases).toContain("霜月遥");
+  }, 30000);
+
+  live("NetEase Cloud Music resolves every returned Aitsuki Nakuru alias", async () => {
+    const fixture = {
+      id: "aitsuki-nakuru-alias-fixture",
+      title: "Killer Neuron",
+      album: "Indigrotto",
+      durationMs: 248_314,
+    };
+    for (const artist of ["Aitsuki Nakuru", "蓝月奈久留", "蓝月拿轱辘", "あいつきなくる"]) {
+      const songs = await searchNetease({ ...fixture, artists: [artist] });
+      const song = songs.find((candidate) => candidate.id === 1_941_230_174);
+      expect(song).toMatchObject({
+        artists: ["藍月なくる"],
+        artistAliases: expect.arrayContaining([
+          "Aitsuki Nakuru",
+          "蓝月奈久留",
+          "蓝月拿轱辘",
+          "あいつきなくる",
+        ]),
+      });
+      expect(assessCandidate(
+        { ...fixture, artists: [artist] },
+        {
+          title: song!.name,
+          artists: song!.artists,
+          artistAliases: song!.artistAliases,
+          album: song!.album,
+          durationMs: song!.durationMs,
+        },
+      ).evidence.artists).toBe(1);
+    }
   }, 30000);
 
   live("Soda Music returns native KRC for a regular catalog track", async () => {
