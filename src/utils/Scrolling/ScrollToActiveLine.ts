@@ -13,7 +13,7 @@ import {
 import { ScrollIntoCenterViewCSS } from "../ScrollIntoView/Center.ts";
 import { ScrollIntoTopViewCSS } from "../ScrollIntoView/Top.ts";
 import { getLyricsVirtualizer, scrollLyricsToIndex } from "../Lyrics/LyricsVirtualizer.ts";
-import { chooseScrollLineIndex } from "../Lyrics/LyricsScrollPolicy.ts";
+import { selectScrollLineIndex } from "./ScrollLineSelection.ts";
 
 // Define intersection types that include _LineIndex
 type LyricsLineWithIndex = LyricsLine & { _LineIndex: number };
@@ -113,8 +113,9 @@ export function InitializeScrollEvents(ScrollSimplebar: any) {
 const GetScrollLine = (Lines: LyricsLine[] | LyricsSyllable[], ProcessedPosition: number) => {
   if ($currentLyricsType.get() === "Static" || $currentLyricsType.get() === "None" || !Lines)
     return;
-  const index = chooseScrollLineIndex(Lines, ProcessedPosition);
-  return index === null ? null : ({ ...Lines[index], _LineIndex: index } as EnhancedLyricsItem);
+  const index = selectScrollLineIndex(Lines, ProcessedPosition);
+  if (index === null) return null;
+  return { ...Lines[index], _LineIndex: index } as EnhancedLyricsItem;
 };
 
 const ScrollTo = (

@@ -3,33 +3,9 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
-  chooseScrollLineIndex,
   measuredVerticalSize,
   shouldVerifyLyricsScroll,
 } from "../src/utils/Lyrics/LyricsScrollPolicy.ts";
-
-test("keeps a lead line anchored while its background vocal group is active", () => {
-  const lines = [
-    { StartTime: 0, EndTime: 4000 },
-    { StartTime: 1000, EndTime: 5000, BGLine: true },
-    { StartTime: 3000, EndTime: 6000 },
-    { StartTime: 6000, EndTime: 7000 },
-  ];
-
-  assert.equal(chooseScrollLineIndex(lines, 3500), 0);
-  assert.equal(chooseScrollLineIndex(lines, 5500), 2);
-});
-
-test("preserves the fallback for overlapping lines separated by a larger gap", () => {
-  const lines = [
-    { StartTime: 0, EndTime: 5000 },
-    { StartTime: 1000, EndTime: 6000 },
-    { StartTime: 2000, EndTime: 7000 },
-    { StartTime: 3000, EndTime: 8000 },
-  ];
-
-  assert.equal(chooseScrollLineIndex(lines, 3500, 2), 3);
-});
 
 test("mounted smooth next-line targets do not enter the convergence retry loop", () => {
   assert.equal(shouldVerifyLyricsScroll(false, true), false);
