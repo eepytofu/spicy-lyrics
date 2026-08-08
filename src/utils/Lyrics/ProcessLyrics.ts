@@ -85,8 +85,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v58: keep non-Arabic timed readings owned by their configured local processor.
-export const LYRICS_PROCESSING_VERSION = 58;
+// v59: apply safe Japanese deinflection reading corrections during local analysis.
+export const LYRICS_PROCESSING_VERSION = 59;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 

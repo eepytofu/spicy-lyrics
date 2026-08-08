@@ -1,5 +1,5 @@
 import { createRetryableLazyInitializer } from "../../Analyzer/LazyInitializer.ts";
-import { normalizeJapaneseKana } from "./KuromojiJapaneseAnalyzer.ts";
+import { normalizeJapaneseKana } from "./JapaneseKana.ts";
 
 export type ProvenFuriganaGeometrySegment = {
   readonly start: number;

@@ -1,4 +1,4 @@
-import { normalizeJapaneseKana } from "../Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
+import { normalizeJapaneseKana } from "../Processing/Japanese/JapaneseKana.ts";
 import { lookupJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 import {
   KanaCharTest,

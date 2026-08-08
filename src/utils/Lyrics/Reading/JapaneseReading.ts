@@ -20,6 +20,9 @@ import {
 } from "../Processing/Japanese/JapaneseAnalyzer.ts";
 import { kuromojiJapaneseAnalyzer } from "../Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
 import {
+  resolveJapaneseDeinflectionReadings,
+} from "../Processing/Japanese/JapaneseDeinflectionResolver.ts";
+import {
   applyProductivePersonCounterReadings,
   applyVerifiedLexicalReadings,
 } from "../Processing/Japanese/JapaneseReadingResolver.ts";
@@ -172,6 +175,9 @@ async function buildJapaneseTokenContext(
     entries,
     explicitHints,
   );
+  if (analyzer.id === kuromojiJapaneseAnalyzer.id) {
+    await resolveJapaneseDeinflectionReadings(analysisText, tokens, entries);
+  }
   for (let index = 0; index < entries.length; index += 1) {
     if (entries[index].consumed) continue;
     entries[index].romaji = entryRomaji(entries[index], tokens[index], kanaToRomaji);
