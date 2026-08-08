@@ -18,6 +18,10 @@ const HELD_OUT_SONGS = [
   { songId: 161199, lyricsId: 46279 },
 ];
 const VISIBLE_CORPUS_LINES = fixtures.map(({ text }) => text);
+const LEXICAL_GUARD_LINES = [
+  "同じ阿呆でも踊らにゃ損損",
+  "終えるななんて何様だ",
+];
 const EXPECTED_TARGETS = 44;
 const EXPECTED_HELD_OUT_LINES = 276;
 const GATES = {
@@ -187,6 +191,7 @@ const heldOut = await loadHeldOutLines();
 const corpusGroups = [
   { id: "historical-27-line", lines: VISIBLE_CORPUS_LINES },
   { id: "bad-apple-complete", lines: badAppleLines },
+  { id: "lexical-guard", lines: LEXICAL_GUARD_LINES },
   { id: "held-out-276-line", lines: heldOut.lines },
 ];
 const allLines = corpusGroups.flatMap(({ lines }) => lines);
@@ -227,7 +232,7 @@ const generatedSource = await readFile(
 );
 const generatedGzipBytes = gzipSync(generatedSource, { level: 9 }).length;
 
-const timingLines = [...VISIBLE_CORPUS_LINES, ...badAppleLines];
+const timingLines = [...VISIBLE_CORPUS_LINES, ...badAppleLines, ...LEXICAL_GUARD_LINES];
 
 deinflectionEngine.releaseJapaneseDeinflectionData();
 if (globalThis.gc) globalThis.gc();
@@ -336,6 +341,7 @@ const report = {
   corpus: {
     historical: { lines: fixtures.length, targets: targetCount },
     badApple: { lines: badAppleLines.length },
+    lexicalGuard: { lines: LEXICAL_GUARD_LINES.length },
     heldOut: {
       lines: heldOut.lines.length,
       songs: heldOut.songs.map(({ songId, lyricsId, lineCount }) => ({ songId, lyricsId, lineCount })),

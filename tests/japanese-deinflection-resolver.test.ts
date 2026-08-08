@@ -241,6 +241,70 @@ test("production Japanese analysis always applies safe deinflection corrections"
   );
 });
 
+test("exact Kuromoji lexemes beat homographic deinflection candidates", async () => {
+  const fixtures = [
+    {
+      surface: "同じ",
+      reading: "おなじ",
+      rawPartOfSpeech: "連体詞",
+      conjugationType: "*",
+      conjugationForm: "*",
+      rejectedLemma: "同じる",
+      rejectedReading: "どうじ",
+      furigana: "おな",
+    },
+    {
+      surface: "終える",
+      reading: "おえる",
+      rawPartOfSpeech: "動詞",
+      conjugationType: "一段",
+      conjugationForm: "基本形",
+      rejectedLemma: "終う",
+      rejectedReading: "しまえる",
+      furigana: "お",
+    },
+  ] as const;
+
+  for (const fixture of fixtures) {
+    const rawCandidate = await deinflectJapaneseSurface(fixture.surface);
+    assert.ok(rawCandidate.candidates.some((candidate) =>
+      candidate.lemma === fixture.rejectedLemma
+      && candidate.projectedReading === fixture.rejectedReading
+    ));
+
+    const exactToken = token(
+      fixture.surface,
+      0,
+      fixture.surface.length,
+      fixture.reading,
+    );
+    exactToken.baseForm = fixture.surface;
+    exactToken.conjugationType = fixture.conjugationType;
+    exactToken.conjugationForm = fixture.conjugationForm;
+    exactToken.provenance.rawPartOfSpeech = fixture.rawPartOfSpeech;
+    assert.deepEqual(
+      await collectJapaneseDeinflectionCandidates(
+        fixture.surface,
+        [exactToken],
+        [entry(exactToken)],
+      ),
+      [],
+    );
+
+    const analysis = await prepareJapaneseLineAnalysis(fixture.surface, {
+      analyzer: {
+        id: "kuromoji",
+        analyze: async () => [structuredClone(exactToken)],
+      },
+      kanaRomanizer: (kana) => kana,
+    });
+    assert.equal(analysis?.reading.romaji, fixture.reading);
+    assert.deepEqual(analysis?.reading.furigana, [
+      { start: 0, end: 1, reading: fixture.furigana },
+    ]);
+  }
+});
+
 test("current verified corrections agree and provider-authored readings retain precedence", async () => {
   const changeTokens = [token("変", 0, 1, "へん"), token("われる", 1, 4, "われる")];
   const corrected = changeTokens.map(entry);

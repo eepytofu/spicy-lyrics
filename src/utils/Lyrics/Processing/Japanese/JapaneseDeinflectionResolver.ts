@@ -83,6 +83,11 @@ function hasProviderReading(
     .some((entry) => entry.readingProvenance === "providerExplicit");
 }
 
+function hasConfidentExactLexicalAnalysis(token: JapaneseAnalyzerToken): boolean {
+  return token.readingKana !== ""
+    && token.baseForm === token.surface;
+}
+
 export async function collectJapaneseDeinflectionCandidates(
   text: string,
   tokens: readonly JapaneseAnalyzerToken[],
@@ -111,6 +116,14 @@ export async function collectJapaneseDeinflectionCandidates(
         records.push(recordForSpan("ambiguous", span, { candidateCount: 2 }));
         continue;
       }
+      // A complete dictionary-form token with its own reading is stronger
+      // evidence than a homographic suffix rewrite. This protects both
+      // uninflected words such as 同じ/おなじ and dictionary-form verbs such as
+      // 終える/おえる from being reinterpreted as 同じる or 終う.
+      if (
+        startToken === endToken
+        && hasConfidentExactLexicalAnalysis(tokens[startToken])
+      ) continue;
       const result = await deinflectJapaneseSurface(surface);
       if (result.budgetExceeded) {
         records.push(recordForSpan("budgetExceeded", span));
