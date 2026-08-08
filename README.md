@@ -19,7 +19,8 @@ Lyrics:
 - Translation extensions can use the original lyrics even when readings are shown
 - Contributor credits from the lyric source (when available)
 - Three ways to choose lyrics: Smart Match (compares the available results and picks the best match), Sync Type First (prefers syllable, then line, then static lyrics), and Strict Priority (uses the first usable result in source order)
-- Enable, disable, and reorder sources, with details about why a result was picked
+- Search by title and artist from the lyrics view, compare candidates from enabled sources, and remember a manual choice for that Spotify track
+- Enable, disable, and reorder sources. Developer Mode adds selection scores and source-failure details to the chooser.
 
 Readings:
 
