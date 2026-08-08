@@ -18,7 +18,8 @@ export default function ExperimentsPanel({ onBack }: { onBack: () => void }) {
         </button>
       </div>
       <p className="sl-sp-experiments-note">
-        Experimental features may change or be removed. You can safely switch them at any time.
+        These features are still being shaped. Toggle one off if you prefer how things worked
+        before.
       </p>
       {EXPERIMENTS.map((experiment) => (
         <ExperimentRow key={experiment.id} experiment={experiment} />

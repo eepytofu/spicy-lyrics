@@ -659,8 +659,12 @@ function OpenNowBar(skipSaving: boolean = false) {
           const next = clamp(volume);
           const wasMuted = level <= 0;
           render(next);
-          if (wasMuted && next > 0) Spicetify.Player.setMute?.(false);
-          Spicetify.Player.setVolume(next);
+          try {
+            if (wasMuted && next > 0) Spicetify.Player.setMute?.(false);
+            Spicetify.Player.setVolume(next);
+          } catch (error) {
+            console.error("Spicy Lyrics: couldn't set the volume", error);
+          }
         };
         const fromEvent = (event: MouseEvent | TouchEvent) => {
           const clientY = "touches" in event && event.touches.length
@@ -699,7 +703,12 @@ function OpenNowBar(skipSaving: boolean = false) {
           move(event);
         };
         const mute = () => {
-          Spicetify.Player.toggleMute();
+          try {
+            Spicetify.Player.toggleMute();
+          } catch (error) {
+            console.error("Spicy Lyrics: couldn't toggle mute", error);
+            return;
+          }
           const timer = window.setTimeout(() => {
             if (!isDragging) render(Spicetify.Player.getVolume() ?? 0);
           }, 60);

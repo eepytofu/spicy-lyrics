@@ -1013,13 +1013,17 @@ async function main() {
       Whentil.When(
         () => Spicetify.Platform?.PlaybackAPI,
         () => {
-          Spicetify.Platform.PlaybackAPI?._events?.addListener?.(
-            "volume",
-            (event: { data?: { volume?: number } }) => {
-              const volume = event?.data?.volume;
-              if (typeof volume === "number") Global.Event.evoke("playback:volume", volume);
-            }
-          );
+          try {
+            Spicetify.Platform.PlaybackAPI?._events?.addListener?.(
+              "volume",
+              (event: { data?: { volume?: number } }) => {
+                const volume = event?.data?.volume;
+                if (typeof volume === "number") Global.Event.evoke("playback:volume", volume);
+              }
+            );
+          } catch (error) {
+            console.error("Spicy Lyrics: couldn't listen for volume changes", error);
+          }
         }
       );
     }
