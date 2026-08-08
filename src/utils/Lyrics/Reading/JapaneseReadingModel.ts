@@ -115,7 +115,7 @@ export type JapaneseLineTextMap = {
   spans: JapaneseTimedTextSpan[];
 };
 
-export const JapaneseSourceTextTest = /[぀-ヿ一-鿿]/;
+export const JapaneseSourceTextTest = /[぀-ヿ一-鿿々]/;
 export const JapaneseKanaTextTest = /[ぁ-んァ-ン]/;
 export const KanjiTextTest = /[一-鿿々]/;
 export const KanjiLikeCharTest = /[一-鿿々]/;
@@ -133,6 +133,8 @@ export type JapaneseTokenEntry = MergeableEntry & {
   surface: string;
   readingKana: string;
   furigana?: TokenFuriganaReading;
+  /** Exact dictionary geometry proven for this final surface and reading. */
+  provenFurigana?: readonly TokenFuriganaReading[];
   readingProvenance?: ReadingProvenance;
 };
 

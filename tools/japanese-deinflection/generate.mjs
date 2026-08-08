@@ -217,6 +217,133 @@ function furiganaReconstructs(surface, reading, geometry) {
   return reconstructed === reading;
 }
 
+function geometrySegmentCount(geometry) {
+  return String(geometry || "").split(";").filter(Boolean).length;
+}
+
+function isIterationMarkGeometry(surface, reading, geometry) {
+  return /^[々〆ヶ一-鿿豈-﫿]々$/u.test(surface)
+    && geometrySegmentCount(geometry) === 2
+    && furiganaReconstructs(surface, reading, geometry);
+}
+
+async function loadDictionarySurfaceReadings() {
+  const readingsBySurface = new Map();
+  const readingsBySequence = new Map();
+  const aliases = [];
+  const expressionSurfaces = new Set();
+  const files = (await readdir(JMDICT_ROOT))
+    .filter((name) => /^term_bank_\d+\.json$/u.test(name))
+    .sort((left, right) => Number(left.match(/\d+/u)[0]) - Number(right.match(/\d+/u)[0]));
+
+  const addReading = (surface, reading) => {
+    if (!JAPANESE_TERM.test(surface) || !HAS_KANJI.test(surface) || !/^[ぁ-んー]+$/u.test(reading)) {
+      return;
+    }
+    const readings = readingsBySurface.get(surface) || new Set();
+    readings.add(reading);
+    readingsBySurface.set(surface, readings);
+  };
+
+  for (const name of files) {
+    const bank = JSON.parse(await readFile(resolve(JMDICT_ROOT, name), "utf8"));
+    for (const row of bank) {
+      const surface = String(row[0] || "").normalize("NFKC");
+      const reading = String(row[1] || "").normalize("NFKC");
+      const sequence = Number(row[6]);
+      const dictionaryTags = new Set(String(row[2] || "").split(/\s+/u));
+      if (dictionaryTags.has("exp")) expressionSurfaces.add(surface);
+
+      if (reading) {
+        addReading(surface, reading);
+        if (Number.isInteger(sequence) && sequence > 0 && /^[ぁ-んー]+$/u.test(reading)) {
+          const sequenceReadings = readingsBySequence.get(sequence) || new Set();
+          sequenceReadings.add(reading);
+          readingsBySequence.set(sequence, sequenceReadings);
+        }
+      } else if (Number.isInteger(sequence) && sequence < 0 && JAPANESE_TERM.test(surface)) {
+        aliases.push({ surface, sequence: -sequence });
+      }
+    }
+  }
+
+  for (const alias of aliases) {
+    for (const reading of readingsBySequence.get(alias.sequence) || []) {
+      addReading(alias.surface, reading);
+    }
+  }
+  return { readingsBySurface, expressionSurfaces };
+}
+
+function readingFallbackGeometry(surface, reading, furiganaPairs, jitendexPairs) {
+  const geometry = furiganaPairs.get(`${surface}\t${reading}`);
+  if (!geometry || !furiganaReconstructs(surface, reading, geometry)) return undefined;
+  const characters = Array.from(surface);
+  const kanjiCount = characters.filter((character) => HAS_KANJI.test(character)).length;
+  if (kanjiCount === 1 && characters.length === 1) return geometry;
+  if (characters.some((character) => /^[ぁ-んー]$/u.test(character))) return geometry;
+  if (jitendexPairs.has(`${surface}\t${reading}`)) return geometry;
+  return isIterationMarkGeometry(surface, reading, geometry) ? geometry : undefined;
+}
+
+function kuromojiReading(token) {
+  return String(token.reading || token.pronunciation || "")
+    .normalize("NFKC")
+    .replace(/[ァ-ヶ]/gu, (character) =>
+      String.fromCharCode(character.charCodeAt(0) - 0x60));
+}
+
+function kuromojiHasReadingGap(tokenizer, surface) {
+  return tokenizer.tokenize(surface).some((token) =>
+    HAS_KANJI.test(String(token.surface_form || ""))
+    && !/^[ぁ-んー]+$/u.test(kuromojiReading(token)));
+}
+
+function kuromojiReturnsExactReading(tokenizer, surface, reading) {
+  const tokens = tokenizer.tokenize(surface);
+  return tokens.length === 1
+    && tokens[0].surface_form === surface
+    && kuromojiReading(tokens[0]) === reading;
+}
+
+async function buildReadingCoverageEntries(furiganaPairs, jitendexPairs, tokenizer) {
+  const { readingsBySurface, expressionSurfaces } = await loadDictionarySurfaceReadings();
+  const fallbackEntries = [];
+  const okuriganaGeometryEntries = [];
+
+  for (const [surface, readings] of readingsBySurface) {
+    if (!(expressionSurfaces.has(surface) && crossesGrammaticalBoundary(tokenizer, surface))) {
+      if (readings.size === 1) {
+        const [reading] = readings;
+        const geometry = readingFallbackGeometry(surface, reading, furiganaPairs, jitendexPairs);
+        if (geometry && kuromojiHasReadingGap(tokenizer, surface)) {
+          fallbackEntries.push([surface, reading, geometry]);
+        }
+      }
+    }
+
+    const characters = Array.from(surface);
+    const kanjiCount = characters.filter((character) => HAS_KANJI.test(character)).length;
+    const hasKana = characters.some((character) => /^[ぁ-んー]$/u.test(character));
+    if (kanjiCount < 2 || !hasKana) continue;
+    for (const reading of readings) {
+      const geometry = furiganaPairs.get(`${surface}\t${reading}`);
+      if (
+        geometrySegmentCount(geometry) >= 2
+        && furiganaReconstructs(surface, reading, geometry)
+        && kuromojiReturnsExactReading(tokenizer, surface, reading)
+      ) {
+        okuriganaGeometryEntries.push([surface, reading, geometry]);
+      }
+    }
+  }
+
+  fallbackEntries.sort((left, right) => left[0].localeCompare(right[0], "ja"));
+  okuriganaGeometryEntries.sort((left, right) =>
+    left[0].localeCompare(right[0], "ja") || left[1].localeCompare(right[1], "ja"));
+  return { fallbackEntries, okuriganaGeometryEntries };
+}
+
 function geometryEvidence(surface, reading, furiganaPairs, jitendexPairs) {
   const characters = Array.from(surface);
   const kanjiCount = characters.filter((character) => HAS_KANJI.test(character)).length;
@@ -320,7 +447,14 @@ function fnv1a(value) {
   return hash >>> 0;
 }
 
-function render({ transforms, entries, rejectedEntries, sourceHashes }) {
+function render({
+  transforms,
+  entries,
+  rejectedEntries,
+  fallbackEntries,
+  okuriganaGeometryEntries,
+  sourceHashes,
+}) {
   const buckets = Array.from({ length: BUCKET_COUNT }, () => []);
   for (const entry of entries) buckets[fnv1a(entry[0]) & (BUCKET_COUNT - 1)].push(entry.join("\t"));
   const bucketSource = buckets.map((rows) => `\n${rows.join("\n")}\n`);
@@ -329,6 +463,18 @@ function render({ transforms, entries, rejectedEntries, sourceHashes }) {
     rejectedBuckets[fnv1a(entry[0]) & (BUCKET_COUNT - 1)].push(entry.join("\t"));
   }
   const rejectedBucketSource = rejectedBuckets.map((rows) => `\n${rows.join("\n")}\n`);
+  const fallbackBuckets = Array.from({ length: BUCKET_COUNT }, () => []);
+  for (const entry of fallbackEntries) {
+    fallbackBuckets[fnv1a(entry[0]) & (BUCKET_COUNT - 1)].push(entry.join("\t"));
+  }
+  const fallbackBucketSource = fallbackBuckets.map((rows) => `\n${rows.join("\n")}\n`);
+  const okuriganaGeometryBuckets = Array.from({ length: BUCKET_COUNT }, () => []);
+  for (const entry of okuriganaGeometryEntries) {
+    okuriganaGeometryBuckets[fnv1a(entry[0]) & (BUCKET_COUNT - 1)].push(entry.join("\t"));
+  }
+  const okuriganaGeometryBucketSource = okuriganaGeometryBuckets.map(
+    (rows) => `\n${rows.join("\n")}\n`,
+  );
   return `/*\n * SPDX-License-Identifier: AGPL-3.0-only AND CC-BY-SA-4.0\n *\n * Generated from Yomitan 26.7.21.0 transform definitions (GPL-3.0-or-later).\n * Copyright (C) 2024-2026 Yomitan Authors.\n * JMdict.2026-07-28 and JmdictFurigana-derived dictionary data is CC BY-SA 4.0\n * and includes material from EDRDG. Do not edit this file by hand.\n */\n\nexport const JAPANESE_DEINFLECTION_METADATA = ${JSON.stringify({
     yomitanRelease: "26.7.21.0",
     jmdictRevision: "JMdict.2026-07-28",
@@ -337,7 +483,9 @@ function render({ transforms, entries, rejectedEntries, sourceHashes }) {
     transformRules: transforms.rules.length,
     lemmaEntries: entries.length,
     rejectedLemmaEntries: rejectedEntries.length,
-  }, null, 2)} as const;\n\nexport const JAPANESE_DEINFLECTION_RULES = ${JSON.stringify(transforms.rules)} as const;\n\nexport const JAPANESE_DEINFLECTION_LEMMA_BUCKETS = ${JSON.stringify(bucketSource)} as const;\n\nexport const JAPANESE_DEINFLECTION_REJECTED_LEMMA_BUCKETS = ${JSON.stringify(rejectedBucketSource)} as const;\n`;
+    readingFallbackEntries: fallbackEntries.length,
+    okuriganaGeometryEntries: okuriganaGeometryEntries.length,
+  }, null, 2)} as const;\n\nexport const JAPANESE_DEINFLECTION_RULES = ${JSON.stringify(transforms.rules)} as const;\n\nexport const JAPANESE_DEINFLECTION_LEMMA_BUCKETS = ${JSON.stringify(bucketSource)} as const;\n\nexport const JAPANESE_DEINFLECTION_REJECTED_LEMMA_BUCKETS = ${JSON.stringify(rejectedBucketSource)} as const;\n\nexport const JAPANESE_READING_FALLBACK_BUCKETS = ${JSON.stringify(fallbackBucketSource)} as const;\n\nexport const JAPANESE_OKURIGANA_GEOMETRY_BUCKETS = ${JSON.stringify(okuriganaGeometryBucketSource)} as const;\n`;
 }
 
 await verifyInputs();
@@ -352,10 +500,17 @@ const { entries, rejectedEntries } = await buildLemmaEntries(
   jitendexPairs,
   tokenizer,
 );
+const { fallbackEntries, okuriganaGeometryEntries } = await buildReadingCoverageEntries(
+  furiganaPairs,
+  jitendexPairs,
+  tokenizer,
+);
 const output = render({
   transforms,
   entries,
   rejectedEntries,
+  fallbackEntries,
+  okuriganaGeometryEntries,
   sourceHashes: {
     yomitanArchiveSha256: EXPECTED_HASHES.get(YOMITAN_ARCHIVE),
     yomitanTransformSourceSha256: EXPECTED_HASHES.get(TRANSFORMS_SOURCE),
@@ -369,7 +524,10 @@ const output = render({
 });
 const compressedBytes = gzipSync(output, { level: 9 }).length;
 if (compressedBytes > 2 * 1024 * 1024) {
-  throw new Error(`Generated deinflection data exceeds 2 MiB gzip: ${compressedBytes} bytes`);
+  throw new Error(
+    `Generated deinflection data exceeds 2 MiB gzip: ${compressedBytes} bytes `
+    + `(${fallbackEntries.length} fallbacks, ${okuriganaGeometryEntries.length} geometries)`,
+  );
 }
 
 if (process.argv.includes("--check")) {
@@ -384,6 +542,8 @@ console.log(JSON.stringify({
   transformRules: transforms.rules.length,
   lemmaEntries: entries.length,
   rejectedLemmaEntries: rejectedEntries.length,
+  readingFallbackEntries: fallbackEntries.length,
+  okuriganaGeometryEntries: okuriganaGeometryEntries.length,
   utf8Bytes: Buffer.byteLength(output),
   gzipBytes: compressedBytes,
 }, null, 2));

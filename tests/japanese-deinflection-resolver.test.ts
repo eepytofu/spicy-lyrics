@@ -75,6 +75,8 @@ test("generated data pins all Yomitan transform families and compact sources", (
   assert.equal(JAPANESE_DEINFLECTION_RULES.length, 834);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.lemmaEntries, 12_634);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.rejectedLemmaEntries, 904);
+  assert.equal(JAPANESE_DEINFLECTION_METADATA.readingFallbackEntries, 2_779);
+  assert.equal(JAPANESE_DEINFLECTION_METADATA.okuriganaGeometryEntries, 9_078);
 });
 
 test("every generated transform rule reverses its own surface rewrite", () => {

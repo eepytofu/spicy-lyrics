@@ -70,6 +70,25 @@ export function applyKuromojiReadingOverrides(
       continue;
     }
 
+    if (
+      surface === "人" &&
+      entries[index].readingKana === "じん" &&
+      tokens[index].morphologyFeatures.includes("suffix") &&
+      previousIndex >= 0 &&
+      (tokens[previousIndex].partOfSpeech === "verb" ||
+        tokens[previousIndex].partOfSpeech === "auxiliaryVerb") &&
+      entries[index + 1]?.surface === "は" &&
+      tokens[index + 1]?.partOfSpeech === "particle"
+    ) {
+      // A provider may move a topic phrase across an authored line boundary,
+      // as in 教えておくれ人は. IPADIC then attaches 人 to the preceding verb
+      // and emits the suffix reading じん; a following topic は proves that 人
+      // starts an independent phrase instead. Noun compounds such as 日本人は
+      // retain the dictionary reading.
+      setReading(entries[index], "hito", "ひと");
+      continue;
+    }
+
     if (surface === "方" && PLURAL_PRONOUN_BEFORE_KATA.test(previousSurface)) {
       const previousToken = previousIndex >= 0 ? tokens[previousIndex] : undefined;
       const currentPartOfSpeech = tokens[index].partOfSpeech;

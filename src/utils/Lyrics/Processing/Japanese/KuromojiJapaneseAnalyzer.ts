@@ -7,7 +7,11 @@ import type {
   JapanesePartOfSpeech,
 } from "./JapaneseAnalyzer.ts";
 import { assertJapaneseAnalyzerTokens } from "./JapaneseAnalyzer.ts";
-import { normalizeJapaneseKana } from "./JapaneseKana.ts";
+import {
+  mayUseKatakanaOkurigana,
+  normalizeJapaneseKana,
+  projectKatakanaAsHiragana,
+} from "./JapaneseKana.ts";
 
 function kanaReading(surface: string, candidate: string): string {
   const reading =
@@ -106,10 +110,103 @@ export function normalizeKuromojiTokens(
   return tokens;
 }
 
+type KuromojiTokenize = (
+  text: string,
+) => Promise<readonly KuromojiAnalyzer.KuromojiToken[]>;
+
+const HAN_OR_ITERATION_MARK = /[\p{Script=Han}\u3005]/u;
+const KATAKANA_ONLY = /^[\u30a1-\u30f6\u30fc]+$/u;
+const NON_WORD = /^[\s\p{P}\p{S}]+$/u;
+
+function nativeWordType(token: KuromojiAnalyzer.KuromojiToken): string {
+  return token.verbose?.word_type || token.word_type || "";
+}
+
+function analysisPenalty(tokens: readonly KuromojiAnalyzer.KuromojiToken[]): number {
+  let penalty = 0;
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const surface = token.surface_form || "";
+    if (nativeWordType(token) === "UNKNOWN" && surface && !NON_WORD.test(surface)) {
+      penalty += 4;
+    }
+    if (
+      HAN_OR_ITERATION_MARK.test(surface)
+      && (!token.reading || token.reading === "*")
+    ) {
+      penalty += 8;
+    }
+    const next = tokens[index + 1];
+    if (
+      HAN_OR_ITERATION_MARK.test(surface)
+      && token.pos_detail_1 === "接尾"
+      && next
+      && KATAKANA_ONLY.test(next.surface_form || "")
+      && nativeWordType(next) === "UNKNOWN"
+    ) {
+      penalty += 3;
+    }
+  }
+  return penalty;
+}
+
+function hasProjectedOkuriganaEvidence(
+  tokens: readonly KuromojiAnalyzer.KuromojiToken[],
+): boolean {
+  return tokens.some((token) => {
+    const surface = token.surface_form || "";
+    return HAN_OR_ITERATION_MARK.test(surface) && /[\u3041-\u3096]/u.test(surface);
+  });
+}
+
+function projectTokensToSource(
+  sourceText: string,
+  analysisText: string,
+  tokens: readonly JapaneseAnalyzerToken[],
+): JapaneseAnalyzerToken[] {
+  if (sourceText === analysisText) return [...tokens];
+  const projected = tokens.map((token) => ({
+    ...token,
+    surface: sourceText.slice(token.start, token.end),
+  }));
+  assertJapaneseAnalyzerTokens(sourceText, projected);
+  return projected;
+}
+
+/**
+ * Retry only old-style all-Katakana inflection as Hiragana and keep it only
+ * when Kuromoji produces strictly stronger dictionary evidence. Display text
+ * and UTF-16 ranges always remain the provider's exact source.
+ */
+export async function analyzeKuromojiText(
+  text: string,
+  tokenize: KuromojiTokenize,
+): Promise<JapaneseAnalyzerToken[]> {
+  const originalRaw = await tokenize(text);
+  let analysisText = text;
+  let selectedRaw = originalRaw;
+  if (mayUseKatakanaOkurigana(text)) {
+    const projectedText = projectKatakanaAsHiragana(text);
+    const projectedRaw = await tokenize(projectedText);
+    if (
+      hasProjectedOkuriganaEvidence(projectedRaw)
+      && analysisPenalty(projectedRaw) < analysisPenalty(originalRaw)
+    ) {
+      analysisText = projectedText;
+      selectedRaw = projectedRaw;
+    }
+  }
+  return projectTokensToSource(
+    text,
+    analysisText,
+    normalizeKuromojiTokens(analysisText, selectedRaw),
+  );
+}
+
 export const kuromojiJapaneseAnalyzer: JapaneseAnalyzer = {
   id: "kuromoji",
   applyReadingOverrides: applyKuromojiReadingOverrides,
   async analyze(text) {
-    return normalizeKuromojiTokens(text, await KuromojiAnalyzer.parse(text));
+    return analyzeKuromojiText(text, KuromojiAnalyzer.parse);
   },
 };

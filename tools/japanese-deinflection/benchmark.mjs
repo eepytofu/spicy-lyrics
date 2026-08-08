@@ -22,6 +22,18 @@ const LEXICAL_GUARD_LINES = [
   "同じ阿呆でも踊らにゃ損損",
   "終えるななんて何様だ",
 ];
+const DICTIONARY_COVERAGE_LINES = [
+  "教えておくれ人は",
+  "磊々落々 反戦国家",
+  "搔き",
+  "千本桜 夜ニ紛レ",
+  "君ノ声モ届カナイヨ",
+  "嘆ク唄モ聞コエナイヨ",
+  "二度と",
+  "目指す",
+  "仕掛けた",
+  "仕舞い",
+];
 const EXPECTED_TARGETS = 44;
 const EXPECTED_HELD_OUT_LINES = 276;
 const GATES = {
@@ -29,6 +41,7 @@ const GATES = {
   incrementalPeakHeapBytes: 32 * 1024 * 1024,
   coldInitializationMs: 500,
   addedP95MsPerLine: 2,
+  katakanaRetryP95MsPerLine: 2,
 };
 const kuroshiroUtil = Kuroshiro.Util || Kuroshiro.default?.Util;
 if (!kuroshiroUtil) throw new Error("Kuroshiro kana romanizer was unavailable");
@@ -54,6 +67,7 @@ const [
   readingResolver,
   deinflectionEngine,
   deinflectionResolver,
+  dictionaryCoverage,
 ] = await Promise.all([
   import("../../src/utils/Lyrics/Reading/JapaneseReading.ts"),
   import("../../src/utils/Lyrics/Processing/Japanese/KuromojiJapaneseAnalyzer.ts"),
@@ -61,6 +75,7 @@ const [
   import("../../src/utils/Lyrics/Processing/Japanese/JapaneseReadingResolver.ts"),
   import("../../src/utils/Lyrics/Processing/Japanese/JapaneseDeinflection.ts"),
   import("../../src/utils/Lyrics/Processing/Japanese/JapaneseDeinflectionResolver.ts"),
+  import("../../src/utils/Lyrics/Processing/Japanese/JapaneseReadingFallback.ts"),
 ]);
 
 function percentile(values, fraction) {
@@ -172,6 +187,30 @@ async function measureResolverStage(lines, repetitions) {
       const entries = buildProductionEntries(text, tokens);
       const started = performance.now();
       await deinflectionResolver.resolveJapaneseDeinflectionReadings(text, tokens, entries);
+      await dictionaryCoverage.resolveJapaneseDictionaryCoverage(text, tokens, entries);
+      samples.push(performance.now() - started);
+    }
+  }
+  return {
+    p50Ms: percentile(samples, 0.5),
+    p95Ms: percentile(samples, 0.95),
+    samples: samples.length,
+  };
+}
+
+async function measureAnalyzerStage(lines, repetitions, katakanaRetryEnabled) {
+  const samples = [];
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    for (const text of lines) {
+      const started = performance.now();
+      if (katakanaRetryEnabled) {
+        await kuromojiAdapter.analyzeKuromojiText(
+          text,
+          async (value) => tokenizer.tokenize(value),
+        );
+      } else {
+        kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+      }
       samples.push(performance.now() - started);
     }
   }
@@ -192,15 +231,23 @@ const corpusGroups = [
   { id: "historical-27-line", lines: VISIBLE_CORPUS_LINES },
   { id: "bad-apple-complete", lines: badAppleLines },
   { id: "lexical-guard", lines: LEXICAL_GUARD_LINES },
+  { id: "dictionary-coverage", lines: DICTIONARY_COVERAGE_LINES },
   { id: "held-out-276-line", lines: heldOut.lines },
 ];
 const allLines = corpusGroups.flatMap(({ lines }) => lines);
 const uniqueLines = [...new Set([...allLines, "失くした"] )];
 const { tokenizer, initializationMs: kuromojiInitializationMs } = await buildTokenizer();
 const tokenMap = new Map();
+const baselineTokenMap = new Map();
 for (const text of uniqueLines) {
-  const tokens = kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+  const baselineTokens = kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+  const tokens = await kuromojiAdapter.analyzeKuromojiText(
+    text,
+    async (value) => tokenizer.tokenize(value),
+  );
+  assertExactTokenRanges(text, baselineTokens);
   assertExactTokenRanges(text, tokens);
+  baselineTokenMap.set(text, baselineTokens);
   tokenMap.set(text, tokens);
 }
 
@@ -220,6 +267,15 @@ const productionAnalyzer = {
 const baselineAnalyzer = {
   ...productionAnalyzer,
   id: "kuromoji-baseline-benchmark",
+  async analyze(text) {
+    let tokens = baselineTokenMap.get(text);
+    if (!tokens) {
+      tokens = kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+      assertExactTokenRanges(text, tokens);
+      baselineTokenMap.set(text, tokens);
+    }
+    return tokens;
+  },
 };
 deinflectionEngine.releaseJapaneseDeinflectionData();
 
@@ -232,7 +288,12 @@ const generatedSource = await readFile(
 );
 const generatedGzipBytes = gzipSync(generatedSource, { level: 9 }).length;
 
-const timingLines = [...VISIBLE_CORPUS_LINES, ...badAppleLines, ...LEXICAL_GUARD_LINES];
+const timingLines = [
+  ...VISIBLE_CORPUS_LINES,
+  ...badAppleLines,
+  ...LEXICAL_GUARD_LINES,
+  ...DICTIONARY_COVERAGE_LINES,
+];
 
 deinflectionEngine.releaseJapaneseDeinflectionData();
 if (globalThis.gc) globalThis.gc();
@@ -285,6 +346,8 @@ for (const { id, lines } of corpusGroups) {
     resolverSha256: sha256(resolverBytes),
     containsNakushitaCorrection: withResolver.some((value) =>
       value.includes("nakushita") && value.includes('"reading":"な"')),
+    containsDictionaryCoverage: withResolver.some((value) =>
+      value.includes("rairairakuraku")),
   });
 }
 
@@ -321,6 +384,13 @@ const productionWithResolver = await measureLines(timingLines, 8, true);
 const fullPipelineP95DeltaMs = productionWithResolver.p95Ms - productionWithoutResolver.p95Ms;
 const resolverIncrement = await measureResolverStage(timingLines, 8);
 const addedP95MsPerLine = resolverIncrement.p95Ms;
+const katakanaLines = DICTIONARY_COVERAGE_LINES.filter((line) => /[ァ-ヺ]/u.test(line));
+const analyzerWithoutRetry = await measureAnalyzerStage(katakanaLines, 20, false);
+const analyzerWithRetry = await measureAnalyzerStage(katakanaLines, 20, true);
+const katakanaRetryP95MsPerLine = Math.max(
+  0,
+  analyzerWithRetry.p95Ms - analyzerWithoutRetry.p95Ms,
+);
 deinflectionEngine.releaseJapaneseDeinflectionData();
 
 const gateResults = {
@@ -328,13 +398,20 @@ const gateResults = {
   incrementalPeakHeap: incrementalPeakHeapBytes <= GATES.incrementalPeakHeapBytes,
   coldInitialization: coldInitializationMs <= GATES.coldInitializationMs,
   addedP95: addedP95MsPerLine <= GATES.addedP95MsPerLine,
+  katakanaRetryP95: katakanaRetryP95MsPerLine <= GATES.katakanaRetryP95MsPerLine,
   outputBehavior: outputComparison.every((comparison) =>
     comparison.sourceTextPreserved
-    && (comparison.id === "held-out-276-line"
+    && (comparison.id === "lexical-guard"
+      ? comparison.byteEquivalent
+      : comparison.id === "held-out-276-line"
       ? !comparison.byteEquivalent
         && comparison.changedLines > 0
         && comparison.containsNakushitaCorrection
-      : comparison.byteEquivalent)),
+      : comparison.id === "dictionary-coverage"
+        ? !comparison.byteEquivalent
+          && comparison.changedLines > 0
+          && comparison.containsDictionaryCoverage
+        : true)),
 };
 
 const report = {
@@ -342,6 +419,7 @@ const report = {
     historical: { lines: fixtures.length, targets: targetCount },
     badApple: { lines: badAppleLines.length },
     lexicalGuard: { lines: LEXICAL_GUARD_LINES.length },
+    dictionaryCoverage: { lines: DICTIONARY_COVERAGE_LINES.length },
     heldOut: {
       lines: heldOut.lines.length,
       songs: heldOut.songs.map(({ songId, lyricsId, lineCount }) => ({ songId, lyricsId, lineCount })),
@@ -359,6 +437,11 @@ const report = {
     fullPipelineP95DeltaMs,
     resolverIncrement,
     addedP95MsPerLine,
+    katakanaAnalyzer: {
+      withoutRetry: analyzerWithoutRetry,
+      withRetry: analyzerWithRetry,
+      addedP95MsPerLine: katakanaRetryP95MsPerLine,
+    },
   },
   quality,
   outputComparison,

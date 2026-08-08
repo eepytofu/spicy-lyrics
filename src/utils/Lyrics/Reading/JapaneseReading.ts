@@ -26,6 +26,9 @@ import {
   applyProductivePersonCounterReadings,
   applyVerifiedLexicalReadings,
 } from "../Processing/Japanese/JapaneseReadingResolver.ts";
+import {
+  resolveJapaneseDictionaryCoverage,
+} from "../Processing/Japanese/JapaneseReadingFallback.ts";
 import { loadJitendexFuriganaGeometry } from "../Processing/Japanese/JitendexFuriganaGeometry.ts";
 import {
   buildFuriganaFromContext,
@@ -177,6 +180,7 @@ async function buildJapaneseTokenContext(
   );
   if (analyzer.id === kuromojiJapaneseAnalyzer.id) {
     await resolveJapaneseDeinflectionReadings(analysisText, tokens, entries);
+    await resolveJapaneseDictionaryCoverage(analysisText, tokens, entries);
   }
   for (let index = 0; index < entries.length; index += 1) {
     if (entries[index].consumed) continue;

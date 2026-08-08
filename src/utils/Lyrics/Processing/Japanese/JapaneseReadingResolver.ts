@@ -27,6 +27,18 @@ type VerifiedLexicalRule = {
  */
 const VERIFIED_LEXICAL_RULES: readonly VerifiedLexicalRule[] = [
   {
+    // 精選版 日本国語大辞典 records the reduplicated idiom as
+    // らいらいらくらく. IPADIC exposes all four characters separately and
+    // JMdict covers only 磊々, so keep the complete verified idiom atomic.
+    lexicalSurface: "磊々落々",
+    tokens: [
+      { surface: "磊", baselineReadingKana: "", readingKana: "らい" },
+      { surface: "々", baselineReadingKana: "々", readingKana: "らい" },
+      { surface: "落", baselineReadingKana: "", readingKana: "らく" },
+      { surface: "々", baselineReadingKana: "々", readingKana: "らく" },
+    ],
+  },
+  {
     lexicalSurface: "大人買い",
     tokens: [
       { surface: "大人", baselineReadingKana: "おとな", readingKana: "おとな" },

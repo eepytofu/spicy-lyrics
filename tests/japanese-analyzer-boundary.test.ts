@@ -5,9 +5,11 @@ import type {
   JapaneseAnalyzerToken,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
 import {
+  analyzeKuromojiText,
   kuromojiJapaneseAnalyzer,
   normalizeKuromojiTokens,
 } from "../src/utils/Lyrics/Processing/Japanese/KuromojiJapaneseAnalyzer.ts";
+import { applyKuromojiReadingOverrides } from "../src/utils/Lyrics/Processing/Japanese/KuromojiReadingPolicy.ts";
 import { prepareJapaneseLineAnalysis } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 
 function token(
@@ -114,6 +116,138 @@ test("Kuromoji adapter normalizes numeric, counter, and name morphology", () => 
   assert.deepEqual(tokens[2].morphologyFeatures, ["suffix", "properName"]);
   assert.equal(tokens[1].provenance.rawPartOfSpeechDetail2, "助数詞");
   assert.equal(tokens[2].provenance.rawPartOfSpeechDetail2, "人名");
+});
+
+test("verb-adjacent suffix 人 before topic は is restored as an independent person", () => {
+  const tokens = normalizeKuromojiTokens("おくれ人は", [
+    {
+      surface_form: "おくれ",
+      reading: "オクレ",
+      pos: "動詞",
+      basic_form: "おくれる",
+    },
+    {
+      surface_form: "人",
+      reading: "ジン",
+      pos: "名詞",
+      pos_detail_1: "接尾",
+      pos_detail_2: "一般",
+      basic_form: "人",
+    },
+    { surface_form: "は", reading: "ハ", pos: "助詞", basic_form: "は" },
+  ]);
+  const entries = tokens.map((value) => ({
+    surface: value.surface,
+    start: value.start,
+    end: value.end,
+    readingKana: value.readingKana,
+    romaji: "",
+    consumed: false,
+  }));
+
+  applyKuromojiReadingOverrides(entries, tokens);
+
+  assert.equal(entries[1].readingKana, "ひと");
+  assert.equal(entries[1].romaji, "hito");
+});
+
+test("noun compounds ending in 人 keep their dictionary reading", () => {
+  const tokens = normalizeKuromojiTokens("日本人は", [
+    { surface_form: "日本人", reading: "ニッポンジン", pos: "名詞", basic_form: "日本人" },
+    { surface_form: "は", reading: "ハ", pos: "助詞", basic_form: "は" },
+  ]);
+  const entries = tokens.map((value) => ({
+    surface: value.surface,
+    start: value.start,
+    end: value.end,
+    readingKana: value.readingKana,
+    romaji: "",
+    consumed: false,
+  }));
+
+  applyKuromojiReadingOverrides(entries, tokens);
+
+  assert.equal(entries[0].readingKana, "にっぽんじん");
+});
+
+test("Katakana okurigana retry preserves exact provider text and UTF-16 ranges", async () => {
+  const source = "夜ニ紛レ";
+  const analyzed = await analyzeKuromojiText(source, async (text) =>
+    text === source
+      ? [
+          { surface_form: "夜", reading: "ヨル", pos: "名詞", basic_form: "夜" },
+          { surface_form: "ニ", reading: "ニ", pos: "助詞", basic_form: "ニ" },
+          { surface_form: "紛", pos: "名詞", basic_form: "*" },
+          {
+            surface_form: "レ",
+            pos: "名詞",
+            basic_form: "*",
+            verbose: { word_type: "UNKNOWN" },
+          },
+        ]
+      : [
+          { surface_form: "夜", reading: "ヨル", pos: "名詞", basic_form: "夜" },
+          { surface_form: "に", reading: "ニ", pos: "助詞", basic_form: "に" },
+          { surface_form: "紛れ", reading: "マギレ", pos: "動詞", basic_form: "紛れる" },
+        ]
+  );
+
+  assert.deepEqual(
+    analyzed.map(({ surface, readingKana, start, end }) => ({
+      surface,
+      readingKana,
+      start,
+      end,
+    })),
+    [
+      { surface: "夜", readingKana: "よる", start: 0, end: 1 },
+      { surface: "ニ", readingKana: "に", start: 1, end: 2 },
+      { surface: "紛レ", readingKana: "まぎれ", start: 2, end: 4 },
+    ],
+  );
+  assert.equal(analyzed.map((value) => value.surface).join(""), source);
+});
+
+test("ordinary Katakana vocabulary keeps the original parse on equal evidence", async () => {
+  const source = "ハイカラ革命";
+  const analyzed = await analyzeKuromojiText(source, async (text) =>
+    text === source
+      ? [
+          { surface_form: "ハイカラ", reading: "ハイカラ", pos: "名詞", basic_form: "ハイカラ" },
+          { surface_form: "革命", reading: "カクメイ", pos: "名詞", basic_form: "革命" },
+        ]
+      : [
+          { surface_form: "はい", reading: "ハイ", pos: "感動詞", basic_form: "はい" },
+          { surface_form: "から", reading: "カラ", pos: "助詞", basic_form: "から" },
+          { surface_form: "革命", reading: "カクメイ", pos: "名詞", basic_form: "革命" },
+        ]
+  );
+
+  assert.deepEqual(analyzed.map((value) => value.surface), ["ハイカラ", "革命"]);
+});
+
+test("a Katakana name is not reinterpreted without mixed okurigana evidence", async () => {
+  const source = "東京アリス";
+  const analyzed = await analyzeKuromojiText(source, async (text) =>
+    text === source
+      ? [
+          { surface_form: "東京", reading: "トウキョウ", pos: "名詞", basic_form: "東京" },
+          {
+            surface_form: "アリス",
+            pos: "名詞",
+            basic_form: "*",
+            verbose: { word_type: "UNKNOWN" },
+          },
+        ]
+      : [
+          { surface_form: "東京", reading: "トウキョウ", pos: "名詞", basic_form: "東京" },
+          { surface_form: "あり", reading: "アリ", pos: "動詞", basic_form: "ある" },
+          { surface_form: "す", reading: "ス", pos: "助動詞", basic_form: "す" },
+        ]
+  );
+
+  assert.deepEqual(analyzed.map((value) => value.surface), ["東京", "アリス"]);
+  assert.equal(analyzed[1].readingKana, "ありす");
 });
 
 test("Kuromoji adapter recognizes IPADIC noun-detail pronouns", () => {

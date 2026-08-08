@@ -98,3 +98,20 @@ export function normalizeJapaneseKana(text: string): string {
   }
   return output;
 }
+
+/** One-code-point Katakana projection used only to improve tokenizer input. */
+export function projectKatakanaAsHiragana(text: string): string {
+  return (text || "").replace(/[\u30a1-\u30f6]/gu, (character) =>
+    String.fromCharCode(character.charCodeAt(0) - 0x60)
+  );
+}
+
+/**
+ * Stylized lyrics sometimes write every particle and okurigana in Katakana.
+ * Ordinary mixed Japanese already contains Hiragana and must stay untouched.
+ */
+export function mayUseKatakanaOkurigana(text: string): boolean {
+  return /[\p{Script=Han}\u3005]/u.test(text)
+    && /[\u30a1-\u30f6]/u.test(text)
+    && !/[\u3041-\u3096]/u.test(text);
+}

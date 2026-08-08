@@ -279,7 +279,9 @@ export function buildFuriganaFromContext(
       entry.readingProvenance === "providerExplicit"
         ? undefined
         : lookupJitendexFuriganaGeometry(entry.surface, entry.readingKana);
-    const tokenSegments = provenGeometry
+    const tokenSegments = entry.provenFurigana
+      ? [...entry.provenFurigana]
+      : provenGeometry
       ? provenGeometry.map((segment) => ({
           text: segment.reading,
           targetStart: segment.start,
