@@ -88,6 +88,46 @@ test("partial dictionary matches cannot invent readings inside one unresolved ga
   assert.equal(entries.some((entry) => entry.consumed), false);
 });
 
+test("exact compound geometry fills only unresolved tokens when existing readings agree", async () => {
+  const tokens = [token("隕", 0, ""), token("石", 1, "せき")];
+  const entries: JapaneseTokenEntry[] = tokens.map((value) => ({
+    start: value.start,
+    end: value.end,
+    surface: value.surface,
+    readingKana: value.readingKana,
+    romaji: "",
+    consumed: false,
+  }));
+
+  await resolveJapaneseDictionaryCoverage("隕石", tokens, entries);
+
+  assert.equal(entries[0].readingKana, "いん");
+  assert.deepEqual(entries[0].provenFurigana, [
+    { text: "いん", targetStart: 0, targetEnd: 1 },
+  ]);
+  assert.equal(entries[1].readingKana, "せき");
+  assert.equal(entries[1].provenFurigana, undefined);
+  assert.equal(entries.some((entry) => entry.consumed), false);
+  assert.equal(entries.some((entry) => entry.readingGroupId), false);
+});
+
+test("partial compound coverage abstains when existing token readings disagree", async () => {
+  const tokens = [token("隕", 0, ""), token("石", 1, "いし")];
+  const entries: JapaneseTokenEntry[] = tokens.map((value) => ({
+    start: value.start,
+    end: value.end,
+    surface: value.surface,
+    readingKana: value.readingKana,
+    romaji: "",
+    consumed: false,
+  }));
+
+  await resolveJapaneseDictionaryCoverage("隕石", tokens, entries);
+
+  assert.deepEqual(entries.map((entry) => entry.readingKana), ["", "いし"]);
+  assert.equal(entries.some((entry) => entry.provenFurigana), false);
+});
+
 test("the longest exact repeated-Kanji phrase wins over its partial dictionary word", async () => {
   const tokens = [
     token("磊", 0, ""),

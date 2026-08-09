@@ -16,10 +16,12 @@ type VerifiedLexicalTokenRule = {
 type VerifiedLexicalRule = {
   lexicalSurface: string;
   tokens: readonly VerifiedLexicalTokenRule[];
+  preserveTokenBoundaries?: true;
 };
 
 /**
- * Small product slice from the pinned JMdict/Jitendex differential audit.
+ * Small product slice from pinned dictionary audits and authoritative lyric
+ * evidence.
  * Each rule preserves Kuromoji's token ranges and applies only when the full
  * lexical surface, tokenization, and baseline readings still match the audited
  * shape. Broad dictionary and frequency-driven selection intentionally remain
@@ -61,6 +63,26 @@ const VERIFIED_LEXICAL_RULES: readonly VerifiedLexicalRule[] = [
       { surface: "われる", baselineReadingKana: "われる", readingKana: "われる" },
     ],
   },
+  {
+    // canoue, "Sabaku ni sumu mamono"; exact lyric context disambiguates 金.
+    lexicalSurface: "金も種も",
+    preserveTokenBoundaries: true,
+    tokens: [
+      { surface: "金", baselineReadingKana: "きん", readingKana: "かね" },
+      { surface: "も", baselineReadingKana: "も", readingKana: "も" },
+      { surface: "種", baselineReadingKana: "たね", readingKana: "たね" },
+      { surface: "も", baselineReadingKana: "も", readingKana: "も" },
+    ],
+  },
+  {
+    // Hiiragi Magnetite, "Tetoris"; canonical Vocaloid Lyrics Wiki reading.
+    lexicalSurface: "金による",
+    preserveTokenBoundaries: true,
+    tokens: [
+      { surface: "金", baselineReadingKana: "きむ", readingKana: "かね" },
+      { surface: "による", baselineReadingKana: "による", readingKana: "による" },
+    ],
+  },
 ];
 
 export type VerifiedLexicalReadingDecision = {
@@ -74,6 +96,7 @@ export type VerifiedLexicalReadingDecision = {
   lexicalSurface: string;
   lexicalStart: number;
   lexicalEnd: number;
+  preserveTokenBoundaries: boolean;
 };
 
 export type VerifiedLexicalReadingAbstention = {
@@ -191,6 +214,7 @@ export function collectVerifiedLexicalReadings(
           lexicalSurface: rule.lexicalSurface,
           lexicalStart,
           lexicalEnd,
+          preserveTokenBoundaries: rule.preserveTokenBoundaries === true,
         });
       }
     }
@@ -245,6 +269,7 @@ export function applyVerifiedLexicalReadings(
       applied.push(decision);
     }
     const first = decisions[0];
+    if (first.preserveTokenBoundaries) continue;
     const readingGroupId =
       `verified-lexical:${first.lexicalStart}:${first.lexicalEnd}`;
     for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex += 1) {

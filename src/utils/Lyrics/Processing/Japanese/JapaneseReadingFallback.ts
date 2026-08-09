@@ -4,7 +4,10 @@ import type {
 } from "../../Reading/JapaneseReadingModel.ts";
 import type { JapaneseAnalyzerToken } from "./JapaneseAnalyzer.ts";
 import { loadJapaneseDeinflectionData } from "./JapaneseDeinflection.ts";
-import { parseJapaneseDictionaryGeometry } from "./JapaneseDictionaryGeometry.ts";
+import {
+  parseJapaneseDictionaryGeometry,
+  reconstructJapaneseDictionaryReading,
+} from "./JapaneseDictionaryGeometry.ts";
 import { normalizeJapaneseKana } from "./JapaneseKana.ts";
 
 type CoverageData = Awaited<ReturnType<typeof loadJapaneseDeinflectionData>> & {
@@ -23,6 +26,13 @@ type ReadingSpan = ReadingFallback & {
   start: number;
   end: number;
   surface: string;
+  tokenProjections?: readonly TokenReadingProjection[];
+};
+
+type TokenReadingProjection = {
+  tokenIndex: number;
+  reading: string;
+  geometry: readonly TokenFuriganaReading[];
 };
 
 const MAX_SPAN_TOKENS = 4;
@@ -127,6 +137,17 @@ function applyReadingSpan(
   entries: JapaneseTokenEntry[],
   span: ReadingSpan,
 ): void {
+  if (span.tokenProjections) {
+    for (const projection of span.tokenProjections) {
+      const entry = entries[projection.tokenIndex];
+      if (hasUsableReading(entry)) continue;
+      entry.readingKana = projection.reading;
+      entry.furigana = undefined;
+      entry.provenFurigana = projection.geometry;
+    }
+    return;
+  }
+
   const first = entries[span.startToken];
   first.surface = text.slice(span.start, span.end);
   first.end = span.end;
@@ -138,6 +159,45 @@ function applyReadingSpan(
     entries[index].readingGroupId = readingGroupId;
     if (index > span.startToken) entries[index].consumed = true;
   }
+}
+
+function projectReadingAcrossTokens(
+  entries: readonly JapaneseTokenEntry[],
+  startToken: number,
+  endToken: number,
+  spanStart: number,
+  geometry: readonly TokenFuriganaReading[],
+): readonly TokenReadingProjection[] | undefined {
+  const projections: TokenReadingProjection[] = [];
+  let projectedSegments = 0;
+
+  for (let tokenIndex = startToken; tokenIndex <= endToken; tokenIndex += 1) {
+    const entry = entries[tokenIndex];
+    const relativeStart = entry.start - spanStart;
+    const relativeEnd = entry.end - spanStart;
+    const localGeometry: TokenFuriganaReading[] = [];
+
+    for (const segment of geometry) {
+      const overlaps = segment.targetStart < relativeEnd && segment.targetEnd > relativeStart;
+      if (!overlaps) continue;
+      if (segment.targetStart < relativeStart || segment.targetEnd > relativeEnd) return undefined;
+      localGeometry.push({
+        text: segment.text,
+        targetStart: segment.targetStart - relativeStart,
+        targetEnd: segment.targetEnd - relativeStart,
+      });
+      projectedSegments += 1;
+    }
+
+    const reading = reconstructJapaneseDictionaryReading(entry.surface, localGeometry);
+    if (!reading) return undefined;
+    if (hasUsableReading(entry) && normalizeJapaneseKana(entry.readingKana) !== reading) {
+      return undefined;
+    }
+    projections.push({ tokenIndex, reading, geometry: localGeometry });
+  }
+
+  return projectedSegments === geometry.length ? projections : undefined;
 }
 
 /**
@@ -180,9 +240,8 @@ export async function resolveJapaneseDictionaryCoverage(
         if (endToken > startToken && tokens[endToken - 1].end !== tokens[endToken].start) break;
         const ownedEntries = entries.slice(startToken, endToken + 1);
         if (!ownedEntries.some((entry) => !hasUsableReading(entry))) continue;
-        if (ownedEntries.some((entry) => hasUsableReading(entry) && !isLiteralKanaAnchor(entry))) {
-          break;
-        }
+        const hasResolvedNonLiteralEntry = ownedEntries.some((entry) =>
+          hasUsableReading(entry) && !isLiteralKanaAnchor(entry));
         const start = tokens[startToken].start;
         const end = tokens[endToken].end;
         const surface = text.slice(start, end);
@@ -193,7 +252,19 @@ export async function resolveJapaneseDictionaryCoverage(
         }
         const fallback = lookupFallback(data, surface);
         if (fallback) {
-          candidates.push({ startToken, endToken, start, end, surface, ...fallback });
+          const tokenProjections = hasResolvedNonLiteralEntry
+            ? projectReadingAcrossTokens(entries, startToken, endToken, start, fallback.geometry)
+            : undefined;
+          if (hasResolvedNonLiteralEntry && !tokenProjections) continue;
+          candidates.push({
+            startToken,
+            endToken,
+            start,
+            end,
+            surface,
+            ...fallback,
+            tokenProjections,
+          });
         }
       }
     }

@@ -5,8 +5,9 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import kuromoji from "kuromoji";
 
-// Yomitan transform definitions are GPL-3.0-or-later. JMdict and
-// JmdictFurigana-derived data are CC BY-SA 4.0 and include EDRDG material.
+// Yomitan transform definitions are GPL-3.0-or-later. JMdict,
+// JmdictFurigana, and KANJIDIC2-derived data are CC BY-SA 4.0 and include
+// EDRDG material.
 // The generated output preserves those notices inside this AGPL project.
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -33,6 +34,10 @@ const JITENDEX_GEOMETRY_SOURCE = resolve(
   ROOT,
   "src/utils/Lyrics/Processing/Japanese/GeneratedJitendexFuriganaGeometry.ts",
 );
+const KANJIDIC_READING_SOURCE = resolve(
+  ROOT,
+  "builds/private-research/experiments/suzume-reading-hybrid/generated/kanjidic-readings.tsv.gz",
+);
 const JMDICT_INDEX = resolve(JMDICT_ROOT, "index.json");
 const OUTPUT = resolve(
   ROOT,
@@ -47,6 +52,7 @@ const EXPECTED_HASHES = new Map([
   [YOMITAN_LEGAL, "0e2351394d8e963169c5fea7d2b1b982864fc144694e0bd776fae690b85937bd"],
   [JMDICT_INDEX, "a3f36a4d7fbfc0c75d1b7af3aa9775ac2211518959d2e789de266352cdf71c1c"],
   [JITENDEX_GEOMETRY_SOURCE, "0d620d50040fb65b0baa9fea4cccf6325b82451e96553de46045c79033ee6503"],
+  [KANJIDIC_READING_SOURCE, "fb4ce3297c74bc0cd3cca882e0c6d7edbacaec3087ca293741ca5bebaaff2acc"],
 ]);
 const EXPECTED_TERM_BANK_SHA256 = "d66650a297348fae4ec5cb09fa43378534ca447fbad3efc2deb8e28e1498a8af";
 
@@ -151,6 +157,27 @@ function parseFurigana(text) {
     else if (existing !== geometry) pairs.set(key, "");
   }
   return pairs;
+}
+
+function normalizeKana(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/[ァ-ヶ]/gu, (character) =>
+      String.fromCharCode(character.charCodeAt(0) - 0x60));
+}
+
+function parseKanjidicOnReadings(text) {
+  const readingsByCharacter = new Map();
+  for (const line of text.split(/\r?\n/u)) {
+    const [character, rawReading, type] = line.split("\t");
+    if (type !== "ja_on" || Array.from(character || "").length !== 1) continue;
+    const reading = normalizeKana(rawReading);
+    if (!/^[ぁ-んー]+$/u.test(reading)) continue;
+    const readings = readingsByCharacter.get(character) || new Set();
+    readings.add(reading);
+    readingsByCharacter.set(character, readings);
+  }
+  return readingsByCharacter;
 }
 
 function parseJitendexGeometry(source) {
@@ -310,10 +337,85 @@ function readingFallbackGeometry(surface, reading, furiganaPairs, jitendexPairs)
 }
 
 function kuromojiReading(token) {
-  return String(token.reading || token.pronunciation || "")
-    .normalize("NFKC")
-    .replace(/[ァ-ヶ]/gu, (character) =>
-      String.fromCharCode(character.charCodeAt(0) - 0x60));
+  return normalizeKana(token.reading || token.pronunciation);
+}
+
+function kuromojiPartiallyAnchorsGeometry(
+  tokenizer,
+  kanjidicOnReadings,
+  surface,
+  reading,
+  geometry,
+) {
+  if (!geometry || !furiganaReconstructs(surface, reading, geometry)) return false;
+  const characters = Array.from(surface);
+  if (characters.length !== 2 || !characters.every((character) => HAS_KANJI.test(character))) {
+    return false;
+  }
+  const utf16Offsets = [0];
+  for (const character of characters) utf16Offsets.push(utf16Offsets.at(-1) + character.length);
+  const offsetIndexes = new Map(utf16Offsets.map((offset, index) => [offset, index]));
+  const segments = String(geometry).split(";").map((rawSegment) => {
+    const separator = rawSegment.indexOf(":");
+    const [rawStart, rawEnd = rawStart] = rawSegment.slice(0, separator).split("-");
+    return {
+      start: Number.parseInt(rawStart, 10),
+      end: Number.parseInt(rawEnd, 10) + 1,
+      reading: rawSegment.slice(separator + 1),
+    };
+  });
+  if (segments.some((segment) =>
+    !Number.isInteger(segment.start)
+    || !Number.isInteger(segment.end)
+    || segment.end !== segment.start + 1
+    || !segment.reading)) return false;
+
+  const tokens = tokenizer.tokenize(surface);
+  let cursor = 0;
+  let missingHanReadings = 0;
+  let matchingHanAnchors = 0;
+  for (const token of tokens) {
+    const tokenSurface = String(token.surface_form || "");
+    const tokenStart = offsetIndexes.get(cursor);
+    cursor += tokenSurface.length;
+    const tokenEnd = offsetIndexes.get(cursor);
+    if (tokenStart === undefined || tokenEnd === undefined) return false;
+
+    const tokenSegments = segments.filter((segment) =>
+      segment.start < tokenEnd && segment.end > tokenStart);
+    if (tokenSegments.some((segment) =>
+      segment.start < tokenStart || segment.end > tokenEnd)) return false;
+
+    let projectedReading = "";
+    const segmentsByStart = new Map(tokenSegments.map((segment) => [segment.start, segment]));
+    for (let index = tokenStart; index < tokenEnd;) {
+      const segment = segmentsByStart.get(index);
+      if (segment) {
+        projectedReading += segment.reading;
+        index = segment.end;
+        continue;
+      }
+      const character = characters[index];
+      if (!/^[ぁ-んー]$/u.test(character)) return false;
+      projectedReading += character;
+      index += 1;
+    }
+
+    if (!HAS_KANJI.test(tokenSurface)) continue;
+    if (
+      Array.from(tokenSurface).length !== 1
+      || !kanjidicOnReadings.get(tokenSurface)?.has(projectedReading)
+    ) return false;
+    const analyzerReading = kuromojiReading(token);
+    if (analyzerReading) {
+      if (analyzerReading !== projectedReading) return false;
+      matchingHanAnchors += 1;
+    } else {
+      missingHanReadings += 1;
+    }
+  }
+
+  return cursor === surface.length && missingHanReadings === 1 && matchingHanAnchors === 1;
 }
 
 function kuromojiHasReadingGap(tokenizer, surface) {
@@ -329,7 +431,12 @@ function kuromojiReturnsExactReading(tokenizer, surface, reading) {
     && kuromojiReading(tokens[0]) === reading;
 }
 
-async function buildReadingCoverageEntries(furiganaPairs, jitendexPairs, tokenizer) {
+async function buildReadingCoverageEntries(
+  furiganaPairs,
+  jitendexPairs,
+  kanjidicOnReadings,
+  tokenizer,
+) {
   const { readingsBySurface, expressionSurfaces } = await loadDictionarySurfaceReadings();
   const fallbackEntries = [];
   const okuriganaGeometryEntries = [];
@@ -338,7 +445,15 @@ async function buildReadingCoverageEntries(furiganaPairs, jitendexPairs, tokeniz
     if (!(expressionSurfaces.has(surface) && crossesGrammaticalBoundary(tokenizer, surface))) {
       if (readings.size === 1) {
         const [reading] = readings;
-        const geometry = readingFallbackGeometry(surface, reading, furiganaPairs, jitendexPairs);
+        const dictionaryGeometry = furiganaPairs.get(`${surface}\t${reading}`);
+        const geometry = readingFallbackGeometry(surface, reading, furiganaPairs, jitendexPairs)
+          || (kuromojiPartiallyAnchorsGeometry(
+            tokenizer,
+            kanjidicOnReadings,
+            surface,
+            reading,
+            dictionaryGeometry,
+          ) ? dictionaryGeometry : undefined);
         if (geometry && kuromojiHasReadingGap(tokenizer, surface)) {
           fallbackEntries.push([surface, reading, geometry]);
         }
@@ -509,7 +624,7 @@ function render({
   const okuriganaGeometryBucketSource = okuriganaGeometryBuckets.map(
     (rows) => `\n${rows.join("\n")}\n`,
   );
-  return `/*\n * SPDX-License-Identifier: AGPL-3.0-only AND CC-BY-SA-4.0\n *\n * Generated from Yomitan 26.7.21.0 transform definitions (GPL-3.0-or-later).\n * Copyright (C) 2024-2026 Yomitan Authors.\n * JMdict.2026-07-28 and JmdictFurigana-derived dictionary data is CC BY-SA 4.0\n * and includes material from EDRDG. Do not edit this file by hand.\n */\n\nexport const JAPANESE_DEINFLECTION_METADATA = ${JSON.stringify({
+  return `/*\n * SPDX-License-Identifier: AGPL-3.0-only AND CC-BY-SA-4.0\n *\n * Generated from Yomitan 26.7.21.0 transform definitions (GPL-3.0-or-later).\n * Copyright (C) 2024-2026 Yomitan Authors.\n * JMdict.2026-07-28, JmdictFurigana, and KANJIDIC2-derived dictionary data is\n * CC BY-SA 4.0 and includes material from EDRDG. Do not edit this file by hand.\n */\n\nexport const JAPANESE_DEINFLECTION_METADATA = ${JSON.stringify({
     yomitanRelease: "26.7.21.0",
     jmdictRevision: "JMdict.2026-07-28",
     ...sourceHashes,
@@ -528,6 +643,9 @@ const transforms = loadTransforms(transformText);
 const furiganaCompressed = await readFile(FURIGANA_SOURCE);
 const furiganaPairs = parseFurigana(gunzipSync(furiganaCompressed).toString("utf8"));
 const jitendexPairs = parseJitendexGeometry(await readFile(JITENDEX_GEOMETRY_SOURCE, "utf8"));
+const kanjidicOnReadings = parseKanjidicOnReadings(
+  gunzipSync(await readFile(KANJIDIC_READING_SOURCE)).toString("utf8"),
+);
 const tokenizer = await buildKuromojiTokenizer();
 const { entries, rejectedEntries } = await buildLemmaEntries(
   furiganaPairs,
@@ -537,6 +655,7 @@ const { entries, rejectedEntries } = await buildLemmaEntries(
 const { fallbackEntries, okuriganaGeometryEntries } = await buildReadingCoverageEntries(
   furiganaPairs,
   jitendexPairs,
+  kanjidicOnReadings,
   tokenizer,
 );
 const output = render({
@@ -554,6 +673,7 @@ const output = render({
     jmdictTermBanksSha256: EXPECTED_TERM_BANK_SHA256,
     jmdictFuriganaSha256: EXPECTED_HASHES.get(FURIGANA_SOURCE),
     jitendexGeometrySha256: EXPECTED_HASHES.get(JITENDEX_GEOMETRY_SOURCE),
+    kanjidicReadingsSha256: EXPECTED_HASHES.get(KANJIDIC_READING_SOURCE),
   },
 });
 const compressedBytes = gzipSync(output, { level: 9 }).length;

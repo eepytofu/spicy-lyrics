@@ -70,12 +70,16 @@ test("generated data pins all Yomitan transform families and compact sources", (
     JAPANESE_DEINFLECTION_METADATA.jmdictTermBanksSha256,
     "d66650a297348fae4ec5cb09fa43378534ca447fbad3efc2deb8e28e1498a8af",
   );
+  assert.equal(
+    JAPANESE_DEINFLECTION_METADATA.kanjidicReadingsSha256,
+    "fb4ce3297c74bc0cd3cca882e0c6d7edbacaec3087ca293741ca5bebaaff2acc",
+  );
   assert.equal(JAPANESE_DEINFLECTION_METADATA.transformFamilies, 54);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.transformRules, 834);
   assert.equal(JAPANESE_DEINFLECTION_RULES.length, 834);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.lemmaEntries, 12_634);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.rejectedLemmaEntries, 904);
-  assert.equal(JAPANESE_DEINFLECTION_METADATA.readingFallbackEntries, 2_791);
+  assert.equal(JAPANESE_DEINFLECTION_METADATA.readingFallbackEntries, 4_358);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.okuriganaGeometryEntries, 9_078);
 });
 

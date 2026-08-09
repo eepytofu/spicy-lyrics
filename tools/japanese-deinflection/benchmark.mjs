@@ -34,6 +34,9 @@ const DICTIONARY_COVERAGE_LINES = [
   "仕掛けた",
   "仕舞い",
   "見下ろして",
+  "Q.更新で降る隕石抹消可?",
+  "金による",
+  "盗め 盗め 金も種も",
 ];
 const EXPECTED_TARGETS = 44;
 const EXPECTED_HELD_OUT_LINES = 276;
@@ -399,6 +402,12 @@ for (const { id, lines } of corpusGroups) {
       line === "見下ろして"
       && withResolver[index].includes('"start":0,"end":1,"reading":"み"')
       && withResolver[index].includes('"start":1,"end":2,"reading":"お"')),
+    containsPartialCompoundCoverage: lines.some((line, index) =>
+      line === "Q.更新で降る隕石抹消可?"
+      && withResolver[index].includes('"reading":"いん"')),
+    containsContextualKaneCorrections: lines.every((line, index) =>
+      (!line.includes("金も種も") && line !== "金による")
+      || withResolver[index].includes("kane")),
   });
 }
 
@@ -461,6 +470,8 @@ const gateResults = {
           && comparison.changedLines > 0
           && comparison.containsDictionaryCoverage
           && comparison.containsProjectedInflectionGeometry
+          && comparison.containsPartialCompoundCoverage
+          && comparison.containsContextualKaneCorrections
         : true)),
 };
 

@@ -73,6 +73,14 @@ export function japaneseDictionaryGeometryReconstructs(
   reading: string,
   geometry: readonly TokenFuriganaReading[],
 ): boolean {
+  return reconstructJapaneseDictionaryReading(surface, geometry)
+    === normalizeJapaneseKana(reading);
+}
+
+export function reconstructJapaneseDictionaryReading(
+  surface: string,
+  geometry: readonly TokenFuriganaReading[],
+): string | undefined {
   const characters = Array.from(surface);
   const offsets = [0];
   for (const character of characters) offsets.push(offsets.at(-1)! + character.length);
@@ -89,7 +97,7 @@ export function japaneseDictionaryGeometryReconstructs(
       || !segment.text
       || byStart.has(start)
       || characters.slice(start, end).some((character) => !KANJI_LIKE.test(character))
-    ) return false;
+    ) return undefined;
     byStart.set(start, segment);
   }
 
@@ -102,10 +110,9 @@ export function japaneseDictionaryGeometryReconstructs(
       continue;
     }
     const character = normalizeJapaneseKana(characters[index]);
-    if (!KANA_ONLY.test(character)) return false;
+    if (!KANA_ONLY.test(character)) return undefined;
     reconstructed += character;
     index += 1;
   }
-  return byStart.size === geometry.length
-    && reconstructed === normalizeJapaneseKana(reading);
+  return byStart.size === geometry.length ? reconstructed : undefined;
 }

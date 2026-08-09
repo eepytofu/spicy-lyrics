@@ -353,6 +353,28 @@ test("verified lexical resolver corrects only audited Kuromoji token shapes", as
       expectedRomaji: "kawareru",
       expectedDecisionCount: 1,
     },
+    {
+      text: "金も種も",
+      specs: [
+        { surface: "金", reading: "キン" },
+        { surface: "も", reading: "モ", pos: "助詞", detail1: "係助詞" },
+        { surface: "種", reading: "タネ" },
+        { surface: "も", reading: "モ", pos: "助詞", detail1: "係助詞" },
+      ],
+      expectedFurigana: "かねたね",
+      expectedRomaji: "kane mo tane mo",
+      expectedDecisionCount: 1,
+    },
+    {
+      text: "金による",
+      specs: [
+        { surface: "金", reading: "キム", detail1: "固有名詞", detail2: "人名" },
+        { surface: "による", reading: "ニヨル", pos: "助詞", detail1: "格助詞" },
+      ],
+      expectedFurigana: "かね",
+      expectedRomaji: "kane niyoru",
+      expectedDecisionCount: 1,
+    },
   ];
   const romanized = new Map([
     ["おとな", "otona"],
@@ -365,6 +387,10 @@ test("verified lexical resolver corrects only audited Kuromoji token shapes", as
     ["ぶた", "buta"],
     ["か", "ka"],
     ["われる", "wareru"],
+    ["かね", "kane"],
+    ["も", "mo"],
+    ["たね", "tane"],
+    ["による", "niyoru"],
   ]);
 
   for (const fixture of cases) {

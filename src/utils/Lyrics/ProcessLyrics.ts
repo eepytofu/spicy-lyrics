@@ -85,8 +85,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v62: add dictionary coverage and inflection-proven furigana geometry.
-export const LYRICS_PROCESSING_VERSION = 62;
+// v63: add anchored partial-compound coverage and audited contextual readings.
+export const LYRICS_PROCESSING_VERSION = 63;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 
