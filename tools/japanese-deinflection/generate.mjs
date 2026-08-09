@@ -160,20 +160,31 @@ function parseJitendexGeometry(source) {
     throw new Error(`Could not parse generated Jitendex geometry: ${JITENDEX_GEOMETRY_SOURCE}`);
   }
   const buckets = Function(`"use strict"; return (${source.slice(arrayStart, arrayEnd + 1)});`)();
-  const pairs = new Set();
+  const pairs = new Map();
   for (const bucket of buckets) {
     for (const line of bucket.split("\n")) {
       if (!line) continue;
       const separator = line.indexOf("\t");
       if (separator < 1) throw new Error(`Invalid generated Jitendex row: ${line}`);
       const surface = line.slice(0, separator);
-      const reading = line
-        .slice(separator + 1)
-        .split("|")
-        .map((segment) => segment.slice(segment.indexOf(":") + 1))
-        .join("");
+      const encodedSegments = line.slice(separator + 1).split("|");
+      let cursor = 0;
+      const geometry = [];
+      let reading = "";
+      for (const segment of encodedSegments) {
+        const readingSeparator = segment.indexOf(":");
+        const length = Number.parseInt(segment.slice(0, readingSeparator), 36);
+        const segmentReading = segment.slice(readingSeparator + 1);
+        if (readingSeparator < 1 || !Number.isInteger(length) || length < 1 || !segmentReading) {
+          throw new Error(`Invalid generated Jitendex segment: ${line}`);
+        }
+        const end = cursor + length - 1;
+        geometry.push(`${cursor}${end > cursor ? `-${end}` : ""}:${segmentReading}`);
+        cursor = end + 1;
+        reading += segmentReading;
+      }
       if (!reading) throw new Error(`Invalid generated Jitendex reading: ${line}`);
-      pairs.add(`${surface}\t${reading}`);
+      pairs.set(`${surface}\t${reading}`, geometry.join(";"));
     }
   }
   return pairs;
@@ -222,8 +233,20 @@ function geometrySegmentCount(geometry) {
 }
 
 function isIterationMarkGeometry(surface, reading, geometry) {
-  return /^[々〆ヶ一-鿿豈-﫿]々$/u.test(surface)
-    && geometrySegmentCount(geometry) === 2
+  const characters = Array.from(surface);
+  if (
+    characters.length < 2
+    || characters.length % 2 !== 0
+    || geometrySegmentCount(geometry) !== characters.length
+    || !characters.every((character, index) =>
+      index % 2 === 0 ? /^[〆ヶ一-鿿豈-﫿]$/u.test(character) : character === "々")
+  ) return false;
+  const coveredIndexes = String(geometry || "").split(";").map((rawSegment) => {
+    const [range] = rawSegment.split(":");
+    const [start, end = start] = range.split("-").map(Number);
+    return start === end ? start : -1;
+  });
+  return coveredIndexes.every((index, position) => index === position)
     && furiganaReconstructs(surface, reading, geometry);
 }
 
@@ -347,12 +370,22 @@ async function buildReadingCoverageEntries(furiganaPairs, jitendexPairs, tokeniz
 function geometryEvidence(surface, reading, furiganaPairs, jitendexPairs) {
   const characters = Array.from(surface);
   const kanjiCount = characters.filter((character) => HAS_KANJI.test(character)).length;
-  if (kanjiCount === 1 && characters.length === 1) return "singleKanji";
+  if (kanjiCount === 1 && characters.length === 1) {
+    const geometry = furiganaPairs.get(`${surface}\t${reading}`) || `0:${reading}`;
+    return furiganaReconstructs(surface, reading, geometry)
+      ? { evidence: "singleKanji", geometry }
+      : undefined;
+  }
   if (characters.some((character) => /^[ぁ-んー]$/u.test(character))) {
     const geometry = furiganaPairs.get(`${surface}\t${reading}`);
-    return furiganaReconstructs(surface, reading, geometry) ? "okurigana" : undefined;
+    return furiganaReconstructs(surface, reading, geometry)
+      ? { evidence: "okurigana", geometry }
+      : undefined;
   }
-  return jitendexPairs.has(`${surface}\t${reading}`) ? "jitendex" : undefined;
+  const geometry = jitendexPairs.get(`${surface}\t${reading}`);
+  return furiganaReconstructs(surface, reading, geometry)
+    ? { evidence: "jitendex", geometry }
+    : undefined;
 }
 
 async function buildKuromojiTokenizer() {
@@ -430,7 +463,8 @@ async function buildLemmaEntries(furiganaPairs, jitendexPairs, tokenizer) {
       surface,
       reading,
       [...value.conditions].sort().join(","),
-      value.geometry,
+      value.geometry.evidence,
+      value.geometry.geometry,
     ]);
   }
   entries.sort((left, right) => left[0].localeCompare(right[0], "ja"));

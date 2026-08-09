@@ -1,12 +1,17 @@
-import type { JapaneseTokenEntry } from "../../Reading/JapaneseReadingModel.ts";
+import type {
+  JapaneseTokenEntry,
+  TokenFuriganaReading,
+} from "../../Reading/JapaneseReadingModel.ts";
 import type { JapaneseAnalyzerToken } from "./JapaneseAnalyzer.ts";
 import {
   deinflectJapaneseSurface,
   type JapaneseDeinflectionCandidate,
 } from "./JapaneseDeinflection.ts";
+import { japaneseDictionaryGeometryReconstructs } from "./JapaneseDictionaryGeometry.ts";
 
 export type JapaneseDeinflectionResolverStatus =
   | "corrected"
+  | "geometryEnriched"
   | "wouldCorrect"
   | "agreesWithProduction"
   | "providerWins"
@@ -26,6 +31,7 @@ export type JapaneseDeinflectionResolverRecord = {
   projectedReading?: string;
   traceFamilies?: readonly string[];
   candidateCount?: number;
+  projectedFurigana?: readonly TokenFuriganaReading[];
 };
 
 const MAX_SPAN_TOKENS = 6;
@@ -175,6 +181,7 @@ export async function collectJapaneseDeinflectionCandidates(
       lemma: span.candidate.lemma,
       lemmaReading: span.candidate.lemmaReading,
       projectedReading: span.candidate.projectedReading,
+      projectedFurigana: span.candidate.provenFurigana,
       traceFamilies: span.candidate.trace.map((frame) => frame.family),
     };
     const status = hasProviderReading(entries, span.startToken, span.endToken)
@@ -194,7 +201,11 @@ function applyJapaneseDeinflectionCorrection(
   entries: readonly JapaneseTokenEntry[],
   record: JapaneseDeinflectionResolverRecord,
 ): JapaneseDeinflectionResolverRecord {
-  if (record.status !== "wouldCorrect" || !record.projectedReading) return record;
+  if (
+    (record.status !== "wouldCorrect" && record.status !== "agreesWithProduction")
+    || !record.projectedReading
+    || !record.projectedFurigana
+  ) return record;
   const startToken = tokens.findIndex((token) => token.start === record.start);
   const endToken = tokens.findIndex((token) => token.end === record.end);
   if (startToken < 0 || endToken < startToken) return record;
@@ -207,11 +218,45 @@ function applyJapaneseDeinflectionCorrection(
     return record;
   }
 
+  if (record.status === "agreesWithProduction") {
+    const geometryByEntry = new Map<number, TokenFuriganaReading[]>();
+    for (const segment of record.projectedFurigana) {
+      const absoluteStart = record.start + segment.targetStart;
+      const absoluteEnd = record.start + segment.targetEnd;
+      const ownerIndex = entries.findIndex((entry, index) =>
+        index >= startToken
+        && index <= endToken
+        && !entry.consumed
+        && entry.start <= absoluteStart
+        && entry.end >= absoluteEnd);
+      if (ownerIndex < 0) return record;
+      const owner = entries[ownerIndex];
+      const geometry = geometryByEntry.get(ownerIndex) || [];
+      geometry.push({
+        text: segment.text,
+        targetStart: absoluteStart - owner.start,
+        targetEnd: absoluteEnd - owner.start,
+      });
+      geometryByEntry.set(ownerIndex, geometry);
+    }
+    for (const [index, geometry] of geometryByEntry) {
+      const owner = entries[index];
+      if (!japaneseDictionaryGeometryReconstructs(owner.surface, owner.readingKana, geometry)) {
+        return record;
+      }
+    }
+    for (const [index, geometry] of geometryByEntry) {
+      entries[index].provenFurigana = geometry;
+    }
+    return { ...record, status: "geometryEnriched" };
+  }
+
   const first = entries[startToken];
   first.surface = text.slice(record.start, record.end);
   first.end = record.end;
   first.readingKana = record.projectedReading;
   first.furigana = undefined;
+  first.provenFurigana = record.projectedFurigana;
   const readingGroupId = `deinflection:${record.start}:${record.end}`;
   for (let index = startToken; index <= endToken; index += 1) {
     entries[index].readingGroupId = readingGroupId;

@@ -85,8 +85,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v61: add exact dictionary gap coverage and Katakana-okurigana analysis.
-export const LYRICS_PROCESSING_VERSION = 61;
+// v62: add dictionary coverage and inflection-proven furigana geometry.
+export const LYRICS_PROCESSING_VERSION = 62;
 // v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
 export const READING_PLAN_SCHEMA_VERSION = 4;
 

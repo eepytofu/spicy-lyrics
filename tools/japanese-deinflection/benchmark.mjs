@@ -33,6 +33,7 @@ const DICTIONARY_COVERAGE_LINES = [
   "目指す",
   "仕掛けた",
   "仕舞い",
+  "見下ろして",
 ];
 const EXPECTED_TARGETS = 44;
 const EXPECTED_HELD_OUT_LINES = 276;
@@ -198,26 +199,58 @@ async function measureResolverStage(lines, repetitions) {
   };
 }
 
-async function measureAnalyzerStage(lines, repetitions, katakanaRetryEnabled) {
-  const samples = [];
+async function measureKatakanaRetry(lines, repetitions) {
+  const withoutRetrySamples = [];
+  const withRetrySamples = [];
+  const overheadSamples = [];
+  const measure = async (text, retry) => {
+    const started = performance.now();
+    if (retry) {
+      await kuromojiAdapter.analyzeKuromojiText(
+        text,
+        async (value) => tokenizer.tokenize(value),
+      );
+    } else {
+      kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+    }
+    return performance.now() - started;
+  };
+  for (const text of lines) {
+    await measure(text, false);
+    await measure(text, true);
+  }
   for (let repetition = 0; repetition < repetitions; repetition += 1) {
     for (const text of lines) {
-      const started = performance.now();
-      if (katakanaRetryEnabled) {
-        await kuromojiAdapter.analyzeKuromojiText(
-          text,
-          async (value) => tokenizer.tokenize(value),
-        );
+      let withoutRetry;
+      let withRetry;
+      if (repetition % 2 === 0) {
+        withoutRetry = await measure(text, false);
+        withRetry = await measure(text, true);
       } else {
-        kuromojiAdapter.normalizeKuromojiTokens(text, tokenizer.tokenize(text));
+        withRetry = await measure(text, true);
+        withoutRetry = await measure(text, false);
       }
-      samples.push(performance.now() - started);
+      withoutRetrySamples.push(withoutRetry);
+      withRetrySamples.push(withRetry);
+      overheadSamples.push(Math.max(0, withRetry - withoutRetry));
     }
   }
   return {
-    p50Ms: percentile(samples, 0.5),
-    p95Ms: percentile(samples, 0.95),
-    samples: samples.length,
+    withoutRetry: {
+      p50Ms: percentile(withoutRetrySamples, 0.5),
+      p95Ms: percentile(withoutRetrySamples, 0.95),
+      samples: withoutRetrySamples.length,
+    },
+    withRetry: {
+      p50Ms: percentile(withRetrySamples, 0.5),
+      p95Ms: percentile(withRetrySamples, 0.95),
+      samples: withRetrySamples.length,
+    },
+    overhead: {
+      p50Ms: percentile(overheadSamples, 0.5),
+      p95Ms: percentile(overheadSamples, 0.95),
+      samples: overheadSamples.length,
+    },
   };
 }
 
@@ -336,18 +369,36 @@ for (const { id, lines } of corpusGroups) {
     .filter((index) => index >= 0);
   const sourceTextPreserved = baseline.every((value, index) =>
     JSON.parse(value)?.sourceText === JSON.parse(withResolver[index])?.sourceText);
+  const withoutFurigana = (value) => {
+    const parsed = JSON.parse(value);
+    if (parsed) parsed.furigana = [];
+    return JSON.stringify(parsed);
+  };
+  const nonFuriganaEquivalent = baseline.every((value, index) =>
+    withoutFurigana(value) === withoutFurigana(withResolver[index]));
+  const changedFuriganaSamples = changedLineIndexes.slice(0, 8).map((index) => ({
+    text: lines[index],
+    baseline: JSON.parse(baseline[index])?.furigana || [],
+    resolver: JSON.parse(withResolver[index])?.furigana || [],
+  }));
   outputComparison.push({
     id,
     lines: lines.length,
     byteEquivalent: baselineBytes === resolverBytes,
     changedLines: changedLineIndexes.length,
     sourceTextPreserved,
+    nonFuriganaEquivalent,
+    changedFuriganaSamples,
     baselineSha256: sha256(baselineBytes),
     resolverSha256: sha256(resolverBytes),
     containsNakushitaCorrection: withResolver.some((value) =>
       value.includes("nakushita") && value.includes('"reading":"な"')),
     containsDictionaryCoverage: withResolver.some((value) =>
       value.includes("rairairakuraku")),
+    containsProjectedInflectionGeometry: lines.some((line, index) =>
+      line === "見下ろして"
+      && withResolver[index].includes('"start":0,"end":1,"reading":"み"')
+      && withResolver[index].includes('"start":1,"end":2,"reading":"お"')),
   });
 }
 
@@ -385,12 +436,8 @@ const fullPipelineP95DeltaMs = productionWithResolver.p95Ms - productionWithoutR
 const resolverIncrement = await measureResolverStage(timingLines, 8);
 const addedP95MsPerLine = resolverIncrement.p95Ms;
 const katakanaLines = DICTIONARY_COVERAGE_LINES.filter((line) => /[ァ-ヺ]/u.test(line));
-const analyzerWithoutRetry = await measureAnalyzerStage(katakanaLines, 20, false);
-const analyzerWithRetry = await measureAnalyzerStage(katakanaLines, 20, true);
-const katakanaRetryP95MsPerLine = Math.max(
-  0,
-  analyzerWithRetry.p95Ms - analyzerWithoutRetry.p95Ms,
-);
+const katakanaAnalyzer = await measureKatakanaRetry(katakanaLines, 20);
+const katakanaRetryP95MsPerLine = katakanaAnalyzer.overhead.p95Ms;
 deinflectionEngine.releaseJapaneseDeinflectionData();
 
 const gateResults = {
@@ -401,8 +448,10 @@ const gateResults = {
   katakanaRetryP95: katakanaRetryP95MsPerLine <= GATES.katakanaRetryP95MsPerLine,
   outputBehavior: outputComparison.every((comparison) =>
     comparison.sourceTextPreserved
-    && (comparison.id === "lexical-guard"
+    && (comparison.id === "historical-27-line" || comparison.id === "lexical-guard"
       ? comparison.byteEquivalent
+      : comparison.id === "bad-apple-complete"
+      ? comparison.nonFuriganaEquivalent
       : comparison.id === "held-out-276-line"
       ? !comparison.byteEquivalent
         && comparison.changedLines > 0
@@ -411,6 +460,7 @@ const gateResults = {
         ? !comparison.byteEquivalent
           && comparison.changedLines > 0
           && comparison.containsDictionaryCoverage
+          && comparison.containsProjectedInflectionGeometry
         : true)),
 };
 
@@ -438,8 +488,7 @@ const report = {
     resolverIncrement,
     addedP95MsPerLine,
     katakanaAnalyzer: {
-      withoutRetry: analyzerWithoutRetry,
-      withRetry: analyzerWithRetry,
+      ...katakanaAnalyzer,
       addedP95MsPerLine: katakanaRetryP95MsPerLine,
     },
   },

@@ -6,6 +6,8 @@
  */
 
 import { normalizeJapaneseKana } from "./JapaneseKana.ts";
+import { parseJapaneseDictionaryGeometry } from "./JapaneseDictionaryGeometry.ts";
+import type { TokenFuriganaReading } from "../../Reading/JapaneseReadingModel.ts";
 import type * as GeneratedJapaneseDeinflectionData from "./GeneratedJapaneseDeinflectionData.ts";
 
 type GeneratedData = typeof GeneratedJapaneseDeinflectionData;
@@ -34,6 +36,7 @@ export type JapaneseDeinflectionCandidate = {
   lemmaReading: string;
   projectedReading: string;
   geometryEvidence: "singleKanji" | "okurigana" | "jitendex";
+  provenFurigana: readonly TokenFuriganaReading[];
   conditions: readonly string[];
   trace: readonly JapaneseDeinflectionTraceFrame[];
 };
@@ -136,6 +139,7 @@ function lookupLemma(data: GeneratedData, surface: string): {
   reading: string;
   conditions: readonly string[];
   geometryEvidence: JapaneseDeinflectionCandidate["geometryEvidence"];
+  encodedGeometry: string;
 } | undefined {
   const buckets = data.JAPANESE_DEINFLECTION_LEMMA_BUCKETS as readonly string[];
   const bucket = buckets[fnv1a(surface) & (buckets.length - 1)];
@@ -144,12 +148,20 @@ function lookupLemma(data: GeneratedData, surface: string): {
   if (start < 0) return undefined;
   const valueStart = start + marker.length;
   const end = bucket.indexOf("\n", valueStart);
-  const [reading, rawConditions, rawGeometryEvidence] = bucket.slice(valueStart, end).split("\t");
-  if (!reading || !rawConditions || !SAFE_GEOMETRY_EVIDENCE.has(rawGeometryEvidence)) return undefined;
+  const [reading, rawConditions, rawGeometryEvidence, encodedGeometry] = bucket
+    .slice(valueStart, end)
+    .split("\t");
+  if (
+    !reading
+    || !rawConditions
+    || !SAFE_GEOMETRY_EVIDENCE.has(rawGeometryEvidence)
+    || !encodedGeometry
+  ) return undefined;
   return {
     reading,
     conditions: rawConditions.split(","),
     geometryEvidence: rawGeometryEvidence as JapaneseDeinflectionCandidate["geometryEvidence"],
+    encodedGeometry,
   };
 }
 
@@ -257,7 +269,10 @@ export async function deinflectJapaneseSurface(
       if (lemma && conditionsMatch(state.conditions, lemma.conditions)) {
         const projectedReading = projectReading(lemma.reading, state.trace);
         const reinflectedSurface = reinflectSurface(state.text, state.trace);
-        if (projectedReading && reinflectedSurface === source) {
+        const provenFurigana = projectedReading
+          ? parseJapaneseDictionaryGeometry(source, projectedReading, lemma.encodedGeometry)
+          : undefined;
+        if (projectedReading && reinflectedSurface === source && provenFurigana) {
           const key = `${state.text}\t${projectedReading}`;
           const existing = candidates.get(key);
           if (!existing || state.trace.length < existing.trace.length) {
@@ -270,6 +285,7 @@ export async function deinflectJapaneseSurface(
               lemmaReading: lemma.reading,
               projectedReading,
               geometryEvidence: lemma.geometryEvidence,
+              provenFurigana,
               conditions: lemma.conditions,
               trace: state.trace,
             });

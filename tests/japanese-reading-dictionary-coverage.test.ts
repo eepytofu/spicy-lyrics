@@ -5,6 +5,7 @@ import type {
   JapaneseAnalyzerToken,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
 import { resolveJapaneseDictionaryCoverage } from "../src/utils/Lyrics/Processing/Japanese/JapaneseReadingFallback.ts";
+import { applyVerifiedLexicalReadings } from "../src/utils/Lyrics/Processing/Japanese/JapaneseReadingResolver.ts";
 import { prepareJapaneseLineAnalysis } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 import type { JapaneseTokenEntry } from "../src/utils/Lyrics/Reading/JapaneseReadingModel.ts";
 
@@ -87,7 +88,7 @@ test("partial dictionary matches cannot invent readings inside one unresolved ga
   assert.equal(entries.some((entry) => entry.consumed), false);
 });
 
-test("an exact iteration-mark word may end before a separate unresolved word", async () => {
+test("the longest exact repeated-Kanji phrase wins over its partial dictionary word", async () => {
   const tokens = [
     token("磊", 0, ""),
     token("々", 1, "々"),
@@ -105,18 +106,29 @@ test("an exact iteration-mark word may end before a separate unresolved word", a
 
   await resolveJapaneseDictionaryCoverage("磊々落々", tokens, entries);
 
-  assert.equal(entries[0].readingKana, "らいらい");
-  assert.equal(entries[1].consumed, true);
-  assert.deepEqual(entries.slice(2).map((entry) => entry.readingKana), ["", "々"]);
+  assert.equal(entries[0].readingKana, "らいらいらくらく");
+  assert.deepEqual(entries.slice(1).map((entry) => entry.consumed), [true, true, true]);
 });
 
 test("the verified complete 磊々落々 idiom supplies the JMdict-missing second half", async () => {
-  const result = await analyze("磊々落々", [
+  const tokens = [
     token("磊", 0, ""),
     token("々", 1, "々"),
     token("落", 2, ""),
     token("々", 3, "々"),
-  ]);
+  ];
+  const entries: JapaneseTokenEntry[] = tokens.map((value) => ({
+    start: value.start,
+    end: value.end,
+    surface: value.surface,
+    readingKana: value.readingKana,
+    romaji: "",
+    consumed: false,
+  }));
+  applyVerifiedLexicalReadings("磊々落々", tokens, entries);
+  assert.deepEqual(entries.map((entry) => entry.readingKana), ["", "々", "", "々"]);
+
+  const result = await analyze("磊々落々", tokens);
 
   assert.equal(result?.reading.romaji, "らいらいらくらく");
   assert.deepEqual(result?.reading.furigana, [

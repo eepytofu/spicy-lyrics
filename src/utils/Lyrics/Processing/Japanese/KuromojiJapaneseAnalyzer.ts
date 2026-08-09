@@ -185,12 +185,13 @@ export async function analyzeKuromojiText(
   const originalRaw = await tokenize(text);
   let analysisText = text;
   let selectedRaw = originalRaw;
-  if (mayUseKatakanaOkurigana(text)) {
+  const originalPenalty = analysisPenalty(originalRaw);
+  if (originalPenalty > 0 && mayUseKatakanaOkurigana(text)) {
     const projectedText = projectKatakanaAsHiragana(text);
     const projectedRaw = await tokenize(projectedText);
     if (
       hasProjectedOkuriganaEvidence(projectedRaw)
-      && analysisPenalty(projectedRaw) < analysisPenalty(originalRaw)
+      && analysisPenalty(projectedRaw) < originalPenalty
     ) {
       analysisText = projectedText;
       selectedRaw = projectedRaw;

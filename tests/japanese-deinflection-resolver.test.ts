@@ -75,7 +75,7 @@ test("generated data pins all Yomitan transform families and compact sources", (
   assert.equal(JAPANESE_DEINFLECTION_RULES.length, 834);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.lemmaEntries, 12_634);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.rejectedLemmaEntries, 904);
-  assert.equal(JAPANESE_DEINFLECTION_METADATA.readingFallbackEntries, 2_779);
+  assert.equal(JAPANESE_DEINFLECTION_METADATA.readingFallbackEntries, 2_791);
   assert.equal(JAPANESE_DEINFLECTION_METADATA.okuriganaGeometryEntries, 9_078);
 });
 
@@ -182,6 +182,7 @@ test("candidate collection proposes 失くした without mutating Kuromoji-owned
     lemma: "失くす",
     lemmaReading: "なくす",
     projectedReading: "なくした",
+    projectedFurigana: [{ text: "な", targetStart: 0, targetEnd: 1 }],
     traceFamilies: ["-た"],
   }]);
   assert.deepEqual(tokens, beforeTokens);
@@ -241,6 +242,52 @@ test("production Japanese analysis always applies safe deinflection corrections"
     syllables.map((syllable) => syllable.JapaneseReading?.romaji),
     ["な", "くし", "た"],
   );
+});
+
+test("lemma geometry projects through safe okurigana inflections", async () => {
+  const fixtures = [
+    ["見下ろした", "みおろした"],
+    ["見下ろして", "みおろして"],
+    ["見下ろさない", "みおろさない"],
+    ["見下ろします", "みおろします"],
+  ] as const;
+
+  for (const [surface, reading] of fixtures) {
+    const analyzedToken = token(surface, 0, surface.length, reading, "verb");
+    const analysis = await prepareJapaneseLineAnalysis(surface, {
+      analyzer: {
+        id: "kuromoji",
+        analyze: async () => [structuredClone(analyzedToken)],
+      },
+      kanaRomanizer: (kana) => kana,
+    });
+
+    assert.equal(analysis?.reading.romaji, reading, surface);
+    assert.deepEqual(analysis?.reading.furigana, [
+      { start: 0, end: 1, reading: "み" },
+      { start: 1, end: 2, reading: "お" },
+    ], surface);
+    assert.equal(analysis?.reading.sourceText, surface);
+  }
+});
+
+test("agreeing lemma geometry preserves analyzer token and timing ownership", async () => {
+  const tokens = [
+    token("見下ろし", 0, 4, "みおろし", "verb"),
+    token("て", 4, 5, "て", "auxiliaryVerb"),
+  ];
+  const entries = tokens.map(entry);
+  const records = await resolveJapaneseDeinflectionReadings("見下ろして", tokens, entries);
+
+  assert.equal(records.find((record) => record.surface === "見下ろして")?.status, "geometryEnriched");
+  assert.deepEqual(entries[0].provenFurigana, [
+    { text: "み", targetStart: 0, targetEnd: 1 },
+    { text: "お", targetStart: 1, targetEnd: 2 },
+  ]);
+  assert.equal(entries[0].surface, "見下ろし");
+  assert.equal(entries[0].readingKana, "みおろし");
+  assert.equal(entries[1].consumed, false);
+  assert.equal(entries[1].readingGroupId, undefined);
 });
 
 test("exact Kuromoji lexemes beat homographic deinflection candidates", async () => {

@@ -4,6 +4,7 @@ import type {
 } from "../../Reading/JapaneseReadingModel.ts";
 import type { JapaneseAnalyzerToken } from "./JapaneseAnalyzer.ts";
 import { loadJapaneseDeinflectionData } from "./JapaneseDeinflection.ts";
+import { parseJapaneseDictionaryGeometry } from "./JapaneseDictionaryGeometry.ts";
 import { normalizeJapaneseKana } from "./JapaneseKana.ts";
 
 type CoverageData = Awaited<ReturnType<typeof loadJapaneseDeinflectionData>> & {
@@ -40,64 +41,6 @@ function fnv1a(value: string): number {
   return hash >>> 0;
 }
 
-function parseGeometry(
-  surface: string,
-  reading: string,
-  encoded: string,
-): readonly TokenFuriganaReading[] | undefined {
-  const characters = Array.from(surface);
-  const offsets = [0];
-  for (const character of characters) {
-    offsets.push(offsets.at(-1)! + character.length);
-  }
-
-  const byStart = new Map<number, { end: number; reading: string }>();
-  for (const rawSegment of encoded.split(";")) {
-    const separator = rawSegment.indexOf(":");
-    if (separator < 1) return undefined;
-    const [rawStart, rawEnd = rawStart] = rawSegment.slice(0, separator).split("-");
-    const start = Number.parseInt(rawStart, 10);
-    const end = Number.parseInt(rawEnd, 10) + 1;
-    const segmentReading = normalizeJapaneseKana(rawSegment.slice(separator + 1));
-    if (
-      !Number.isInteger(start)
-      || !Number.isInteger(end)
-      || start < 0
-      || end <= start
-      || end > characters.length
-      || !segmentReading
-      || byStart.has(start)
-      || characters.slice(start, end).some((character) => !HAS_KANJI.test(character))
-    ) {
-      return undefined;
-    }
-    byStart.set(start, { end, reading: segmentReading });
-  }
-
-  const geometry: TokenFuriganaReading[] = [];
-  let reconstructed = "";
-  for (let index = 0; index < characters.length;) {
-    const segment = byStart.get(index);
-    if (segment) {
-      reconstructed += segment.reading;
-      geometry.push({
-        text: segment.reading,
-        targetStart: offsets[index],
-        targetEnd: offsets[segment.end],
-      });
-      index = segment.end;
-      continue;
-    }
-    const character = normalizeJapaneseKana(characters[index]);
-    if (!KANA_ONLY.test(character)) return undefined;
-    reconstructed += character;
-    index += 1;
-  }
-  return geometry.length > 0 && reconstructed === normalizeJapaneseKana(reading)
-    ? geometry
-    : undefined;
-}
-
 function lookupFallback(
   data: CoverageData,
   surface: string,
@@ -110,7 +53,7 @@ function lookupFallback(
   const valueStart = start + marker.length;
   const end = bucket.indexOf("\n", valueStart);
   const [reading, encodedGeometry] = bucket.slice(valueStart, end).split("\t");
-  const geometry = parseGeometry(surface, reading, encodedGeometry);
+  const geometry = parseJapaneseDictionaryGeometry(surface, reading, encodedGeometry);
   return reading && geometry ? { reading, geometry } : undefined;
 }
 
@@ -127,7 +70,11 @@ function lookupOkuriganaGeometry(
   if (start < 0) return undefined;
   const valueStart = start + marker.length;
   const end = bucket.indexOf("\n", valueStart);
-  return parseGeometry(surface, normalizedReading, bucket.slice(valueStart, end));
+  return parseJapaneseDictionaryGeometry(
+    surface,
+    normalizedReading,
+    bucket.slice(valueStart, end),
+  );
 }
 
 function hasUsableReading(entry: JapaneseTokenEntry): boolean {
