@@ -1,6 +1,7 @@
 import { deflateSync } from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { assessCandidate } from "../src/matching/score";
+import { ProviderTimeoutError } from "../src/http/fetch";
 import {
   isKugouCandidateCompatible,
   kugouProvider,
@@ -721,5 +722,162 @@ describe("provider search flow", () => {
       artists: ["霜月遥"],
       artistAliases: ["霜月はるか"],
     });
+  });
+
+  it("distinguishes a valid empty Soda catalog from malformed HTTP 2xx payloads", async () => {
+    const track = {
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    await expect(searchSoda(track)).resolves.toEqual([]);
+
+    let mixedAttempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      mixedAttempts++ === 0 ? "" : "{}",
+      { status: 200 },
+    )));
+    await expect(searchSoda(track)).resolves.toEqual([]);
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 200 })));
+    await expect(searchSoda(track)).rejects.toMatchObject({
+      name: "ProviderUpstreamError",
+      status: 502,
+    });
+  });
+
+  it("recovers when a later Soda search query returns a valid result", async () => {
+    let searches = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      searches += 1;
+      if (searches === 1) return new Response("", { status: 200 });
+      return new Response(JSON.stringify({
+        result_groups: [{
+          data: [{
+            meta: { item_type: "track" },
+            entity: { track: {
+              id: "dna",
+              name: "D/N/A",
+              artists: [{ name: "AZARI" }],
+              duration: 146_000,
+            } },
+          }],
+        }],
+      }), { status: 200 });
+    }));
+
+    await expect(searchSoda({
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    })).resolves.toMatchObject([{ id: "dna" }]);
+    expect(searches).toBe(2);
+  });
+
+  it("continues to a later Soda candidate after a malformed detail payload", async () => {
+    const detailIds: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: ["broken", "recovered"].map((id) => ({
+              meta: { item_type: "track" },
+              entity: { track: {
+                id,
+                name: "D/N/A",
+                artists: [{ name: "AZARI" }],
+                duration: 146_000,
+              } },
+            })),
+          }],
+        }), { status: 200 });
+      }
+      const id = (init?.body as URLSearchParams).get("track_id") ?? "";
+      detailIds.push(id);
+      if (id === "broken") return new Response("not json", { status: 200 });
+      return new Response(JSON.stringify({
+        track: {
+          id,
+          name: "D/N/A",
+          artists: [{ name: "AZARI" }],
+          duration: 146_000,
+        },
+        lyric: { type: "lrc", content: "[00:01.00]D/N/A" },
+      }), { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    })).resolves.toMatchObject({ Type: "Line" });
+    expect(detailIds).toEqual(["broken", "recovered"]);
+  });
+
+  it("surfaces malformed Soda detail payloads when no candidate detail recovers", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: [{
+              meta: { item_type: "track" },
+              entity: { track: {
+                id: "dna",
+                name: "D/N/A",
+                artists: [{ name: "AZARI" }],
+                duration: 146_000,
+              } },
+            }],
+          }],
+        }), { status: 200 });
+      }
+      return new Response("", { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    })).rejects.toMatchObject({ name: "ProviderUpstreamError", status: 502 });
+  });
+
+  it.each([
+    [429, "ProviderRateLimitError"],
+    [503, "ProviderUpstreamError"],
+  ])("preserves Soda HTTP %i failure mapping", async (status, name) => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status })));
+    await expect(searchSoda({
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    })).rejects.toMatchObject({ name });
+  });
+
+  it("preserves Soda timeout and caller-abort failures", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new ProviderTimeoutError("timed out"); }));
+    const track = {
+      id: "spotify-id",
+      title: "D/N/A",
+      artists: ["AZARI"],
+      album: "",
+      durationMs: 146_000,
+    };
+    await expect(searchSoda(track)).rejects.toMatchObject({ name: "ProviderTimeoutError" });
+
+    const controller = new AbortController();
+    controller.abort(new DOMException("cancelled", "AbortError"));
+    await expect(searchSoda(track, undefined, controller.signal)).rejects.toMatchObject({ name: "AbortError" });
   });
 });

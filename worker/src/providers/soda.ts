@@ -6,6 +6,7 @@ import {
   toSyllableLyrics,
 } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
+import { ProviderUpstreamError } from "../http/fetch";
 import type { LyricsProvider, NativeLyrics, TimedLine } from "../types";
 import { parseKrc } from "./kugou";
 import { parseYrc } from "./netease";
@@ -67,6 +68,35 @@ type SodaLyric = {
   type?: string;
 };
 
+type SodaPayloadAttempt<T> =
+  | { kind: "valid"; body: T }
+  | { kind: "invalid-payload" };
+
+type SodaAttemptSummary = {
+  valid: number;
+  invalidPayload: number;
+};
+
+async function readSodaPayload<T>(response: Response, signal?: AbortSignal): Promise<SodaPayloadAttempt<T>> {
+  try {
+    return { kind: "valid", body: await readResponseJson<T>(response) };
+  } catch (error) {
+    throwIfProviderRequestFailed(error, signal);
+    return { kind: "invalid-payload" };
+  }
+}
+
+function recordSodaAttempt(summary: SodaAttemptSummary, attempt: SodaPayloadAttempt<unknown>): void {
+  if (attempt.kind === "valid") summary.valid += 1;
+  else summary.invalidPayload += 1;
+}
+
+function throwIfOnlyInvalidSodaPayloads(summary: SodaAttemptSummary, phase: string): void {
+  if (summary.valid === 0 && summary.invalidPayload > 0) {
+    throw new ProviderUpstreamError(`Soda returned invalid ${phase} payloads`, 502);
+  }
+}
+
 function assessSodaSong(track: Parameters<LyricsProvider>[0], song: SodaSong) {
   return assessCandidate(track, {
     title: song.title,
@@ -112,6 +142,7 @@ async function searchSodaAssessed(
   signal?: AbortSignal,
 ) {
   const found = new Map<string, SodaSong>();
+  const attempts: SodaAttemptSummary = { valid: 0, invalidPayload: 0 };
   let assessed = assessAndRankCandidates(found.values(), (song) => assessSodaSong(track, song));
   for (const query of searchQueries(track)) {
     throwIfAborted(signal);
@@ -143,7 +174,10 @@ async function searchSodaAssessed(
     try {
       const response = await fetchWithTimeout(url.toString(), { headers: sodaHeaders, signal });
       if (!response.ok) continue;
-      const body = await readResponseJson<any>(response);
+      const attempt = await readSodaPayload<any>(response, signal);
+      recordSodaAttempt(attempts, attempt);
+      if (attempt.kind === "invalid-payload") continue;
+      const body = attempt.body;
       if (!successfulSodaBody(body)) continue;
       for (const item of (body?.result_groups ?? []).flatMap((group: any) => group?.data ?? [])) {
         if (item?.meta?.item_type !== "track") continue;
@@ -157,6 +191,7 @@ async function searchSodaAssessed(
     assessed = assessAndRankCandidates(found.values(), (song) => assessSodaSong(track, song));
     if (assessed.some(({ assessment }) => isStrongCandidate(assessment))) break;
   }
+  throwIfOnlyInvalidSodaPayloads(attempts, "search");
   return assessed;
 }
 
@@ -168,11 +203,11 @@ export async function searchSoda(
   return (await searchSodaAssessed(track, clientParams, signal)).map(({ candidate }) => candidate);
 }
 
-export async function fetchSodaDetail(
+async function fetchSodaDetail(
   song: SodaSong,
   clientParams = sodaClientParams(),
   signal?: AbortSignal,
-): Promise<any | undefined> {
+): Promise<SodaPayloadAttempt<any> | undefined> {
   const url = new URL("https://api.qishui.com/luna/pc/track_v2");
   url.search = new URLSearchParams(clientParams).toString();
   try {
@@ -190,9 +225,12 @@ export async function fetchSodaDetail(
       signal,
     });
     if (!response.ok) return undefined;
-    const body = await readResponseJson<any>(response);
-    if (!successfulSodaBody(body) || String(body?.track?.id ?? "") !== song.id) return undefined;
-    return body;
+    const attempt = await readSodaPayload<any>(response, signal);
+    if (attempt.kind === "invalid-payload") return attempt;
+    if (!successfulSodaBody(attempt.body) || String(attempt.body?.track?.id ?? "") !== song.id) {
+      return { kind: "valid", body: undefined };
+    }
+    return attempt;
   } catch (error) {
     throwIfProviderRequestFailed(error, signal);
     return undefined;
@@ -254,10 +292,15 @@ function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefi
 // failure behavior. See worker/NOTICE.md and worker/LICENSES/Apache-2.0.txt.
 export const sodaProvider: LyricsProvider = async (track, context = {}) => {
   const clientParams = sodaClientParams();
+  const detailAttempts: SodaAttemptSummary = { valid: 0, invalidPayload: 0 };
   for (const { candidate: song, assessment: searchAssessment } of await searchSodaAssessed(track, clientParams, context.signal)) {
     throwIfAborted(context.signal);
     if (!isAcceptableCandidate(searchAssessment) || searchAssessment.evidence.versionConflict) continue;
-    const body = await fetchSodaDetail(song, clientParams, context.signal);
+    const attempt = await fetchSodaDetail(song, clientParams, context.signal);
+    if (!attempt) continue;
+    recordSodaAttempt(detailAttempts, attempt);
+    if (attempt.kind === "invalid-payload") continue;
+    const body = attempt.body;
     if (!body) continue;
     const detail = sodaSong(body.track);
     if (!detail) continue;
@@ -282,5 +325,6 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
       ),
     };
   }
+  throwIfOnlyInvalidSodaPayloads(detailAttempts, "detail");
   return undefined;
 };
