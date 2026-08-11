@@ -169,8 +169,15 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-indent: 0;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-cluster,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-plain-cluster {
+  grid-template-rows: var(--furigana-rt-size) 1em;
+  row-gap: var(--furigana-rt-gap);
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-text {
   font-variant-east-asian: normal;
+  padding-inline: 0.1em;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending::before {
