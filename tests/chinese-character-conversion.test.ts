@@ -23,6 +23,9 @@ const broadJapaneseConverter = ConverterFactory(
   [SimplifiedToTraditionalCharacters],
   [JapaneseShinjitaiCharacters],
 );
+const simplifiedToTraditionalConverter = ConverterFactory(
+  [SimplifiedToTraditionalCharacters],
+);
 
 test("converts between Simplified and Taiwan Traditional character forms", () => {
   assert.equal(convertChineseText("\u6f22\u8a9e", "simplified"), "\u6c49\u8bed");
@@ -70,6 +73,21 @@ test("keeps ambiguous Japanese lexical forms in safe source contexts", () => {
   );
 });
 
+test("repairs only Simplified provider forms and preserves authored kyujitai", () => {
+  assert.equal(repairChineseProviderJapaneseText("繼續"), "繼續");
+  for (const source of ["姬", "惠", "濱"]) {
+    assert.equal(repairChineseProviderJapaneseText(source), source, source);
+  }
+  assert.equal(repairChineseProviderJapaneseText("梦见ては"), "夢見ては");
+  assert.equal(repairChineseProviderJapaneseText("梦と櫻"), "夢と櫻");
+});
+
+test("preserves JMnedict-attested Japanese proper-name glyphs", () => {
+  for (const source of ["梼原", "三潴", "東久迩"]) {
+    assert.equal(repairChineseProviderJapaneseText(source), source, source);
+  }
+});
+
 test("conservative repair ablates broad OpenCC changes without losing proven fixtures", () => {
   assert.equal(CHINESE_PROVIDER_CHARACTER_MAP_METADATA.broadChangedCodePoints, 3020);
   assert.equal(
@@ -94,6 +112,10 @@ test("conservative repair ablates broad OpenCC changes without losing proven fix
     CHINESE_PROVIDER_CHARACTER_MAP_METADATA.mappingSha256,
   );
   assert.equal(entries.every(([source, target]) => source.length === target.length), true);
+  assert.equal(
+    entries.every(([source]) => simplifiedToTraditionalConverter(source) !== source),
+    true,
+  );
 
   for (const source of ["占", "岩", "干", "里"]) {
     assert.notEqual(broadJapaneseConverter(source), source, source);
