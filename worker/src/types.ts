@@ -1,4 +1,5 @@
 export type ProviderId = "qq" | "kugou" | "netease" | "soda";
+export type ProviderInfoKind = "credit" | "rightsNotice" | "trackHeader";
 
 export type ProviderCreditRole = "syncedLyrics" | "lyrics" | "translation" | "romanization" | "credit";
 export type ProviderCredit = {
@@ -23,6 +24,7 @@ export type TimedLine = {
   words: TimedWord[];
   translation?: string;
   romanization?: string;
+  providerInfoKind?: ProviderInfoKind;
 };
 
 export type NativeLyrics = Record<string, unknown> & {

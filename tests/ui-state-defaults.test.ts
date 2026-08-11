@@ -20,6 +20,7 @@ const storage = new Map<string, string>();
 const {
   UI_STATE_KEY,
   $providerTranslationsEnabled,
+  $hideEmbeddedProviderInfo,
   $chineseTones,
   $joinMandarinWords,
   $pinyinPlacement,
@@ -32,6 +33,7 @@ const {
 
 test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($providerTranslationsEnabled.get(), true);
+  assert.equal($hideEmbeddedProviderInfo.get(), false);
   assert.equal($chineseTones.get(), true);
   assert.equal($joinMandarinWords.get(), false);
   assert.equal($pinyinPlacement.get(), "below");

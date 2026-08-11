@@ -1,10 +1,10 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { attachSidecars, attachTimedSidecars, parseLrc, toLineLyrics, toSyllableLyrics } from "../src/convert";
+import { attachSidecars, attachTimedSidecars, parseLrc, toLineLyrics, toStaticLyrics, toSyllableLyrics } from "../src/convert";
 import { dedupeProviderCredits, extractByCredit, isAutomatedByCredit } from "../src/credits";
 import { decryptKrc, parseKrc } from "../src/providers/kugou";
 import { parseQrc, qrcContent } from "../src/providers/qq";
-import { neteaseProviderCredits, parseYrc } from "../src/providers/netease";
+import { neteaseProviderCredits, parseNeteaseYrc, parseYrc } from "../src/providers/netease";
 
 describe("native word-sync conversion", () => {
   it("parses QRC absolute word timings", () => {
@@ -50,7 +50,7 @@ describe("native word-sync conversion", () => {
     }
   });
 
-  it("preserves structured title and credit rows as ordinary timed lyrics", () => {
+  it("marks a compact structured title and credit block without changing text or timing", () => {
     const fixtures = [
       parseQrc(
         "[0,2000]Title - Artist(0,2000)\n[2000,1000]词(2000,300)：(2300,200)Stack(2500,500)\n[3000,1000]曲(3000,300)：(3300,200)ZUN(3500,500)\n[4000,1000]first lyric(4000,1000)",
@@ -64,14 +64,14 @@ describe("native word-sync conversion", () => {
     ];
 
     for (const lines of fixtures) {
-      const lyrics = toSyllableLyrics(lines, "qq") as any;
-      expect(lyrics.Content.every((line: any) =>
-        line.Lead.IsProviderInfo === undefined &&
-        line.Lead.IsMetadata === undefined
-      )).toBe(true);
+      const lyrics = toSyllableLyrics(lines, "qq", {
+        id: "track", title: "Title", artists: ["Artist"], album: "", durationMs: 5_000,
+      }) as any;
       expect(lyrics.Content.map((line: any) =>
         line.Lead.Syllables.map((word: any) => word.Text).join("")))
         .toEqual(["Title - Artist", "词：Stack", "曲：ZUN", "first lyric"]);
+      expect(lyrics.Content.map((line: any) => line.Lead.ProviderInfoKind))
+        .toEqual(["trackHeader", "credit", "credit", undefined]);
       expect(lyrics.Content.slice(0, 3).map((line: any) => [
         line.Lead.StartTime,
         line.Lead.EndTime,
@@ -85,13 +85,17 @@ describe("native word-sync conversion", () => {
       + "[26310,7174]词(26310,2391)：(28701,2391)Stack(31093,2391)\n"
       + "[33485,11964]曲(33485,7175)：(40660,2391)ZUN(43052,2397)\n"
       + "[45450,1949]声(45450,513)も(45963,185)上(46148,137)げ(46285,143)ら(46428,143)れ(46571,185)ず(46756,159)に(46915,484)",
-    ), "qq") as any;
+    ), "qq", {
+      id: "track",
+      title: "Shout It Out Loud!!!",
+      artists: ["暁Records (akatsuki records)"],
+      album: "",
+      durationMs: 48_000,
+    }) as any;
     const title = lyrics.Content[0].Lead;
 
-    expect(lyrics.Content.every((line: any) =>
-      line.Lead.IsProviderInfo === undefined &&
-      line.Lead.IsMetadata === undefined
-    )).toBe(true);
+    expect(lyrics.Content.map((line: any) => line.Lead.ProviderInfoKind))
+      .toEqual(["trackHeader", "credit", "credit", undefined]);
     expect(title.Syllables.map((word: any) => word.Text).join(""))
       .toBe("Shout It Out Loud!!! - 暁Records (akatsuki records)");
     expect(title.Syllables.map((word: any) => word.IsPartOfWord))
@@ -109,7 +113,7 @@ describe("native word-sync conversion", () => {
       ]);
   });
 
-  it("does not guess semantic roles from arbitrary QQ label text", () => {
+  it("marks reviewed QQ roles while keeping an unknown 喧笑 cue as lyrics", () => {
     const lyrics = toSyllableLyrics(parseQrc(
       "[885,3648]晚(885,288)夜(1173,170)微(1343,230)雨(1573,224)问(1797,224)海(2021,248)棠(2269,136) - (2405,136)镜(2541,248)予(2789,280)歌(3069,216)\n"
       + "[4533,744]词(4533,256)：(4789,0)唐(4789,248)酱(5037,240)\n"
@@ -118,12 +122,17 @@ describe("native word-sync conversion", () => {
       + "[11685,665]混(11685,501)音(12186,32)：(12218,0)圣(12218,33)雨(12251,32)轻(12283,35)纱(12318,32)\n"
       + "[36385,2567]喧(36385,225)笑(36610,1447)：(38056,1)\n"
       + "[38952,2000]那(38952,500)年(39452,500)风(39952,500)吹(40452,500)",
-    ), "qq") as any;
+    ), "qq", {
+      id: "track",
+      title: "晚夜微雨问海棠",
+      artists: ["镜予歌"],
+      album: "",
+      durationMs: 42_000,
+    }) as any;
 
-    expect(lyrics.Content.every((line: any) =>
-      line.Lead.IsProviderInfo === undefined &&
-      line.Lead.IsMetadata === undefined
-    )).toBe(true);
+    expect(lyrics.Content.map((line: any) => line.Lead.ProviderInfoKind)).toEqual([
+      "trackHeader", "credit", "credit", "credit", "credit", undefined, undefined,
+    ]);
     expect(lyrics.Content.map((line: any) =>
       line.Lead.Syllables.map((word: any) => word.Text).join("")
     )).toEqual([
@@ -143,6 +152,75 @@ describe("native word-sync conversion", () => {
     ), "qq") as any;
 
     expect(lyrics.Content.every((line: any) => line.Lead.IsMetadata === undefined)).toBe(true);
+  });
+
+  it("uses role coverage and block context instead of complete credit-label matches", () => {
+    const lyrics = toStaticLyrics([
+      "录音室：Studio A",
+      "词/曲：Writer",
+      "声嘶力竭：不必回头",
+      "海伊：第一句",
+      "喧笑：",
+      "编曲：standalone credit outside a block",
+    ].join("\n"), "netease") as any;
+
+    expect(lyrics.Lines.map((line: any) => line.ProviderInfoKind)).toEqual([
+      "credit",
+      "credit",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it("requires every compound role part to qualify", () => {
+    const lyrics = toStaticLyrics([
+      "词/曲：Writer",
+      "编曲/和声编写：Arranger",
+      "作词/张三：not a role compound",
+    ].join("\n"), "qq") as any;
+
+    expect(lyrics.Lines.map((line: any) => line.ProviderInfoKind)).toEqual([
+      "credit",
+      "credit",
+      undefined,
+    ]);
+  });
+
+  it("marks Tencent and strongly evidenced generic rights notices conservatively", () => {
+    const lyrics = toStaticLyrics([
+      "腾讯音乐娱乐集团享有本翻译作品的著作权",
+      "未经版权所有者许可或授权，不得使用",
+      "请勿喧笑：",
+    ].join("\n"), "qq") as any;
+
+    expect(lyrics.Lines.map((line: any) => line.ProviderInfoKind)).toEqual([
+      "rightsNotice",
+      "rightsNotice",
+      undefined,
+    ]);
+  });
+
+  it("preserves leading and trailing NetEase YRC JSON credits and extracts writer segments", () => {
+    const parsed = parseNeteaseYrc([
+      JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Brent Kutzle" }, { tx: "/" }, { tx: "Ryan Tedder" }] }),
+      "[1000,1000](1000,1000,0)first lyric",
+      JSON.stringify({ t: 3000, c: [{ tx: "编曲: " }, { tx: "Producer" }] }),
+    ].join("\n"));
+    const lyrics = toSyllableLyrics(parsed.lines, "netease") as any;
+
+    expect(parsed.songWriters).toEqual(["Brent Kutzle", "Ryan Tedder"]);
+    expect(lyrics.Content.map((line: any) => ({
+      text: line.Lead.Syllables.map((word: any) => word.Text).join(""),
+      kind: line.Lead.ProviderInfoKind,
+      start: line.Lead.StartTime,
+      end: line.Lead.EndTime,
+    }))).toEqual([
+      { text: "作词: Brent Kutzle/Ryan Tedder", kind: "credit", start: 0, end: 0 },
+      { text: "first lyric", kind: undefined, start: 1, end: 2 },
+      { text: "编曲: Producer", kind: "credit", start: 3, end: 3 },
+    ]);
   });
 
   it("keeps zero-duration punctuation attached while honoring its authored following space", () => {

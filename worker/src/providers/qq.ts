@@ -291,6 +291,7 @@ function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong,
   const result = toSyllableLyrics(
     attachQqSidecars(parseQrc(bundle.primary), bundle.translation, bundle.romanization),
     "qq",
+    track,
   );
   const ProviderCredits = dedupeProviderCredits([
     extractByCredit(bundle.primary, "lyrics", "qq"),

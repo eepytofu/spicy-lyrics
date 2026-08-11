@@ -1,6 +1,7 @@
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import { $currentLyricsData } from "../stores.ts";
-import { $lyricsCopyFormat } from "../uiState.ts";
+import { $hideEmbeddedProviderInfo, $lyricsCopyFormat } from "../uiState.ts";
+import { isProviderInfoEntry } from "./ProviderInfo.ts";
 import { isMeaningfullyDifferent } from "./TextCompare.ts";
 import { preferredCopyTranslation } from "./TranslationSidecar.ts";
 
@@ -50,11 +51,12 @@ const formatTime = (seconds: unknown): string => {
   return `${minutes.toString().padStart(2, "0")}:${secs.toFixed(2).padStart(5, "0")}`;
 };
 
-function linesFromLyrics(lyrics: any): CopyLine[] {
+function linesFromLyrics(lyrics: any, hideProviderInfo: boolean): CopyLine[] {
   if (!lyrics || typeof lyrics !== "object") return [];
 
   if (lyrics.Type === "Static") {
     return (lyrics.Lines ?? [])
+      .filter((line: any) => !hideProviderInfo || !isProviderInfoEntry(line))
       .map((line: any) => ({
         text: cleanText(line?.Text),
         translatedText: cleanText(preferredCopyTranslation(line)),
@@ -64,6 +66,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
 
   if (lyrics.Type === "Line") {
     return (lyrics.Content ?? [])
+      .filter((line: any) => !hideProviderInfo || !isProviderInfoEntry(line))
       .map((line: any) => ({
         text: cleanText(line?.Text),
         startTime: line?.StartTime,
@@ -75,6 +78,7 @@ function linesFromLyrics(lyrics: any): CopyLine[] {
   if (lyrics.Type === "Syllable") {
     const out: CopyLine[] = [];
     for (const group of lyrics.Content ?? []) {
+      if (hideProviderInfo && isProviderInfoEntry(group?.Lead)) continue;
       const leadText = joinSyllables(group?.Lead?.Syllables);
       if (leadText) {
         out.push({
@@ -111,8 +115,12 @@ function currentMetadata(): string {
   return title || artists;
 }
 
-export function formatLyricsForCopy(lyrics: any, format: LyricsCopyFormat): string {
-  const lines = linesFromLyrics(lyrics);
+export function formatLyricsForCopy(
+  lyrics: any,
+  format: LyricsCopyFormat,
+  hideProviderInfo = $hideEmbeddedProviderInfo.get(),
+): string {
+  const lines = linesFromLyrics(lyrics, hideProviderInfo);
   const body = lines
     .map((line) => {
       const prefix = format === "timestamps" && typeof line.startTime === "number"

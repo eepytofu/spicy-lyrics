@@ -9,7 +9,7 @@ import { createWorkerHandler, parseTrackMetadata } from "../src/http/handler";
 import { ProviderRateLimitError, ProviderUpstreamError } from "../src/http/fetch";
 
 const trackQuery =
-  "?request_version=11&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
+  "?request_version=12&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
 
 function adapters(
   provider: WorkerProviderId,
@@ -64,12 +64,12 @@ describe("Worker HTTP boundary", () => {
         )
       ).status,
     ).toBe(400);
-    expect((await handler(request("qq", "?request_version=11&title=Song&duration=240"))).status).toBe(400);
+    expect((await handler(request("qq", "?request_version=12&title=Song&duration=240"))).status).toBe(400);
   });
 
   it("rejects stale request contracts and oversized metadata", async () => {
     const handler = createWorkerHandler();
-    expect((await handler(request("qq", trackQuery.replace("request_version=11", "request_version=10")))).status).toBe(426);
+    expect((await handler(request("qq", trackQuery.replace("request_version=12", "request_version=11")))).status).toBe(426);
     expect((await handler(request("qq", `${trackQuery}&artist_name=${"x".repeat(257)}`))).status).toBe(400);
   });
 
@@ -99,7 +99,7 @@ describe("Worker HTTP boundary", () => {
       format: "json",
       lyrics: {
         Type: "Static",
-        Lines: [{ Text: "line" }],
+        Lines: [{ Text: "作词：Writer", ProviderInfoKind: "credit" }],
         source: "qq",
         fetchProvider: "qq",
         sourceDisplayName: "QQ Music",
@@ -113,9 +113,13 @@ describe("Worker HTTP boundary", () => {
     expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("public, max-age=3600, stale-if-error=86400");
-    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v11");
+    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v12");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
-    expect(await response.json()).toMatchObject({ Type: "Static", source: "qq" });
+    expect(await response.json()).toMatchObject({
+      Type: "Static",
+      source: "qq",
+      Lines: [{ Text: "作词：Writer", ProviderInfoKind: "credit" }],
+    });
   });
 
   it("serializes AMLL TTML and match metadata", async () => {
@@ -208,6 +212,20 @@ describe("Worker HTTP boundary", () => {
       "[worker] invalid provider response",
       { provider: "qq", category: "invalid-payload" },
     );
+
+    const invalidMarker = await createWorkerHandler(
+      adapters("qq", async () => ({
+        format: "json",
+        lyrics: {
+          Type: "Static",
+          Lines: [{ Text: "line", ProviderInfoKind: "unknown" }],
+          source: "qq",
+          fetchProvider: "qq",
+          sourceDisplayName: "QQ Music",
+        } as any,
+      })),
+    )(request());
+    expect(invalidMarker.status).toBe(502);
     consoleError.mockRestore();
   });
 

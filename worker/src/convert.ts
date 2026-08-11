@@ -1,4 +1,5 @@
-import type { NativeLyrics, ProviderId, TimedLine, TimedWord } from "./types";
+import { markEmbeddedProviderInfo } from "./provider-info";
+import type { NativeLyrics, ProviderId, TimedLine, TimedWord, TrackMetadata } from "./types";
 
 const labels: Record<ProviderId, string> = {
   qq: "QQ Music",
@@ -48,7 +49,7 @@ function hasAuthoredBoundaryAfter(words: TimedWord[], index: number): boolean {
   return false;
 }
 
-export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): NativeLyrics | undefined {
+export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId, track?: TrackMetadata): NativeLyrics | undefined {
   const usableLines = lines.flatMap((line) => {
     // QRC, KRC, and YRC already encode their authored text as ordered
     // fragments. Keep that order and every nonempty zero-duration fragment;
@@ -77,6 +78,7 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
       StartTime: Syllables[0].StartTime,
       EndTime: Syllables.at(-1)!.EndTime,
       Syllables,
+      ...(line.providerInfoKind ? { ProviderInfoKind: line.providerInfoKind } : {}),
     };
     const translation = cleanSidecarText(line.translation, provider);
     if (translation) {
@@ -93,7 +95,7 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
   if (!Content.length) return undefined;
   const includesTranslation = Content.some((line) => "ProviderTranslatedText" in line.Lead);
   const includesRomanization = Content.some((line) => "ProviderRomanizedText" in line.Lead);
-  return {
+  return markEmbeddedProviderInfo({
     Type: "Syllable", StartTime: (Content[0].Lead as any).StartTime,
     EndTime: (Content.at(-1)!.Lead as any).EndTime, Content,
     IncludesTranslation: includesTranslation,
@@ -101,7 +103,7 @@ export function toSyllableLyrics(lines: TimedLine[], provider: ProviderId): Nati
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
-  };
+  }, provider, track);
 }
 
 export function parseLrc(text: string): Array<{ startMs: number; text: string }> {
@@ -129,20 +131,20 @@ export function parseLrc(text: string): Array<{ startMs: number; text: string }>
   return output.sort((a, b) => a.startMs - b.startMs);
 }
 
-export function toStaticLyrics(text: string, provider: ProviderId): NativeLyrics | undefined {
+export function toStaticLyrics(text: string, provider: ProviderId, track?: TrackMetadata): NativeLyrics | undefined {
   const Lines = text.split(/\r?\n/).flatMap((row) => {
     if (/^\s*\[(?:ar|al|ti|by|offset|language)\s*:/iu.test(row)) return [];
     const value = row.replace(/^(?:\[\d+:\d+(?:\.\d+)?\])+/u, "").trim();
     return value ? [{ Text: value }] : [];
   });
   if (!Lines.length || isInstrumentalSentinelDocument(Lines.map((line) => line.Text), provider)) return undefined;
-  return {
+  return markEmbeddedProviderInfo({
     Type: "Static",
     Lines,
     source: provider,
     fetchProvider: provider,
     sourceDisplayName: labels[provider],
-  };
+  }, provider, track);
 }
 
 function alignSidecars<T>(
@@ -226,6 +228,7 @@ export function toLineLyrics(
   provider: ProviderId,
   translation?: string,
   romanization?: string,
+  track?: TrackMetadata,
 ): NativeLyrics | undefined {
   const rows = parseLrc(lrc).filter((row) => !isProviderPlaceholder(row.text, provider));
   if (!rows.length || isInstrumentalSentinelDocument(rows.map((row) => row.text), provider)) return undefined;
@@ -245,14 +248,14 @@ export function toLineLyrics(
   });
   const includesTranslation = Content.some((line) => "ProviderTranslatedText" in line);
   const includesRomanization = Content.some((line) => "ProviderRomanizedText" in line);
-  return {
+  return markEmbeddedProviderInfo({
     Type: "Line", StartTime: Content[0].StartTime, EndTime: Content.at(-1)!.EndTime, Content,
     IncludesTranslation: includesTranslation,
     HasProviderTranslations: includesTranslation,
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
-  };
+  }, provider, track);
 }
 
 export function attachSidecars(lines: TimedLine[], translation?: string, romanization?: string): TimedLine[] {

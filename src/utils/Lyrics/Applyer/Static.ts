@@ -9,6 +9,11 @@ import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderFullLineBase
 import type { ProcessedTextEntry } from "../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../HanLanguage.ts";
 import { beginLyricsApply, finishLyricsApply } from "./ApplyLifecycle.ts";
+import { $hideEmbeddedProviderInfo } from "../../uiState.ts";
+import {
+  indexedVisibleLyricsEntries,
+  isProviderInfoEntry,
+} from "../ProviderInfo.ts";
 
 /**
  * Interface for static lyrics data
@@ -33,7 +38,12 @@ export function ApplyStaticLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
-  const hasRtlLines = data.Lines.some(line => isRtl(line.Text));
+  const visibleLines = indexedVisibleLyricsEntries(
+    data.Lines,
+    (line) => line,
+    $hideEmbeddedProviderInfo.get(),
+  );
+  const hasRtlLines = visibleLines.some(({ entry }) => isRtl(entry.Text));
   const applyContext = beginLyricsApply(
     "Static",
     false,
@@ -47,11 +57,13 @@ export function ApplyStaticLyrics(
   const romanizationPending = (data as any).RomanizationPending === true;
   const fixHanGlyphVariants = $fixHanGlyphVariants.get();
 
-  const isJapaneseLyrics = (data as any).Language === "jpn" || data.Lines.some((line) => isJapaneseEntry(line));
+  const isJapaneseLyrics = (data as any).Language === "jpn"
+    || visibleLines.some(({ entry }) => isJapaneseEntry(entry));
 
-  data.Lines.forEach((line, index) => {
+  visibleLines.forEach(({ entry: line, sourceIndex }) => {
+    const providerInfo = isProviderInfoEntry(line);
     const lineElem = document.createElement("div");
-    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
+    lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
     const hanLanguageContext = createHanLanguageContext(
       data,
@@ -61,11 +73,11 @@ export function ApplyStaticLyrics(
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
     const renderOptions = {
-      useRomanized: UseRomanized,
-      romanizationPending,
+      useRomanized: providerInfo ? false : UseRomanized,
+      romanizationPending: providerInfo ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending,
-      showProviderTranslations: ShowProviderTranslations,
+      translationPending: providerInfo ? false : translationPending,
+      showProviderTranslations: providerInfo ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       hanLanguageContext,
     };
@@ -91,5 +103,5 @@ export function ApplyStaticLyrics(
     lineElements.push(lineElem);
   });
 
-  finishLyricsApply(applyContext, data, data.Lines, UseRomanized);
+  finishLyricsApply(applyContext, data, visibleLines.map(({ entry }) => entry), UseRomanized);
 }

@@ -136,7 +136,7 @@ export default function LyricsSourcesManager() {
         <div className="sl-sp-source-copy">
           <span className="sl-sp-source-label">External Sources Worker</span>
           <span className="sl-sp-source-description">
-            Used by AMLL TTML DB, QQ Music, KuGou, and NetEase Cloud Music. Paste the Worker origin
+            Used by AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. Paste the Worker origin
             only.
           </span>
         </div>

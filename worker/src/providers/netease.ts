@@ -138,19 +138,90 @@ export async function searchNetease(track: Parameters<LyricsProvider>[0], signal
   return (await searchNeteaseAssessed(track, signal)).map(({ candidate }) => candidate);
 }
 
-export function parseYrc(value: string): TimedLine[] {
-  const lines: TimedLine[] = [];
+export type ParsedNeteaseYrc = {
+  lines: TimedLine[];
+  songWriters: string[];
+};
+
+type ParsedYrcRow = {
+  line: TimedLine;
+  structured: boolean;
+  writerSegments: string[];
+};
+
+function structuredYrcRow(row: string, offset: number): ParsedYrcRow | undefined {
+  let value: any;
+  try { value = JSON.parse(row.trim()); } catch { return undefined; }
+  const startMs = Number(value?.t);
+  if (!Number.isFinite(startMs) || !Array.isArray(value?.c)) return undefined;
+  const segments = value.c
+    .map((segment: any) => typeof segment?.tx === "string" ? segment.tx : "")
+    .filter((segment: string) => segment.length > 0);
+  const text = segments.join("");
+  if (!text) return undefined;
+  const labelIndex = segments.findIndex((segment: string) => /^作[词詞]\s*[:：]\s*$/u.test(segment));
+  const writerSegments = labelIndex < 0 ? [] : segments
+    .slice(labelIndex + 1)
+    .map((segment: string) => segment.trim())
+    .filter((segment: string) => segment && !/^[/／]$/u.test(segment));
+  const adjustedStart = Math.max(0, startMs + offset);
+  return {
+    structured: true,
+    writerSegments,
+    line: {
+      startMs: adjustedStart,
+      durationMs: 0,
+      words: [{ text, startMs: adjustedStart, durationMs: 0 }],
+    },
+  };
+}
+
+function parseYrcDocument(value: string, classifyStructuredInfo: boolean): ParsedNeteaseYrc {
+  const rows: ParsedYrcRow[] = [];
   const offset = lyricOffset(value);
   for (const row of value.split(/\r?\n/)) {
+    const structured = structuredYrcRow(row, offset);
+    if (structured) {
+      rows.push(structured);
+      continue;
+    }
     const header = /^\[(\d+),(\d+)\](.*)$/.exec(row.trim()); if (!header) continue;
     const words = parseLeadingTimedWords(header[3], /\((\d+),(\d+),(?:\d+)\)/g, offset);
-    if (words.length) lines.push({
-      startMs: Math.max(0, Number(header[1]) + offset),
-      durationMs: Number(header[2]),
-      words,
+    if (words.length) rows.push({
+      structured: false,
+      writerSegments: [],
+      line: {
+        startMs: Math.max(0, Number(header[1]) + offset),
+        durationMs: Number(header[2]),
+        words,
+      },
     });
   }
-  return lines;
+  const ordinaryIndices = rows.flatMap((row, index) => row.structured ? [] : [index]);
+  const firstOrdinary = ordinaryIndices[0] ?? Number.POSITIVE_INFINITY;
+  const lastOrdinary = ordinaryIndices.at(-1) ?? Number.NEGATIVE_INFINITY;
+  const songWriters: string[] = [];
+  const lines = rows.map((row, index) => {
+    const authoritativeInfo = classifyStructuredInfo
+      && row.structured
+      && (index < firstOrdinary || index > lastOrdinary);
+    if (authoritativeInfo) {
+      for (const writer of row.writerSegments) {
+        if (!songWriters.includes(writer)) songWriters.push(writer);
+      }
+      return { ...row.line, providerInfoKind: "credit" as const };
+    }
+    return row.line;
+  });
+  return { lines, songWriters };
+}
+
+export function parseYrc(value: string): TimedLine[] {
+  return parseYrcDocument(value, false).lines;
+}
+
+export function parseNeteaseYrc(value: string): ParsedNeteaseYrc {
+  return parseYrcDocument(value, true);
 }
 
 function neteaseUserCredit(value: any, role: ProviderCreditRole): ProviderCredit | undefined {
@@ -222,10 +293,12 @@ export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
     const ProviderCredits = neteaseProviderCredits(body);
     const yrc = body?.yrc?.lyric;
     if (typeof yrc === "string" && yrc.trim()) {
-      const lines = attachSidecars(parseYrc(yrc), body?.ytlrc?.lyric ?? body?.tlyric?.lyric, body?.yromalrc?.lyric ?? body?.romalrc?.lyric);
-      const result = toSyllableLyrics(lines, "netease");
+      const parsed = parseNeteaseYrc(yrc);
+      const lines = attachSidecars(parsed.lines, body?.ytlrc?.lyric ?? body?.tlyric?.lyric, body?.yromalrc?.lyric ?? body?.romalrc?.lyric);
+      const result = toSyllableLyrics(lines, "netease", track);
       if (result) return {
         ...result,
+        ...(parsed.songWriters.length ? { SongWriters: parsed.songWriters } : {}),
         ...(ProviderCredits.length ? { ProviderCredits } : {}),
         SourceMatch: matchMetadata(
           track,
@@ -245,6 +318,7 @@ export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
         "netease",
         body?.tlyric?.lyric,
         body?.romalrc?.lyric,
+        track,
       );
       if (result) return {
         ...result,

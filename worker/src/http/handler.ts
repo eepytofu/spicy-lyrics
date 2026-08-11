@@ -7,7 +7,7 @@ import {
 } from "../acquisition";
 import type { TrackMetadata } from "../types";
 
-const WORKER_REQUEST_VERSION = "11";
+const WORKER_REQUEST_VERSION = "12";
 const MAX_REQUEST_URL_LENGTH = 8192;
 const MAX_TRACK_ID_LENGTH = 256;
 const MAX_TITLE_LENGTH = 512;
@@ -89,10 +89,16 @@ function isValidNativeLyrics(value: unknown): boolean {
   if (!(["Static", "Line", "Syllable"] as unknown[]).includes(value.Type)) return false;
   if (!(["qq", "kugou", "netease", "soda"] as unknown[]).includes(value.source)) return false;
   if (value.fetchProvider !== value.source || typeof value.sourceDisplayName !== "string") return false;
+  const validProviderInfoKind = (entry: unknown) => entry === undefined
+    || entry === "credit"
+    || entry === "rightsNotice"
+    || entry === "trackHeader";
   if (value.Type === "Static") {
     return Array.isArray(value.Lines)
       && value.Lines.length <= 10_000
-      && value.Lines.every((line) => isRecord(line) && typeof line.Text === "string");
+      && value.Lines.every((line) => isRecord(line)
+        && typeof line.Text === "string"
+        && validProviderInfoKind(line.ProviderInfoKind));
   }
   if (!Array.isArray(value.Content) || value.Content.length > 10_000) return false;
   const finiteNumber = (entry: unknown) => typeof entry === "number" && Number.isFinite(entry);
@@ -100,12 +106,14 @@ function isValidNativeLyrics(value: unknown): boolean {
     return value.Content.every((line) => isRecord(line)
       && typeof line.Text === "string"
       && finiteNumber(line.StartTime)
-      && finiteNumber(line.EndTime));
+      && finiteNumber(line.EndTime)
+      && validProviderInfoKind(line.ProviderInfoKind));
   }
   const validGroup = (group: unknown) => {
     if (!isRecord(group) || !Array.isArray(group.Syllables) || group.Syllables.length > 20_000) return false;
     return finiteNumber(group.StartTime)
       && finiteNumber(group.EndTime)
+      && validProviderInfoKind(group.ProviderInfoKind)
       && group.Syllables.every((syllable) => isRecord(syllable)
         && typeof syllable.Text === "string"
         && finiteNumber(syllable.StartTime)

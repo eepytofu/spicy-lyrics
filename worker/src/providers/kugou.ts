@@ -263,7 +263,7 @@ export const kugouProvider: LyricsProvider = async (track, context = {}) => {
       throwIfAborted(context.signal);
       if (!isKugouCandidateAssessmentCompatible(track, song, candidate, assessment, catalogAssessment)) continue;
       const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
-      const result = toSyllableLyrics(parseKrc(raw), "kugou");
+      const result = toSyllableLyrics(parseKrc(raw), "kugou", track);
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
       if (result) return {
         ...result,

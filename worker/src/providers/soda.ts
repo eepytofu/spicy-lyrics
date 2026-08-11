@@ -261,7 +261,7 @@ function sodaTranslation(lyric: any): SodaLyric | undefined {
     : undefined;
 }
 
-function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefined {
+function convertSodaLyrics(body: any, durationMs: number, track: Parameters<LyricsProvider>[0]): NativeLyrics | undefined {
   const lyric: SodaLyric = body?.lyric ?? {};
   const content = typeof lyric.content === "string" ? lyric.content : "";
   const type = String(lyric.type ?? "").toLowerCase();
@@ -269,7 +269,7 @@ function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefi
   const translation = sodaTranslation(lyric);
 
   if (type === "lrc") {
-    return toLineLyrics(content, durationMs, "soda", translation?.content);
+    return toLineLyrics(content, durationMs, "soda", translation?.content, undefined, track);
   }
 
   const lines = structuredSodaLyrics(type, content);
@@ -280,10 +280,10 @@ function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefi
     const withSidecar = translatedLines.length
       ? attachTimedSidecars(lines, translatedLines)
       : attachSidecars(lines, translation?.content);
-    return toSyllableLyrics(withSidecar, "soda");
+    return toSyllableLyrics(withSidecar, "soda", track);
   }
 
-  return toStaticLyrics(content, "soda");
+  return toStaticLyrics(content, "soda", track);
 }
 
 // Soda's Luna PC search/detail flow and current client identity are adapted
@@ -306,7 +306,7 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
     if (!detail) continue;
     const detailAssessment = assessSodaSong(track, detail);
     if (!isAcceptableCandidate(detailAssessment) || detailAssessment.evidence.versionConflict) continue;
-    const result = convertSodaLyrics(body, detail.durationMs ?? song.durationMs ?? track.durationMs);
+    const result = convertSodaLyrics(body, detail.durationMs ?? song.durationMs ?? track.durationMs, track);
     if (!result) continue;
     const ProviderCredits = dedupeProviderCredits([
       extractByCredit(body?.lyric?.content, "lyrics", "soda"),
