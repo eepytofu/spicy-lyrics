@@ -22,7 +22,8 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 ### Readings and display
 
 - Japanese reading hints from the lyrics, such as `天(そら)`, become furigana and romaji, override inferred readings, and appear in amber.
-- Better local Pinyin for Mandarin words and context-dependent pronunciations.
+- Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, with an option to display readings below the lyrics or above Han characters. Japanese readings in mixed Chinese lines also appear above their characters.
+
 
 ## Install from source
 
