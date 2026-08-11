@@ -23,10 +23,10 @@ import { renderReadingPlan } from "./ReadingPlanRenderer.ts";
 import { resolveSyllableBoundary } from "../Processing/SyllableBoundaries.ts";
 import {
   formatMixedScriptReadingForDisplay,
-  hasMixedScriptReadabilityBoundary,
   needsMixedScriptReadabilityGapBefore,
   projectFuriganaSegmentsForReadability,
   projectMixedScriptReadability,
+  type MixedScriptReadabilityProjection,
 } from "../Processing/MixedScriptReadability.ts";
 import {
   resolveHanLanguageTagForContext,
@@ -181,6 +181,7 @@ function appendPlainText(
   hanLanguageContext?: HanLanguageContext,
   layout: "inline" | "furiganaRow" | "aboveReadingRow" = "inline",
   splitBaseRunsForEmphasis = false,
+  syntheticGapCodePointOffsets?: ReadonlySet<number>,
 ): void {
   if (!text) return;
 
@@ -208,7 +209,16 @@ function appendPlainText(
               ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
             : "lyric-base-run lyric-base-plain";
         run.dataset.sourceStart = String(cursor);
-        cursor += displayText.length;
+        if (
+          layout === "aboveReadingRow" &&
+          WhitespaceOnlyText.test(displayText) &&
+          syntheticGapCodePointOffsets?.has(cursor)
+        ) {
+          run.classList.add("lyric-base-synthetic-gap");
+        }
+        cursor += layout === "aboveReadingRow"
+          ? Array.from(displayText).length
+          : displayText.length;
         run.dataset.sourceEnd = String(cursor);
         if (languageRun.language) run.lang = languageRun.language;
 
@@ -368,20 +378,13 @@ export function appendFuriganaText(
 }
 
 function projectAboveSegmentsForReadability(
-  sourceText: string,
   segments: readonly AboveReadingSegment[],
+  projection: MixedScriptReadabilityProjection,
 ): AboveReadingSegment[] {
-  const characters = Array.from(sourceText);
-  const insertBeforeCp: number[] = [];
-  for (let index = 1; index < characters.length; index += 1) {
-    if (hasMixedScriptReadabilityBoundary(characters[index - 1], characters[index])) {
-      insertBeforeCp.push(index);
-    }
-  }
   const beforeOrAt = (offset: number): number =>
-    insertBeforeCp.filter((position) => position <= offset).length;
+    projection.insertedBeforeCodePoint.filter((position) => position <= offset).length;
   const strictlyBefore = (offset: number): number =>
-    insertBeforeCp.filter((position) => position < offset).length;
+    projection.insertedBeforeCodePoint.filter((position) => position < offset).length;
   return segments.map((segment) => ({
     ...segment,
     canonicalRange: {
@@ -397,6 +400,7 @@ export function appendAboveReadingText(
   rawSegments: readonly AboveReadingSegment[],
   hanLanguageContext?: HanLanguageContext,
   splitBaseRunsForEmphasis = false,
+  syntheticGapCodePointOffsets?: ReadonlySet<number>,
 ): void {
   parent.textContent = "";
   const characters = Array.from(text);
@@ -420,6 +424,7 @@ export function appendAboveReadingText(
       hanLanguageContext,
       "aboveReadingRow",
       splitBaseRunsForEmphasis,
+      syntheticGapCodePointOffsets,
     );
 
     const ruby = document.createElement("ruby");
@@ -450,6 +455,7 @@ export function appendAboveReadingText(
     hanLanguageContext,
     "aboveReadingRow",
     splitBaseRunsForEmphasis,
+    syntheticGapCodePointOffsets,
   );
   groupWrapPunctuationRuns(parent);
   packAdjacentFuriganaClusters(
@@ -503,6 +509,11 @@ export function renderBaseTextWithReadings(
   const sourceDisplayText = reading?.displayText ?? entry.Text ?? "";
   const readabilityProjection = projectMixedScriptReadability(sourceDisplayText);
   const text = readabilityProjection.text;
+  const syntheticGapCodePointOffsets = options.splitBaseRunsForEmphasis
+    ? new Set(
+        readabilityProjection.insertedBeforeCodePoint.map((offset, index) => offset + index),
+      )
+    : undefined;
   const hanLanguageContext = options.hanLanguageContext
     ? {
         ...options.hanLanguageContext,
@@ -515,7 +526,10 @@ export function renderBaseTextWithReadings(
   const aboveReadingSegments = options.aboveReadingSegments
     ?? entry.ReadingRenderPlan?.aboveReadingSegments;
   if (shouldRenderAboveReadings(entry, { ...options, aboveReadingSegments }) && aboveReadingSegments) {
-    const segments = projectAboveSegmentsForReadability(sourceDisplayText, aboveReadingSegments);
+    const segments = projectAboveSegmentsForReadability(
+      aboveReadingSegments,
+      readabilityProjection,
+    );
     element.classList.add("has-above-reading");
     appendAboveReadingText(
       element,
@@ -523,6 +537,7 @@ export function renderBaseTextWithReadings(
       segments,
       hanLanguageContext,
       options.splitBaseRunsForEmphasis === true,
+      syntheticGapCodePointOffsets,
     );
     return true;
   }
@@ -562,6 +577,7 @@ export function renderBaseTextWithReadings(
       hanLanguageContext,
       "aboveReadingRow",
       options.splitBaseRunsForEmphasis === true,
+      syntheticGapCodePointOffsets,
     );
     return true;
   }
@@ -575,6 +591,7 @@ export function renderBaseTextWithReadings(
       hanLanguageContext,
       "aboveReadingRow",
       options.splitBaseRunsForEmphasis === true,
+      syntheticGapCodePointOffsets,
     );
     return true;
   }

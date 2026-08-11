@@ -142,6 +142,7 @@ interface SyllableWordPresentation {
 
 const renderedEmphasisUnits = (word: HTMLElement) =>
   Array.from(word.querySelectorAll<HTMLElement>(".lyric-base-run"))
+    .filter((run) => !run.classList.contains("lyric-base-synthetic-gap"))
     .map((run) => {
       const base = Array.from(run.children).find((child) =>
         child.classList.contains("furigana-base")

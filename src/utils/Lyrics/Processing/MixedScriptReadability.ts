@@ -9,11 +9,13 @@ export { hasMixedScriptReadabilityBoundary } from "./BoundaryResolver.ts";
 export type MixedScriptReadabilityProjection = {
   text: string;
   insertedBeforeUtf16: readonly number[];
+  insertedBeforeCodePoint: readonly number[];
 };
 
 export function projectMixedScriptReadability(text: string): MixedScriptReadabilityProjection {
   const characters = Array.from(text || "");
   const insertedBeforeUtf16: number[] = [];
+  const insertedBeforeCodePoint: number[] = [];
   let projected = "";
   let utf16Offset = 0;
 
@@ -24,12 +26,13 @@ export function projectMixedScriptReadability(text: string): MixedScriptReadabil
     ) {
       projected += " ";
       insertedBeforeUtf16.push(utf16Offset);
+      insertedBeforeCodePoint.push(index);
     }
     projected += character;
     utf16Offset += character.length;
   });
 
-  return { text: projected, insertedBeforeUtf16 };
+  return { text: projected, insertedBeforeUtf16, insertedBeforeCodePoint };
 }
 
 export function projectFuriganaSegmentsForReadability(

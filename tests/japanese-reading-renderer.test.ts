@@ -839,6 +839,16 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
     true,
   );
 
+  const mixedWord = new FakeElement();
+  assert.equal(renderBaseTextWithReadings(
+    mixedWord as unknown as HTMLElement,
+    { Text: "命shout" },
+    { ...options, splitBaseRunsForEmphasis: true },
+  ), true);
+  assert.equal(mixedWord.children.length, 7);
+  assert.equal(mixedWord.children[1].textContent, " ");
+  assert.equal(mixedWord.children[1].classList.contains("lyric-base-synthetic-gap"), true);
+
   const syllableLine = new FakeElement();
   assert.equal(appendSyllableRomanizedBelow(
     syllableLine as unknown as HTMLElement,
@@ -858,6 +868,7 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
   assert.match(syllableApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
   assert.match(syllableApplyerSource, /EmphasizeRenderedUnits\(renderedEmphasisUnits\(word\)/u);
   assert.match(syllableApplyerSource, /shouldReservePendingAboveReading\(renderOptions\)/u);
+  assert.match(syllableApplyerSource, /!run\.classList\.contains\("lyric-base-synthetic-gap"\)/u);
 
   $pinyinPlacement.set("below");
 });

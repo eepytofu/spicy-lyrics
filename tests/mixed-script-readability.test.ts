@@ -53,6 +53,11 @@ test("readability boundaries remain separate from provider word boundaries", () 
 test("furigana ranges stay attached to their source glyph after projection", () => {
   const trailingLatin = projectMixedScriptReadability("命shout");
   assert.deepEqual(trailingLatin.insertedBeforeUtf16, [1]);
+  assert.deepEqual(trailingLatin.insertedBeforeCodePoint, [1]);
+
+  const astralHan = projectMixedScriptReadability("𠮷A");
+  assert.deepEqual(astralHan.insertedBeforeUtf16, [2]);
+  assert.deepEqual(astralHan.insertedBeforeCodePoint, [1]);
   assert.deepEqual(
     projectFuriganaSegmentsForReadability(
       [{ start: 0, end: 1, reading: "いのち" }],
