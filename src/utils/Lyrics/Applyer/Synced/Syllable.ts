@@ -17,7 +17,7 @@ import {
   type SyllableLead,
   type TimedGroupWindow,
 } from "../../lyrics.ts";
-import Emphasize from "../Utils/Emphasize.ts";
+import Emphasize, { EmphasizeRenderedUnits } from "../Utils/Emphasize.ts";
 import { IsLetterCapable } from "../Utils/IsLetterCapable.ts";
 import {
   appendSyllableRomanizedBelow,
@@ -26,6 +26,7 @@ import {
   packAdjacentFuriganaClusters,
   populateFuriganaReading,
   renderBaseTextWithReadings,
+  shouldReservePendingAboveReading,
   shouldRenderFurigana,
   shouldRenderAboveReadings,
 } from "../ReadingRenderer.ts";
@@ -139,6 +140,17 @@ interface SyllableWordPresentation {
   isBackground?: boolean;
 }
 
+const renderedEmphasisUnits = (word: HTMLElement) =>
+  Array.from(word.querySelectorAll<HTMLElement>(".lyric-base-run"))
+    .map((run) => {
+      const base = Array.from(run.children).find((child) =>
+        child.classList.contains("furigana-base")
+      ) as HTMLElement | undefined;
+      const length = Array.from(base?.textContent ?? run.textContent ?? "").length;
+      return { HTMLElement: run, Length: length };
+    })
+    .filter((unit) => unit.Length > 0);
+
 const createSyllableWord = (
   syllable: SyllableData,
   index: number,
@@ -153,22 +165,34 @@ const createSyllableWord = (
   const letterLength = syllable.Text.split("").length;
   const hasFurigana = shouldRenderFurigana(syllable, renderOptions);
   const hasAboveReading = shouldRenderAboveReadings(syllable, renderOptions);
+  const reservesAboveReadingRow =
+    hasAboveReading ||
+    (renderOptions.reserveAboveReading === true && useRomanized) ||
+    shouldReservePendingAboveReading(renderOptions);
   const reservesFuriganaRow =
     hasFurigana ||
-    hasAboveReading ||
+    reservesAboveReadingRow ||
     ((renderOptions.reserveFurigana === true || renderOptions.reserveAboveReading === true) && useRomanized);
   // Package-backed Japanese words need a registered word element in every
   // display mode. Letter emphasis returns before timing registration.
   const letterCapable =
     IsLetterCapable(letterLength, totalDuration) &&
     !isRtl(syllable.Text) &&
-    !reservesFuriganaRow &&
+    (!reservesFuriganaRow || reservesAboveReadingRow) &&
     !syllable.JapaneseReading;
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
     word = document.createElement("div");
-    Emphasize(syllable.Text.split(""), word, syllable, isBackground);
+    if (reservesAboveReadingRow) {
+      renderBaseTextWithReadings(word, syllable, {
+        ...renderOptions,
+        splitBaseRunsForEmphasis: true,
+      });
+      EmphasizeRenderedUnits(renderedEmphasisUnits(word), word, syllable, isBackground);
+    } else {
+      Emphasize(syllable.Text.split(""), word, syllable, isBackground);
+    }
     applyWordPositionClasses(word, syllable, index, all);
 
     if (!$simpleLyricsMode.get()) {

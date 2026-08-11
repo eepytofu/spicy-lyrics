@@ -372,6 +372,17 @@
   display: inline-flex;
 }
 
+/* Above-reading emphasis reuses each ruby/plain grid run as the animated
+   glyph owner. Keep its two-row geometry after the generic .letter rule. */
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line .letter.furigana-cluster,
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line
+  .letter.furigana-plain-cluster {
+  display: inline-grid;
+}
+
 #SpicyLyricsPage.SpicyRenderer.UseSpicyFont .LyricsContainer .LyricsContent .line.bg-line,
 #SpicyLyricsPage.SpicyRenderer.UseSpicyFont .LyricsContainer .LyricsContent .line.bg-line .word,
 #SpicyLyricsPage.SpicyRenderer.UseSpicyFont

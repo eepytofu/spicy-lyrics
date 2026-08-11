@@ -20,6 +20,7 @@ import {
   IdleEmphasisLetterScale,
   IdleLyricsScale,
 } from "../src/utils/Lyrics/Animator/Shared.ts";
+import { distributeEmphasisTiming } from "../src/utils/Lyrics/Applyer/Utils/EmphasisTiming.ts";
 
 const animatorSource = readFileSync(
   new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
@@ -80,6 +81,14 @@ test("idle emphasis keeps the outer motion without shrinking each glyph box", ()
     animatorSource,
     /const ScaleRange\s*=\s*\[\s*\{\s*Time:\s*0,\s*Value:\s*IdleLyricsScale\s*\}/u,
   );
+});
+
+test("rendered ruby emphasis preserves source-glyph timing weight", () => {
+  assert.deepEqual(distributeEmphasisTiming(0, 100, [1, 2, 1]), [
+    { StartTime: 0, EndTime: 25 },
+    { StartTime: 25, EndTime: 75 },
+    { StartTime: 75, EndTime: 100 },
+  ]);
 });
 
 test("forward, pause, backward, and rapid seeks resolve deterministically", () => {

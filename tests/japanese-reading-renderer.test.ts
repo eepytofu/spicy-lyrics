@@ -825,6 +825,20 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
   assert.equal(baseFlow.children[0].className.includes("above-reading-plain-cluster"), true);
   assert.equal(line.children.some((child) => child.className.includes("romanized-below")), false);
 
+  const emphasizedWord = new FakeElement();
+  assert.equal(renderBaseTextWithReadings(
+    emphasizedWord as unknown as HTMLElement,
+    { Text: "如果" },
+    { ...options, splitBaseRunsForEmphasis: true },
+  ), true);
+  assert.equal(emphasizedWord.children.length, 2);
+  assert.equal(
+    emphasizedWord.children.every((child) =>
+      child.className.includes("above-reading-plain-cluster")
+    ),
+    true,
+  );
+
   const syllableLine = new FakeElement();
   assert.equal(appendSyllableRomanizedBelow(
     syllableLine as unknown as HTMLElement,
@@ -842,6 +856,8 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
   assert.match(staticApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
   assert.match(lineApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
   assert.match(syllableApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
+  assert.match(syllableApplyerSource, /EmphasizeRenderedUnits\(renderedEmphasisUnits\(word\)/u);
+  assert.match(syllableApplyerSource, /shouldReservePendingAboveReading\(renderOptions\)/u);
 
   $pinyinPlacement.set("below");
 });

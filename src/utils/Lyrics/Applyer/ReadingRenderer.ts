@@ -48,6 +48,8 @@ export type ReadingRenderOptions = {
   primaryScript?: "Japanese" | "Chinese";
   chineseDocument?: boolean;
   hanLanguageContext?: HanLanguageContext;
+  /** Split unannotated Above-row text into animator-sized glyph runs. */
+  splitBaseRunsForEmphasis?: boolean;
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
 };
@@ -131,7 +133,7 @@ export function shouldRenderRomanization(entry: JapaneseReadable | undefined, op
   return !isJapanese || $japaneseReadingMode.get() !== "furigana";
 }
 
-function shouldReservePendingAboveReading(options: ReadingRenderOptions): boolean {
+export function shouldReservePendingAboveReading(options: ReadingRenderOptions): boolean {
   return options.useRomanized
     && options.romanizationPending === true
     && options.chineseDocument === true
@@ -178,44 +180,50 @@ function appendPlainText(
   sourceStart = 0,
   hanLanguageContext?: HanLanguageContext,
   layout: "inline" | "furiganaRow" | "aboveReadingRow" = "inline",
+  splitBaseRunsForEmphasis = false,
 ): void {
   if (!text) return;
 
   let cursor = sourceStart;
   for (const chunk of plainTextWrapChunks(text)) {
     for (const languageRun of splitHanLanguageRuns(chunk, hanLanguageContext)) {
-      const run = document.createElement("span");
-      const usesFuriganaRow =
-        layout === "furiganaRow" &&
-        !WhitespaceOnlyText.test(languageRun.text);
-      const usesAboveReadingRow =
-        layout === "aboveReadingRow" &&
-        !WhitespaceOnlyText.test(languageRun.text);
-      run.className = usesFuriganaRow
-        ? "lyric-base-run furigana-plain-cluster"
-        : usesAboveReadingRow
-          ? "lyric-base-run furigana-plain-cluster above-reading-plain-cluster has-above-reading"
-        : layout === "furiganaRow"
-          ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
-          : layout === "aboveReadingRow"
+      const displayRuns = splitBaseRunsForEmphasis
+        ? Array.from(languageRun.text)
+        : [languageRun.text];
+      for (const displayText of displayRuns) {
+        const run = document.createElement("span");
+        const usesFuriganaRow =
+          layout === "furiganaRow" &&
+          !WhitespaceOnlyText.test(displayText);
+        const usesAboveReadingRow =
+          layout === "aboveReadingRow" &&
+          !WhitespaceOnlyText.test(displayText);
+        run.className = usesFuriganaRow
+          ? "lyric-base-run furigana-plain-cluster"
+          : usesAboveReadingRow
+            ? "lyric-base-run furigana-plain-cluster above-reading-plain-cluster has-above-reading"
+          : layout === "furiganaRow"
             ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
-          : "lyric-base-run lyric-base-plain";
-      run.dataset.sourceStart = String(cursor);
-      cursor += languageRun.text.length;
-      run.dataset.sourceEnd = String(cursor);
-      if (languageRun.language) run.lang = languageRun.language;
+            : layout === "aboveReadingRow"
+              ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
+            : "lyric-base-run lyric-base-plain";
+        run.dataset.sourceStart = String(cursor);
+        cursor += displayText.length;
+        run.dataset.sourceEnd = String(cursor);
+        if (languageRun.language) run.lang = languageRun.language;
 
-      if (usesFuriganaRow || usesAboveReadingRow) {
-        const base = document.createElement("span");
-        base.className = usesAboveReadingRow
-          ? "furigana-base above-reading-base"
-          : "furigana-base";
-        base.textContent = languageRun.text;
-        run.appendChild(base);
-      } else {
-        run.textContent = languageRun.text;
+        if (usesFuriganaRow || usesAboveReadingRow) {
+          const base = document.createElement("span");
+          base.className = usesAboveReadingRow
+            ? "furigana-base above-reading-base"
+            : "furigana-base";
+          base.textContent = displayText;
+          run.appendChild(base);
+        } else {
+          run.textContent = displayText;
+        }
+        parent.appendChild(run);
       }
-      parent.appendChild(run);
     }
   }
 }
@@ -388,6 +396,7 @@ export function appendAboveReadingText(
   text: string,
   rawSegments: readonly AboveReadingSegment[],
   hanLanguageContext?: HanLanguageContext,
+  splitBaseRunsForEmphasis = false,
 ): void {
   parent.textContent = "";
   const characters = Array.from(text);
@@ -410,6 +419,7 @@ export function appendAboveReadingText(
       cursorCp,
       hanLanguageContext,
       "aboveReadingRow",
+      splitBaseRunsForEmphasis,
     );
 
     const ruby = document.createElement("ruby");
@@ -439,6 +449,7 @@ export function appendAboveReadingText(
     cursorCp,
     hanLanguageContext,
     "aboveReadingRow",
+    splitBaseRunsForEmphasis,
   );
   groupWrapPunctuationRuns(parent);
   packAdjacentFuriganaClusters(
@@ -506,7 +517,13 @@ export function renderBaseTextWithReadings(
   if (shouldRenderAboveReadings(entry, { ...options, aboveReadingSegments }) && aboveReadingSegments) {
     const segments = projectAboveSegmentsForReadability(sourceDisplayText, aboveReadingSegments);
     element.classList.add("has-above-reading");
-    appendAboveReadingText(element, text, segments, hanLanguageContext);
+    appendAboveReadingText(
+      element,
+      text,
+      segments,
+      hanLanguageContext,
+      options.splitBaseRunsForEmphasis === true,
+    );
     return true;
   }
 
@@ -538,13 +555,27 @@ export function renderBaseTextWithReadings(
     entry.ReadingPrimaryScript === "Chinese"
   ) {
     element.classList.add("has-above-reading");
-    appendPlainText(element, text, 0, hanLanguageContext, "aboveReadingRow");
+    appendPlainText(
+      element,
+      text,
+      0,
+      hanLanguageContext,
+      "aboveReadingRow",
+      options.splitBaseRunsForEmphasis === true,
+    );
     return true;
   }
 
   if (shouldReservePendingAboveReading(options)) {
     element.classList.add("has-above-reading", "above-reading-pending");
-    appendPlainText(element, text, 0, hanLanguageContext, "aboveReadingRow");
+    appendPlainText(
+      element,
+      text,
+      0,
+      hanLanguageContext,
+      "aboveReadingRow",
+      options.splitBaseRunsForEmphasis === true,
+    );
     return true;
   }
 

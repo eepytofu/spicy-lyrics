@@ -35,6 +35,13 @@ test("pending Above Pinyin reserves ruby geometry without a visible skeleton", (
   );
 });
 
+test("Above-reading emphasis keeps ruby runs on the shared two-row grid", () => {
+  assert.match(
+    mixedCss,
+    /\.letter\.furigana-cluster,[\s\S]*?\.letter\.furigana-plain-cluster\s*\{[\s\S]*?display:\s*inline-grid/u,
+  );
+});
+
 function ruleBody(selector: string): string {
   const selectorStart = mainCss.indexOf(selector);
   assert.notEqual(selectorStart, -1, `missing CSS selector: ${selector}`);

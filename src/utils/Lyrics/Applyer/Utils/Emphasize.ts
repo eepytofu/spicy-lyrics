@@ -3,6 +3,7 @@ import { ArabicPersianRegex } from "../../../Addons.ts";
 import { IdleEmphasisLetterScale } from "../../Animator/Shared.ts";
 import { ConvertTime } from "../../ConvertTime.ts";
 import { CurrentLineLyricsObject, LyricsObject } from "../../lyrics.ts";
+import { distributeEmphasisTiming } from "./EmphasisTiming.ts";
 
 const emphasisTimingOffsets = () => ({
   startTime: $simpleLyricsMode.get() ? -21 : 0,
@@ -18,76 +19,63 @@ interface LetterData {
   BGLetter?: boolean;
 }
 
-export default function Emphasize(
-  letters: Array<string>,
+export interface EmphasisRenderUnit {
+  HTMLElement: HTMLElement;
+  /** Number of source glyphs represented by this visual unit. */
+  Length: number;
+}
+
+const applyEmphasisUnits = (
+  units: EmphasisRenderUnit[],
   applyTo: HTMLElement,
   lead: any,
-  isBgWord: boolean = false
-) {
+  isBgWord: boolean,
+): void => {
   const timingOffsets = emphasisTimingOffsets();
   const StartTime = ConvertTime(lead.StartTime) - timingOffsets.startTime;
   const EndTime = ConvertTime(lead.EndTime) - timingOffsets.endTime;
   const totalDuration = EndTime - StartTime;
-  const letterDuration = totalDuration / letters.length; // Duration per letter
   const word = applyTo;
   const Letters: LetterData[] = [];
+  const timingWindows = distributeEmphasisTiming(
+    StartTime,
+    EndTime,
+    units.map((unit) => unit.Length),
+  );
 
-  letters.forEach((letter, index) => {
-    const letterElem = document.createElement("span");
-    letterElem.textContent = letter;
-    letterElem.classList.add("letter");
-    letterElem.classList.add("Emphasis");
-    const isLastLetter = index === letters.length - 1;
-    // Calculate start and end time for each letter
-    const letterStartTime = StartTime + index * letterDuration;
-    const letterEndTime = letterStartTime + letterDuration;
+  if (ArabicPersianRegex.test(lead.Text)) {
+    word.setAttribute("font", "Vazirmatn");
+  }
 
-    //const contentDuration = letterDuration > 150 ? letterDuration : 150;
-    //letterElem.style.setProperty("--content-duration", `${contentDuration}ms`);
+  units.forEach((unit, index) => {
+    const letterElem = unit.HTMLElement;
+    const timing = timingWindows[index];
 
-    if (isLastLetter) {
+    letterElem.classList.add("letter", "Emphasis");
+    if (index === units.length - 1) {
       letterElem.classList.add("LastLetterInWord");
     }
 
-    if (ArabicPersianRegex.test(lead.Text)) {
-      word.setAttribute("font", "Vazirmatn");
-    }
-
-    const mcont = isBgWord
-      ? {
-          BGLetter: true,
-        }
-      : {};
-
     Letters.push({
       HTMLElement: letterElem,
-      StartTime: letterStartTime,
-      EndTime: letterEndTime,
-      TotalTime: letterDuration,
+      StartTime: timing.StartTime,
+      EndTime: timing.EndTime,
+      TotalTime: timing.EndTime - timing.StartTime,
       Emphasis: true,
-      ...mcont,
+      ...(isBgWord ? { BGLetter: true } : {}),
     });
 
     if (!$simpleLyricsMode.get()) {
-      letterElem.style.setProperty("--gradient-position", `-20%`);
+      letterElem.style.setProperty("--gradient-position", "-20%");
     }
-    letterElem.style.setProperty("--text-shadow-opacity", `0%`);
-    letterElem.style.setProperty("--text-shadow-blur-radius", `4px`);
+    letterElem.style.setProperty("--text-shadow-opacity", "0%");
+    letterElem.style.setProperty("--text-shadow-blur-radius", "4px");
     letterElem.style.scale = IdleEmphasisLetterScale.toString();
     letterElem.style.transform = `translateY(calc(var(--DefaultLyricsSize) * 0.02))`;
-
-    word.appendChild(letterElem);
   });
 
   word.classList.add("letterGroup");
 
-  const mcont = isBgWord
-    ? {
-        BGWord: true,
-      }
-    : {};
-
-  // Make sure CurrentLineLyricsObject is valid and Syllables.Lead exists
   if (
     CurrentLineLyricsObject >= 0 &&
     LyricsObject.Types.Syllable.Lines?.[CurrentLineLyricsObject].Syllables
@@ -99,13 +87,36 @@ export default function Emphasize(
       TotalTime: totalDuration,
       LetterGroup: true,
       Letters,
-      ...mcont,
+      ...(isBgWord ? { BGWord: true } : {}),
     });
   } else {
     console.warn(
       "Cannot add letter group: CurrentLineLyricsObject is invalid or Syllables.Lead doesn't exist"
     );
   }
+};
 
-  // No need to reset Letters as it's a local constant
+/** Register already-rendered base/ruby units with the legacy letter animator. */
+export function EmphasizeRenderedUnits(
+  units: EmphasisRenderUnit[],
+  applyTo: HTMLElement,
+  lead: any,
+  isBgWord: boolean = false,
+): void {
+  applyEmphasisUnits(units, applyTo, lead, isBgWord);
+}
+
+export default function Emphasize(
+  letters: Array<string>,
+  applyTo: HTMLElement,
+  lead: any,
+  isBgWord: boolean = false
+) {
+  const units = letters.map((letter) => {
+    const letterElem = document.createElement("span");
+    letterElem.textContent = letter;
+    applyTo.appendChild(letterElem);
+    return { HTMLElement: letterElem, Length: 1 };
+  });
+  applyEmphasisUnits(units, applyTo, lead, isBgWord);
 }
