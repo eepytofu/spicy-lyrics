@@ -44,6 +44,59 @@ test("crossing ruby groups every intersecting timed span", () => {
   assert.equal(result.bySpanId.has("2"), false);
 });
 
+test("ateji reading stays whole across separate Apple timing owners", () => {
+  const parsed: ParsedLine = {
+    id: "apple-tokei",
+    displayText: "時計の",
+    paragraphProvenance: "unavailable",
+    spans: [
+      {
+        id: "apple-tokei-0",
+        rawText: "時",
+        cleanText: "時",
+        startMs: 186_375,
+        endMs: 187_103,
+        providerPartOfWord: true,
+      },
+      {
+        id: "apple-tokei-1",
+        rawText: "計",
+        cleanText: "計",
+        startMs: 187_103,
+        endMs: 188_340,
+        providerPartOfWord: true,
+      },
+      {
+        id: "apple-tokei-2",
+        rawText: "の",
+        cleanText: "の",
+        startMs: 188_340,
+        endMs: 190_137,
+      },
+    ],
+  };
+  const canonical = buildCanonicalLine(parsed);
+  const result = timedFuriganaGroups({
+    sourceUnits: canonical.spanMappings,
+    furigana: [
+      {
+        canonicalRange: { startCp: 0, endCp: 2 },
+        reading: "とけい",
+        provenance: "local",
+      },
+    ],
+  } as any);
+
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].reading, "とけい");
+  assert.equal(result.groups[0].segmentKey, "0:2\u0000とけい");
+  assert.equal(result.groups[0].rubyCenterCh, 1);
+  assert.deepEqual(result.groups[0].spanIds, ["apple-tokei-0", "apple-tokei-1"]);
+  assert.equal(result.bySpanId.get("apple-tokei-0"), result.groups[0]);
+  assert.equal(result.bySpanId.get("apple-tokei-1"), result.groups[0]);
+  assert.equal(result.bySpanId.has("apple-tokei-2"), false);
+});
+
 test("ruby centers over the annotated range inside oversized provider fragments", () => {
   // Real AMLL fragmenting: one timed span holds エーテル麻, the next holds 酔.
   const parsed: ParsedLine = {
