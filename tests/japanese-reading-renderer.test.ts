@@ -791,6 +791,13 @@ test("only full-line applyers add the shared base-flow owner", () => {
   assert.match(syllableApplyerSource, /renderBaseTextWithReadings\(word,/u);
 });
 
+test("timed syllable rendering keeps one Above romaji group across Kana owners", () => {
+  assert.match(syllableApplyerSource, /timedAboveReadingGroups\(/u);
+  assert.match(syllableApplyerSource, /"timed-above-reading-group"/u);
+  assert.match(syllableApplyerSource, /"above-reading-text"/u);
+  assert.match(syllableApplyerSource, /word\.querySelector\("\.above-reading-plain-cluster"\)/u);
+});
+
 test("explicit readings tint only derived furigana while displaying the immutable source as ruby", () => {
   $japaneseReadingMode.set("furigana");
   const line = new FakeElement();

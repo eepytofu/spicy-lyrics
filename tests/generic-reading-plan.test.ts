@@ -154,7 +154,7 @@ test("above projection fails closed when analyzer normalization changes source t
   assert.equal(projection.valid, false);
 });
 
-test("timed above projection falls back below when one annotation crosses timing owners", () => {
+test("timed above projection keeps one Kana annotation across contiguous timing owners", () => {
   const aboveReadingSegments = [
     { canonicalRange: { startCp: 0, endCp: 1 }, reading: "rú", kind: "mandarinPinyin" as const, provenance: "local" as const },
     { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guǒ", kind: "mandarinPinyin" as const, provenance: "local" as const },
@@ -171,12 +171,33 @@ test("timed above projection falls back below when one annotation crosses timing
   const splitOwner = buildTimedGenericPlan({
     Syllables: [
       { Text: "如果", RomanizedText: "ru guo", StartTime: 0, EndTime: 1 },
-      { Text: "すみ", RomanizedText: "sumi", StartTime: 1, EndTime: 1.5 },
-      { Text: "ません", RomanizedText: "masen", StartTime: 1.5, EndTime: 2 },
+      { Text: "す", RomanizedText: "su", StartTime: 1, EndTime: 1.2 },
+      { Text: "み", RomanizedText: "mi", StartTime: 1.2, EndTime: 1.4 },
+      { Text: "ま", RomanizedText: "ma", StartTime: 1.4, EndTime: 1.6 },
+      { Text: "せ", RomanizedText: "se", StartTime: 1.6, EndTime: 1.8 },
+      { Text: "ん", RomanizedText: "n", StartTime: 1.8, EndTime: 2 },
     ],
   }, "ru guo sumimasen", "Chinese", { aboveReadingSegments });
-  assert.equal(splitOwner?.aboveReadingSegments, undefined);
+  assert.deepEqual(splitOwner?.aboveReadingSegments, aboveReadingSegments);
   assert.equal(splitOwner?.joinedDisplayText.replace(/\s+/gu, " ").trim(), "ru guo sumimasen");
+});
+
+test("timed above projection still rejects multi-owner Mandarin annotations", () => {
+  const plan = buildTimedGenericPlan({
+    Syllables: [
+      { Text: "如", RomanizedText: "rú", StartTime: 0, EndTime: 1, IsPartOfWord: true },
+      { Text: "果", RomanizedText: "guǒ", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+    ],
+  }, "rú guǒ", "Chinese", {
+    aboveReadingSegments: [{
+      canonicalRange: { startCp: 0, endCp: 2 },
+      reading: "rúguǒ",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    }],
+  });
+
+  assert.equal(plan?.aboveReadingSegments, undefined);
 });
 
 test("AMLL-style provider boundary spaces preserve above-reading timing owners", () => {

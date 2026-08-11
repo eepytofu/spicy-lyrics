@@ -1,4 +1,9 @@
-import type { PlanFuriganaSegment, ReadingProvenance, RenderPlan } from "../Model.ts";
+import type {
+  AboveReadingKind,
+  PlanFuriganaSegment,
+  ReadingProvenance,
+  RenderPlan,
+} from "../Model.ts";
 import { furiganaSegmentKey } from "./FuriganaIdentity.ts";
 
 /** Timed unit IDs are provider owner IDs, never array positions. */
@@ -23,6 +28,20 @@ export type TimedFuriganaGroup = {
 export type TimedFuriganaGroups = {
   groups: readonly TimedFuriganaGroup[];
   bySpanId: ReadonlyMap<string, TimedFuriganaGroup>;
+};
+
+export type TimedAboveReadingGroup = {
+  id: string;
+  reading: string;
+  kind: AboveReadingKind;
+  spanIds: readonly string[];
+  provenance: ReadingProvenance;
+  rubyCenterCh: number;
+};
+
+export type TimedAboveReadingGroups = {
+  groups: readonly TimedAboveReadingGroup[];
+  bySpanId: ReadonlyMap<string, TimedAboveReadingGroup>;
 };
 
 /**
@@ -65,6 +84,52 @@ export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFurigana
   return { groups, bySpanId };
 }
 
+/**
+ * A contiguous Kana island in a Chinese line may have one local romaji
+ * annotation but several provider timing owners. Draw that annotation once
+ * across the owners, just like timed furigana, while preserving every source
+ * span and its karaoke timing. Mandarin remains one annotation per owner.
+ */
+export function timedAboveReadingGroups(
+  plan: RenderPlan | undefined,
+): TimedAboveReadingGroups {
+  const sourceUnits = plan?.sourceUnits || [];
+  const segments = plan?.aboveReadingSegments || [];
+  const groups: TimedAboveReadingGroup[] = [];
+  const bySpanId = new Map<string, TimedAboveReadingGroup>();
+
+  segments.forEach((segment, index) => {
+    if (segment.kind !== "japaneseRomaji") return;
+    const { startCp: start, endCp: end } = segment.canonicalRange;
+    if (end <= start || !segment.reading) return;
+
+    const ownerIndexes = sourceUnits
+      .map((unit, ownerIndex) => ({ unit, ownerIndex }))
+      .filter(({ unit }) =>
+        start < unit.canonicalRange.endCp && end > unit.canonicalRange.startCp
+      );
+    if (ownerIndexes.length < 2) return;
+    if (ownerIndexes.some(({ unit }) => bySpanId.has(unit.spanId))) return;
+    if (ownerIndexes.some(({ ownerIndex }, ownerPosition) =>
+      ownerPosition > 0 && ownerIndex !== ownerIndexes[ownerPosition - 1].ownerIndex + 1
+    )) return;
+
+    const group: TimedAboveReadingGroup = {
+      id: `timed-above-${index}`,
+      reading: segment.reading,
+      kind: segment.kind,
+      spanIds: ownerIndexes.map(({ unit }) => unit.spanId),
+      provenance: segment.provenance,
+      rubyCenterCh:
+        start - ownerIndexes[0].unit.canonicalRange.startCp + (end - start) / 2,
+    };
+    groups.push(group);
+    ownerIndexes.forEach(({ unit }) => bySpanId.set(unit.spanId, group));
+  });
+
+  return { groups, bySpanId };
+}
+
 function planFuriganaRange(segment: PlanFuriganaSegment): { start: number; end: number } {
   return "canonicalRange" in segment
     ? { start: segment.canonicalRange.startCp, end: segment.canonicalRange.endCp }
@@ -79,7 +144,7 @@ function planFuriganaRange(segment: PlanFuriganaSegment): { start: number; end: 
  */
 export function timedGroupContinuesAt(
   syllableTexts: readonly string[],
-  groups: TimedFuriganaGroups,
+  groups: { bySpanId: ReadonlyMap<string, { id: string }> },
   fromIndex: number,
   groupId: string | undefined
 ): boolean {

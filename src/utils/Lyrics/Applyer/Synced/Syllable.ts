@@ -34,9 +34,12 @@ import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/Japan
 import { needsSyllableSpaceBefore } from "../../Processing/SyllableBoundaries.ts";
 import { needsMixedScriptReadabilityGapBefore } from "../../Processing/MixedScriptReadability.ts";
 import {
+  timedAboveReadingGroups,
   timedFuriganaGroups,
   timedGroupContinuesAt,
   timedLogicalGroupIds,
+  type TimedAboveReadingGroup,
+  type TimedAboveReadingGroups,
   type TimedFuriganaGroup,
   type TimedFuriganaGroups,
 } from "../../Processing/Japanese/TimedGroupIds.ts";
@@ -196,6 +199,8 @@ const createSyllableWord = (
 };
 
 const EMPTY_TIMED_FURIGANA: TimedFuriganaGroups = { groups: [], bySpanId: new Map() };
+const EMPTY_TIMED_ABOVE_READING: TimedAboveReadingGroups = { groups: [], bySpanId: new Map() };
+type TimedRubyGroup = TimedFuriganaGroup | TimedAboveReadingGroup;
 
 /**
  * One visual ruby drawn once above several timed syllables. The group is
@@ -205,12 +210,19 @@ const EMPTY_TIMED_FURIGANA: TimedFuriganaGroups = { groups: [], bySpanId: new Ma
  * エーテル麻), so the ruby is centered over the annotated range itself via
  * the group's code-point midpoint instead of over the whole group.
  */
-const createTimedFuriganaGroup = (
-  group: TimedFuriganaGroup
+const createTimedRubyGroup = (
+  group: TimedRubyGroup
 ): { root: HTMLSpanElement; anchor: HTMLSpanElement } => {
+  const isAboveReading = "kind" in group;
   const root = document.createElement("span");
-  root.classList.add("word-group", "semantic-word-group", "timed-furigana-group", "has-furigana");
-  root.dataset.timedFuriganaGroup = group.id;
+  root.classList.add(
+    "word-group",
+    "semantic-word-group",
+    isAboveReading ? "timed-above-reading-group" : "timed-furigana-group",
+    isAboveReading ? "has-above-reading" : "has-furigana",
+  );
+  if (isAboveReading) root.dataset.timedAboveReadingGroup = group.id;
+  else root.dataset.timedFuriganaGroup = group.id;
   // The anchor is appended INSIDE the first member word's ruby cluster, so
   // the shared ruby shares the exact rt grid row of every per-word reading
   // (same bottom edge, no line-height drift) and rides that word's per-frame
@@ -220,6 +232,10 @@ const createTimedFuriganaGroup = (
   anchor.style.setProperty("--tfg-center-ch", String(group.rubyCenterCh));
   const reading = document.createElement("span");
   reading.classList.add("furigana-reading", "timed-furigana-reading");
+  if (isAboveReading) {
+    reading.classList.add("above-reading-text", `above-reading-${group.kind}`);
+    reading.lang = group.kind === "mandarinPinyin" ? "zh-Latn" : "ja-Latn";
+  }
   if (group.provenance === "providerExplicit") {
     reading.classList.add("reading-origin-provider-explicit");
     reading.dataset.readingOrigin = "provider-explicit";
@@ -235,35 +251,38 @@ const lastRegisteredWordEntry = (): SyllableLead | undefined => {
   return lead?.[lead.length - 1];
 };
 
-type TimedFuriganaRenderState = {
+type TimedRubyRenderState = {
   root: HTMLSpanElement | null;
   groupId: string | undefined;
   times: TimedGroupWindow | null;
 };
 
-const createTimedFuriganaRenderState = (): TimedFuriganaRenderState => ({
+const createTimedRubyRenderState = (): TimedRubyRenderState => ({
   root: null,
   groupId: undefined,
   times: null,
 });
 
-const resetTimedFuriganaRenderState = (state: TimedFuriganaRenderState): void => {
+const resetTimedRubyRenderState = (state: TimedRubyRenderState): void => {
   state.root = null;
   state.groupId = undefined;
   state.times = null;
 };
 
-const appendTimedFuriganaMember = (
+const appendTimedRubyMember = (
   lineElement: HTMLElement,
   word: HTMLElement,
   syllable: SyllableData,
-  group: TimedFuriganaGroup,
-  state: TimedFuriganaRenderState
+  group: TimedRubyGroup,
+  state: TimedRubyRenderState
 ): void => {
   if (!state.root || group.id !== state.groupId) {
-    const timedGroup = createTimedFuriganaGroup(group);
+    const timedGroup = createTimedRubyGroup(group);
     lineElement.appendChild(timedGroup.root);
-    (word.querySelector(".furigana-cluster") ?? word).appendChild(timedGroup.anchor);
+    const anchorOwner = "kind" in group
+      ? word.querySelector(".above-reading-plain-cluster")
+      : word.querySelector(".furigana-cluster");
+    (anchorOwner ?? word).appendChild(timedGroup.anchor);
     state.root = timedGroup.root;
     state.groupId = group.id;
 
@@ -421,8 +440,17 @@ export function ApplySyllableLyrics(
     const leadTimedFurigana = leadHasFurigana
       ? timedFuriganaGroups(line.Lead.ReadingRenderPlan)
       : EMPTY_TIMED_FURIGANA;
+    const leadTimedAboveReading = leadHasAboveReading
+      ? timedAboveReadingGroups(line.Lead.ReadingRenderPlan)
+      : EMPTY_TIMED_ABOVE_READING;
+    const leadTimedRubyLookup = {
+      bySpanId: new Map<string, TimedRubyGroup>([
+        ...leadTimedFurigana.bySpanId,
+        ...leadTimedAboveReading.bySpanId,
+      ]),
+    };
     const leadTexts = line.Lead.Syllables.map((s) => s.Text || "");
-    const leadTimedFuriganaState = createTimedFuriganaRenderState();
+    const leadTimedRubyState = createTimedRubyRenderState();
 
     line.Lead.Syllables.forEach((lead, iL, aL) => {
         if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
@@ -433,6 +461,8 @@ export function ApplySyllableLyrics(
         // group; member words suppress only their copy of that reading but
         // keep their timing registration. The line is never collapsed.
         const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
+        const timedAboveReadingGroup = leadTimedAboveReading.bySpanId.get(String(iL));
+        const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
         const wordRenderOptions = {
           ...leadRenderOptions,
           aboveReadingSegments: aboveReadingSegmentsForSpan(
@@ -449,13 +479,13 @@ export function ApplySyllableLyrics(
             : wordRenderOptions,
           UseRomanized
         );
-        if (timedFuriganaGroup) {
-          appendTimedFuriganaMember(
+        if (timedRubyGroup) {
+          appendTimedRubyMember(
             lineElem,
             word,
             lead,
-            timedFuriganaGroup,
-            leadTimedFuriganaState
+            timedRubyGroup,
+            leadTimedRubyState
           );
           currentWordGroup = null;
           currentSemanticGroupId = undefined;
@@ -464,21 +494,21 @@ export function ApplySyllableLyrics(
         // Authored whitespace spans between members stay inside the open group
         // so the ruby is not split into duplicates.
         if (
-          leadTimedFuriganaState.root &&
+          leadTimedRubyState.root &&
           !(lead.Text || "").trim() &&
           timedGroupContinuesAt(
             leadTexts,
-            leadTimedFurigana,
+            leadTimedRubyLookup,
             iL + 1,
-            leadTimedFuriganaState.groupId
+            leadTimedRubyState.groupId
           )
         ) {
-          leadTimedFuriganaState.root.appendChild(word);
+          leadTimedRubyState.root.appendChild(word);
           currentWordGroup = null;
           currentSemanticGroupId = undefined;
           return;
         }
-        resetTimedFuriganaRenderState(leadTimedFuriganaState);
+        resetTimedRubyRenderState(leadTimedRubyState);
 
         const semanticGroupId = leadLogicalGroupIds.get(String(iL));
         if (leadUsesSemanticGroups && semanticGroupId) {
@@ -553,8 +583,17 @@ export function ApplySyllableLyrics(
         const bgTimedFurigana = bgHasFurigana
           ? timedFuriganaGroups(bg.ReadingRenderPlan)
           : EMPTY_TIMED_FURIGANA;
+        const bgTimedAboveReading = bgHasAboveReading
+          ? timedAboveReadingGroups(bg.ReadingRenderPlan)
+          : EMPTY_TIMED_ABOVE_READING;
+        const bgTimedRubyLookup = {
+          bySpanId: new Map<string, TimedRubyGroup>([
+            ...bgTimedFurigana.bySpanId,
+            ...bgTimedAboveReading.bySpanId,
+          ]),
+        };
         const bgTexts = bg.Syllables.map((s) => s.Text || "");
-        const bgTimedFuriganaState = createTimedFuriganaRenderState();
+        const bgTimedRubyState = createTimedRubyRenderState();
 
         bg.Syllables.forEach((bw, bI, bA) => {
           if (isRtl(bw.Text) && !lineE.classList.contains("rtl")) {
@@ -562,6 +601,8 @@ export function ApplySyllableLyrics(
           }
 
           const timedFuriganaGroup = bgTimedFurigana.bySpanId.get(String(bI));
+          const timedAboveReadingGroup = bgTimedAboveReading.bySpanId.get(String(bI));
+          const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
           const wordRenderOptions = {
             ...bgWordRenderOptions,
             aboveReadingSegments: aboveReadingSegmentsForSpan(bg.ReadingRenderPlan, String(bI)),
@@ -576,23 +617,23 @@ export function ApplySyllableLyrics(
             UseRomanized,
             { isBackground: true }
           );
-          if (timedFuriganaGroup) {
-            appendTimedFuriganaMember(lineE, word, bw, timedFuriganaGroup, bgTimedFuriganaState);
+          if (timedRubyGroup) {
+            appendTimedRubyMember(lineE, word, bw, timedRubyGroup, bgTimedRubyState);
             currentBGWordGroup = null;
             currentBGSemanticGroupId = undefined;
             return;
           }
           if (
-            bgTimedFuriganaState.root &&
+            bgTimedRubyState.root &&
             !(bw.Text || "").trim() &&
-            timedGroupContinuesAt(bgTexts, bgTimedFurigana, bI + 1, bgTimedFuriganaState.groupId)
+            timedGroupContinuesAt(bgTexts, bgTimedRubyLookup, bI + 1, bgTimedRubyState.groupId)
           ) {
-            bgTimedFuriganaState.root.appendChild(word);
+            bgTimedRubyState.root.appendChild(word);
             currentBGWordGroup = null;
             currentBGSemanticGroupId = undefined;
             return;
           }
-          resetTimedFuriganaRenderState(bgTimedFuriganaState);
+          resetTimedRubyRenderState(bgTimedRubyState);
 
           const semanticGroupId = bgLogicalGroupIds.get(String(bI));
           if (bgUsesSemanticGroups && semanticGroupId) {

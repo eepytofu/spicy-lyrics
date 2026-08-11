@@ -154,11 +154,20 @@ function withAboveReadingSegments(
     const owners = plan.sourceUnits.filter((unit) =>
       startCp < unit.canonicalRange.endCp && endCp > unit.canonicalRange.startCp
     );
+    const ownerIndexes = owners.map((owner) => plan.sourceUnits.indexOf(owner));
+    const contiguousOwners = ownerIndexes.every(
+      (ownerIndex, ownerPosition) =>
+        ownerPosition === 0 || ownerIndex === ownerIndexes[ownerPosition - 1] + 1,
+    );
+    const supportedOwnerShape = !requireSingleTimingOwner || owners.length === 1 || (
+      segment.kind === "japaneseRomaji" && owners.length > 1 && contiguousOwners
+    );
     return segment.reading.length > 0
       && startCp >= 0
       && endCp > startCp
       && endCp <= canonicalLength
-      && (!requireSingleTimingOwner || owners.length === 1)
+      && owners.length > 0
+      && supportedOwnerShape
       && (index === 0 || segments[index - 1].canonicalRange.endCp <= startCp);
   });
   return valid ? { ...plan, aboveReadingSegments: segments } : plan;

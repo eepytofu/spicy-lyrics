@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { buildCanonicalLine } from "../src/utils/Lyrics/Processing/Canonical.ts";
-import { timedFuriganaGroups, timedGroupContinuesAt } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
+import {
+  timedAboveReadingGroups,
+  timedFuriganaGroups,
+  timedGroupContinuesAt,
+} from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
 import type { ParsedLine } from "../src/utils/Lyrics/Processing/Model.ts";
 
 function charSpans(text: string): ParsedLine {
@@ -124,4 +128,67 @@ test("adjacent crossing rubies form separate consecutive groups", () => {
   assert.deepEqual(result.groups[0].spanIds, ["0", "1"]);
   assert.deepEqual(result.groups[1].spanIds, ["2", "3"]);
   assert.notEqual(result.bySpanId.get("1"), result.bySpanId.get("2"));
+});
+
+test("one Kana romaji annotation spans contiguous timed owners", () => {
+  const canonical = buildCanonicalLine(charSpans("すみません"));
+  const result = timedAboveReadingGroups({
+    sourceUnits: canonical.spanMappings,
+    aboveReadingSegments: [{
+      canonicalRange: { startCp: 0, endCp: 5 },
+      reading: "sumimasen",
+      kind: "japaneseRomaji",
+      provenance: "local",
+    }],
+  } as any);
+
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].kind, "japaneseRomaji");
+  assert.equal(result.groups[0].reading, "sumimasen");
+  assert.deepEqual(result.groups[0].spanIds, ["0", "1", "2", "3", "4"]);
+  assert.equal(result.groups[0].rubyCenterCh, 2.5);
+  assert.equal(result.bySpanId.get("0"), result.groups[0]);
+  assert.equal(result.bySpanId.get("4"), result.groups[0]);
+});
+
+test("multi-owner Mandarin does not become a timed above-reading group", () => {
+  const canonical = buildCanonicalLine(charSpans("如果"));
+  const result = timedAboveReadingGroups({
+    sourceUnits: canonical.spanMappings,
+    aboveReadingSegments: [{
+      canonicalRange: { startCp: 0, endCp: 2 },
+      reading: "rúguǒ",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    }],
+  } as any);
+
+  assert.equal(result.groups.length, 0);
+  assert.equal(result.bySpanId.size, 0);
+});
+
+test("overlapping Kana annotations never duplicate a timed owner", () => {
+  const canonical = buildCanonicalLine(charSpans("すみません"));
+  const result = timedAboveReadingGroups({
+    sourceUnits: canonical.spanMappings,
+    aboveReadingSegments: [
+      {
+        canonicalRange: { startCp: 0, endCp: 3 },
+        reading: "sumi",
+        kind: "japaneseRomaji",
+        provenance: "local",
+      },
+      {
+        canonicalRange: { startCp: 2, endCp: 5 },
+        reading: "masen",
+        kind: "japaneseRomaji",
+        provenance: "local",
+      },
+    ],
+  } as any);
+
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].reading, "sumi");
+  assert.equal(result.bySpanId.has("3"), false);
+  assert.equal(result.bySpanId.has("4"), false);
 });

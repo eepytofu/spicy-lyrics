@@ -311,7 +311,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    anchored inside the first member word so it follows that word's animated
    scale, translateY, and glow like every per-word ruby. Lyric CJK glyphs are
    full-width, so the code-point midpoint maps to em without measurement. */
-#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group.timed-furigana-group {
+#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group.timed-furigana-group,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .semantic-word-group.timed-above-reading-group {
   position: relative;
   overflow: visible;
 }
