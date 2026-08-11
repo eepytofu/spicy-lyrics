@@ -11,9 +11,9 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 ### Lyrics and sources
 
-- Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. This covers more songs and makes syllable-synced or line-synced lyrics easier to find. [Set up the Worker](worker/README.md).
+- Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music, giving you more coverage and more chances to find syllable-synced or line-synced lyrics. [Set up the Worker](worker/README.md).
 - A source manager for enabling, disabling, and ordering providers.
-- When Spotify metadata is romanized, localized, or wrong, you can search again with the original title and artist. The chooser searches again with that metadata, picks the best match, and remembers what you chose for that track.
+- When Spotify metadata is romanized, localized, or wrong, you can search again with the original title and artist. The chooser searches again with that metadata, lets you pick the right match, and remembers what you chose for that track.
 
 <p align="center">
   <img src="assets/lyrics_picker.webp" alt="Choose Lyrics dialog showing manual metadata search and ranked lyric candidates" width="70%">
@@ -22,7 +22,7 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 ### Readings and display
 
 - Japanese reading hints from the lyrics, such as `天(そら)`, become furigana and romaji, override inferred readings, and appear in amber.
-- Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, with an option to display readings below the lyrics or above Han characters. Japanese readings in mixed Chinese lines also appear above their characters.
+- Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, plus a new option to display readings above Han characters. Japanese readings in mixed Chinese lines also share the above-character reading row.
 
 
 ## Install from source
