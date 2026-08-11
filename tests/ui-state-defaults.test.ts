@@ -22,6 +22,7 @@ const {
   $providerTranslationsEnabled,
   $chineseTones,
   $joinMandarinWords,
+  $pinyinPlacement,
   $showBuiltInTranslationButton,
   $translationEnabled,
   $npvLyricsExpanded,
@@ -33,6 +34,7 @@ test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($providerTranslationsEnabled.get(), true);
   assert.equal($chineseTones.get(), true);
   assert.equal($joinMandarinWords.get(), false);
+  assert.equal($pinyinPlacement.get(), "below");
   assert.equal($translationEnabled.get(), false);
   assert.equal($showBuiltInTranslationButton.get(), true);
   assert.equal($npvLyricsOpen.get(), true);

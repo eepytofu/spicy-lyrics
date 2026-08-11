@@ -5,6 +5,7 @@ import {
   $cyrillicKeepSigns,
   $cyrillicRomanizationMode,
   $joinMandarinWords,
+  $pinyinPlacement,
   $koreanDisplayMode,
   $romanization,
   $translationEnabled,
@@ -380,6 +381,11 @@ $chineseTones.listen((val) => {
 export let joinMandarinWords = $joinMandarinWords.get();
 $joinMandarinWords.listen((val) => {
   joinMandarinWords = val;
+});
+
+export let pinyinPlacement = $pinyinPlacement.get();
+$pinyinPlacement.listen((val) => {
+  pinyinPlacement = val;
 });
 
 export let koreanDisplayMode: KoreanDisplayMode = $koreanDisplayMode.get();

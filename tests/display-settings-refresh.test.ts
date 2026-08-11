@@ -61,3 +61,8 @@ test("Simple Mode animation changes rebuild the current presentation", () => {
     /\$simpleLyricsModeRenderingType\.listen\(\(\) => \{\s*if \(!PageContainer \|\| !\$simpleLyricsMode\.get\(\)\) return;\s*queueDisplaySettingsRefresh\(\);/u,
   );
 });
+
+test("Pinyin placement rebuilds processed readings through the guarded queue", () => {
+  const pageSource = readSource("../src/components/Pages/PageView.ts");
+  assert.match(pageSource, /\$pinyinPlacement\.listen\(queueProcessingSettingsRefresh\)/u);
+});

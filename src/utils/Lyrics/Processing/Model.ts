@@ -9,6 +9,7 @@ export type ParagraphProvenance = "provider" | "lineBoundary" | "unavailable";
 export type BoundaryKind = "explicitWhitespace" | "paragraph" | "script" | "inferred";
 export type ReadingUnitKind = "transformed" | "passthrough" | "punctuation";
 export type ReadingProvenance = "provider" | "providerExplicit" | "local" | "remoteFallback";
+export type AboveReadingKind = "mandarinPinyin" | "japaneseRomaji";
 
 export type SourceSpan = {
   readonly id: string;
@@ -78,12 +79,20 @@ export type PlanFuriganaSegment =
       readonly provenance?: ReadingProvenance;
     };
 
+export type AboveReadingSegment = {
+  readonly canonicalRange: TextRange;
+  readonly reading: string;
+  readonly kind: AboveReadingKind;
+  readonly provenance: ReadingProvenance;
+};
+
 export type ReadingAnnotation = {
   readonly processor: string;
   readonly mode: string;
   readonly provenance: ReadingProvenance;
   readonly units: readonly ReadingUnit[];
   readonly furigana?: readonly PlanFuriganaSegment[];
+  readonly aboveReadingSegments?: readonly AboveReadingSegment[];
 };
 
 export type TimedReadingUnit = {

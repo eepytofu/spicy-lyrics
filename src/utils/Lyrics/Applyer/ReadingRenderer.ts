@@ -5,7 +5,11 @@
  * decisions and stable markup so furigana does not leak into every renderer.
  */
 
-import { $japaneseReadingMode } from "../../uiState.ts";
+import {
+  $chineseTranslitMode,
+  $japaneseReadingMode,
+  $pinyinPlacement,
+} from "../../uiState.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
 import { resolveTranslationSidecars } from "../TranslationSidecar.ts";
 import {
@@ -14,11 +18,12 @@ import {
   type JapaneseReadable,
   type JapaneseReading,
 } from "../Reading/JapaneseReading.ts";
-import type { RenderPlan, TextRange } from "../Processing/Model.ts";
+import type { AboveReadingSegment, RenderPlan, TextRange } from "../Processing/Model.ts";
 import { renderReadingPlan } from "./ReadingPlanRenderer.ts";
 import { resolveSyllableBoundary } from "../Processing/SyllableBoundaries.ts";
 import {
   formatMixedScriptReadingForDisplay,
+  hasMixedScriptReadabilityBoundary,
   needsMixedScriptReadabilityGapBefore,
   projectFuriganaSegmentsForReadability,
   projectMixedScriptReadability,
@@ -38,6 +43,9 @@ export type ReadingRenderOptions = {
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
   reserveFurigana?: boolean;
+  reserveAboveReading?: boolean;
+  aboveReadingSegments?: readonly AboveReadingSegment[];
+  primaryScript?: "Japanese" | "Chinese";
   hanLanguageContext?: HanLanguageContext;
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
@@ -116,8 +124,42 @@ export function shouldRenderFurigana(entry: JapaneseReadable | undefined, option
 
 export function shouldRenderRomanization(entry: JapaneseReadable | undefined, options: ReadingRenderOptions): boolean {
   if (!options.useRomanized) return false;
+  if (shouldRenderAboveReadings(entry, options)) return false;
   const isJapanese = isJapaneseEntry(entry, options.isJapaneseLyrics);
   return !isJapanese || $japaneseReadingMode.get() !== "furigana";
+}
+
+export function shouldRenderAboveReadings(
+  entry: JapaneseReadable | undefined,
+  options: ReadingRenderOptions,
+): boolean {
+  if (!options.useRomanized || $chineseTranslitMode.get() !== "pinyin") return false;
+  if ($pinyinPlacement.get() !== "above") return false;
+  const primaryScript = entry?.ReadingPrimaryScript
+    ?? entry?.ReadingRenderPlan?.primaryScript
+    ?? options.primaryScript;
+  if (primaryScript !== "Chinese") return false;
+  return (options.aboveReadingSegments?.length || entry?.ReadingRenderPlan?.aboveReadingSegments?.length || 0) > 0;
+}
+
+export function aboveReadingSegmentsForSpan(
+  plan: RenderPlan | undefined,
+  spanId: string,
+): AboveReadingSegment[] {
+  const mapping = plan?.sourceUnits.find((unit) => unit.spanId === spanId);
+  if (!mapping || !plan?.aboveReadingSegments?.length) return [];
+  return plan.aboveReadingSegments
+    .filter((segment) =>
+      segment.canonicalRange.startCp >= mapping.canonicalRange.startCp &&
+      segment.canonicalRange.endCp <= mapping.canonicalRange.endCp
+    )
+    .map((segment) => ({
+      ...segment,
+      canonicalRange: {
+        startCp: segment.canonicalRange.startCp - mapping.canonicalRange.startCp,
+        endCp: segment.canonicalRange.endCp - mapping.canonicalRange.startCp,
+      },
+    }));
 }
 
 function appendPlainText(
@@ -125,7 +167,7 @@ function appendPlainText(
   text: string,
   sourceStart = 0,
   hanLanguageContext?: HanLanguageContext,
-  layout: "inline" | "furiganaRow" = "inline",
+  layout: "inline" | "furiganaRow" | "aboveReadingRow" = "inline",
 ): void {
   if (!text) return;
 
@@ -136,19 +178,28 @@ function appendPlainText(
       const usesFuriganaRow =
         layout === "furiganaRow" &&
         !WhitespaceOnlyText.test(languageRun.text);
+      const usesAboveReadingRow =
+        layout === "aboveReadingRow" &&
+        !WhitespaceOnlyText.test(languageRun.text);
       run.className = usesFuriganaRow
         ? "lyric-base-run furigana-plain-cluster"
+        : usesAboveReadingRow
+          ? "lyric-base-run furigana-plain-cluster above-reading-plain-cluster has-above-reading"
         : layout === "furiganaRow"
           ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
+          : layout === "aboveReadingRow"
+            ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
           : "lyric-base-run lyric-base-plain";
       run.dataset.sourceStart = String(cursor);
       cursor += languageRun.text.length;
       run.dataset.sourceEnd = String(cursor);
       if (languageRun.language) run.lang = languageRun.language;
 
-      if (usesFuriganaRow) {
+      if (usesFuriganaRow || usesAboveReadingRow) {
         const base = document.createElement("span");
-        base.className = "furigana-base";
+        base.className = usesAboveReadingRow
+          ? "furigana-base above-reading-base"
+          : "furigana-base";
         base.textContent = languageRun.text;
         run.appendChild(base);
       } else {
@@ -298,6 +349,96 @@ export function appendFuriganaText(
   groupWrapPunctuationRuns(parent);
 }
 
+function projectAboveSegmentsForReadability(
+  sourceText: string,
+  segments: readonly AboveReadingSegment[],
+): AboveReadingSegment[] {
+  const characters = Array.from(sourceText);
+  const insertBeforeCp: number[] = [];
+  for (let index = 1; index < characters.length; index += 1) {
+    if (hasMixedScriptReadabilityBoundary(characters[index - 1], characters[index])) {
+      insertBeforeCp.push(index);
+    }
+  }
+  const beforeOrAt = (offset: number): number =>
+    insertBeforeCp.filter((position) => position <= offset).length;
+  const strictlyBefore = (offset: number): number =>
+    insertBeforeCp.filter((position) => position < offset).length;
+  return segments.map((segment) => ({
+    ...segment,
+    canonicalRange: {
+      startCp: segment.canonicalRange.startCp + beforeOrAt(segment.canonicalRange.startCp),
+      endCp: segment.canonicalRange.endCp + strictlyBefore(segment.canonicalRange.endCp),
+    },
+  }));
+}
+
+export function appendAboveReadingText(
+  parent: HTMLElement,
+  text: string,
+  rawSegments: readonly AboveReadingSegment[],
+  hanLanguageContext?: HanLanguageContext,
+): void {
+  parent.textContent = "";
+  const characters = Array.from(text);
+  const segments = [...rawSegments]
+    .filter(({ canonicalRange, reading }) =>
+      !!reading &&
+      canonicalRange.startCp >= 0 &&
+      canonicalRange.endCp > canonicalRange.startCp &&
+      canonicalRange.endCp <= characters.length
+    )
+    .sort((a, b) => a.canonicalRange.startCp - b.canonicalRange.startCp);
+  let cursorCp = 0;
+
+  for (const segment of segments) {
+    const { startCp, endCp } = segment.canonicalRange;
+    if (startCp < cursorCp) continue;
+    appendPlainText(
+      parent,
+      characters.slice(cursorCp, startCp).join(""),
+      cursorCp,
+      hanLanguageContext,
+      "aboveReadingRow",
+    );
+
+    const ruby = document.createElement("ruby");
+    ruby.className = "lyric-base-run furigana-cluster above-reading-cluster has-above-reading";
+    ruby.dataset.sourceStart = String(startCp);
+    ruby.dataset.sourceEnd = String(endCp);
+    ruby.dataset.aboveReadingKind = segment.kind;
+    const baseText = characters.slice(startCp, endCp).join("");
+    const language = resolveHanLanguageTagForContext(baseText, hanLanguageContext);
+    if (language) ruby.lang = language;
+
+    const base = document.createElement("span");
+    base.className = "furigana-base above-reading-base";
+    base.textContent = baseText;
+    const annotation = document.createElement("rt");
+    annotation.className = `furigana-reading above-reading-text above-reading-${segment.kind}`;
+    annotation.lang = segment.kind === "mandarinPinyin" ? "zh-Latn" : "ja-Latn";
+    populateFuriganaReading(annotation, segment.reading, startCp, endCp, characters.length);
+    ruby.append(base, annotation);
+    parent.appendChild(ruby);
+    cursorCp = endCp;
+  }
+
+  appendPlainText(
+    parent,
+    characters.slice(cursorCp).join(""),
+    cursorCp,
+    hanLanguageContext,
+    "aboveReadingRow",
+  );
+  groupWrapPunctuationRuns(parent);
+  packAdjacentFuriganaClusters(
+    Array.from(parent.children)
+      .flatMap((child) => child.classList.contains("lyric-wrap-group")
+        ? Array.from(child.children)
+        : [child]) as HTMLElement[],
+  );
+}
+
 const hasElementClass = (element: Element, className: string): boolean =>
   element.classList.contains(className) || String(element.className).split(/\s+/u).includes(className);
 
@@ -350,6 +491,15 @@ export function renderBaseTextWithReadings(
       }
     : undefined;
 
+  const aboveReadingSegments = options.aboveReadingSegments
+    ?? entry.ReadingRenderPlan?.aboveReadingSegments;
+  if (shouldRenderAboveReadings(entry, { ...options, aboveReadingSegments }) && aboveReadingSegments) {
+    const segments = projectAboveSegmentsForReadability(sourceDisplayText, aboveReadingSegments);
+    element.classList.add("has-above-reading");
+    appendAboveReadingText(element, text, segments, hanLanguageContext);
+    return true;
+  }
+
   if (shouldRenderFurigana(entry, options) && reading) {
     const sourceSegments = options.suppressedFuriganaKeys?.length
       ? reading.furigana.filter((segment) =>
@@ -370,6 +520,16 @@ export function renderBaseTextWithReadings(
       );
       return true;
     }
+  }
+
+  if (
+    options.useRomanized &&
+    options.reserveAboveReading &&
+    entry.ReadingPrimaryScript === "Chinese"
+  ) {
+    element.classList.add("has-above-reading");
+    appendPlainText(element, text, 0, hanLanguageContext, "aboveReadingRow");
+    return true;
   }
 
   if (
@@ -534,6 +694,7 @@ export function appendSyllableRomanizedBelow(
     TransliteratedText: groupRomanizedText,
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
     ReadingPrimaryScript: readingPlan?.primaryScript,
+    ReadingRenderPlan: readingPlan,
   };
 
   const readabilityGapSpanIds = new Set(

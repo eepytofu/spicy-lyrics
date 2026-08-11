@@ -11,6 +11,7 @@ import {
   cyrillicRomanizationMode,
   joinMandarinWords,
   koreanDisplayMode,
+  pinyinPlacement,
 } from "./lyrics.ts";
 import {
   ChineseTextTest,
@@ -37,6 +38,7 @@ import {
   romanizeCantonese,
   buildMandarinWordLayout,
   joinMandarinReadingWords,
+  projectMandarinReading,
   romanizeMandarin,
   romanizeCyrillic,
   romanizeKoreanForDisplay,
@@ -64,7 +66,9 @@ import {
 } from "./Processing/GenericReadingProcessor.ts";
 import {
   buildCjkReadingContextText,
+  projectChineseDominantCjkReadings,
   romanizeChineseDominantCjkText,
+  type CjkRunReadingProjection,
 } from "./Processing/CjkLanguageRouting.ts";
 import {
   allowsChineseProviderJapaneseRepair,
@@ -80,15 +84,15 @@ import {
   selectTimedLineReading,
   shouldPreferGeneratedReading,
 } from "./Processing/ReadingPrecedence.ts";
-import type { ParsedLine } from "./Processing/Model.ts";
+import type { AboveReadingSegment, ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v63: add anchored partial-compound coverage and audited contextual readings.
-export const LYRICS_PROCESSING_VERSION = 63;
-// v4: reading plans retain provider-explicit provenance for ruby and romaji styling.
-export const READING_PLAN_SCHEMA_VERSION = 4;
+// v64: add structured above-line readings for Mandarin and mixed Kana runs.
+export const LYRICS_PROCESSING_VERSION = 64;
+// v5: render plans can carry canonical above-reading segments.
+export const READING_PLAN_SCHEMA_VERSION = 5;
 
 // Constants
 const romanizationLogger = new Logger("Lyrics Romanization");
@@ -133,6 +137,57 @@ const romanizeChineseText = async (text: string, primaryLanguage: string): Promi
   }
   return romanizeMandarin(text, chineseTones);
 };
+
+const KanaRunTest = /[\p{Script=Hiragana}\p{Script=Katakana}ー]+/gu;
+
+const projectMandarinRun = (text: string): CjkRunReadingProjection => {
+  const projection = projectMandarinReading(text, chineseTones);
+  return {
+    text: projection.text,
+    valid: projection.valid,
+    segments: projection.segments.map((segment) => ({
+      ...segment,
+      kind: "mandarinPinyin" as const,
+    })),
+  };
+};
+
+const projectKanaRun = async (text: string): Promise<CjkRunReadingProjection> => {
+  const segments: CjkRunReadingProjection["segments"][number][] = [];
+  let output = "";
+  let sourceCursorUtf16 = 0;
+  let valid = true;
+
+  for (const match of text.matchAll(KanaRunTest)) {
+    const matchStartUtf16 = match.index;
+    const kana = match[0];
+    output += text.slice(sourceCursorUtf16, matchStartUtf16);
+    const reading = (await analyzeJapaneseLine(kana))?.romaji?.trim();
+    if (!reading || JapaneseTextTest.test(reading)) {
+      valid = false;
+      output += kana;
+    } else {
+      const startCp = Array.from(text.slice(0, matchStartUtf16)).length;
+      segments.push({
+        startCp,
+        endCp: startCp + Array.from(kana).length,
+        reading,
+        kind: "japaneseRomaji",
+      });
+      output += reading;
+    }
+    sourceCursorUtf16 = matchStartUtf16 + kana.length;
+  }
+  output += text.slice(sourceCursorUtf16);
+
+  return { text: output, segments, valid: valid && segments.length > 0 };
+};
+
+const projectChineseAboveReading = (text: string) =>
+  projectChineseDominantCjkReadings(text, {
+    projectHan: projectMandarinRun,
+    projectKana: projectKanaRun,
+  });
 
 const romanizeKoreanText = (text: string): string =>
   romanizeKoreanForDisplay(text, koreanDisplayMode).display;
@@ -333,10 +388,17 @@ const romanizeLineText = async (
   docContext: ScriptBranchDocContext,
   language: string,
   arabicReadings: ReadonlyMap<string, string>,
-): Promise<string | undefined> => {
+): Promise<{ text: string; aboveReadingSegments?: AboveReadingSegment[] } | undefined> => {
   const entry: RomanizeEntry = { target: { Text: text }, line: {}, lineText: text };
   const changed = await romanizeEntry(entry, docContext, language, arabicReadings, false);
-  return changed ? entry.target.TransliteratedText : undefined;
+  return changed
+    ? {
+        text: entry.target.TransliteratedText,
+        ...(entry.target.AboveReadingSegments
+          ? { aboveReadingSegments: entry.target.AboveReadingSegments }
+          : {}),
+      }
+    : undefined;
 };
 
 const postProcessSyllableRomanization = async (
@@ -466,7 +528,7 @@ const postProcessSyllableRomanization = async (
           return `${output}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${reading}`;
         }, "")
         : undefined;
-      const generatedLineReading = await romanizeLineText(
+      const generatedLineProjection = await romanizeLineText(
         effectiveLineText,
         docContext,
         language,
@@ -474,7 +536,7 @@ const postProcessSyllableRomanization = async (
       );
       const reading = selectTimedLineReading(
         isArabicLine,
-        generatedLineReading,
+        generatedLineProjection?.text,
         providerGroupReading,
         providerSyllableReading,
       );
@@ -495,8 +557,18 @@ const postProcessSyllableRomanization = async (
           }
         }
         const mandarinWordLayout =
-          cjkLineRoute === "Chinese" && chineseTranslitMode === "pinyin" && joinMandarinWords
+          cjkLineRoute === "Chinese" &&
+            chineseTranslitMode === "pinyin" &&
+            pinyinPlacement === "below" &&
+            joinMandarinWords
             ? buildMandarinWordLayout(effectiveLineText)
+            : undefined;
+        const aboveReadingSegments =
+          pinyinPlacement === "above" &&
+            chineseTranslitMode === "pinyin" &&
+            reading.provenance === "local" &&
+            reading.text === generatedLineProjection?.text
+            ? generatedLineProjection?.aboveReadingSegments
             : undefined;
         const plan = isArabicLine && reading.usesLineContext
           ? buildTimedContextReadingPlan(group, fullRomaji, "Arabic", reading.provenance)
@@ -504,7 +576,7 @@ const postProcessSyllableRomanization = async (
             group,
             fullRomaji,
             isChineseLine ? "Chinese" : "Generic",
-            { mandarinWordLayout, provenance: reading.provenance },
+            { mandarinWordLayout, provenance: reading.provenance, aboveReadingSegments },
           );
         if (plan) {
           group.ReadingRenderPlan = plan;
@@ -590,10 +662,25 @@ const romanizeEntry = async (
     cjkLineRoute !== "Japanese" &&
     (ItemChineseTest.test(text) || JapaneseTextTest.test(text));
   if (chineseDominantCjk) {
-    text = await romanizeChineseDominantCjkText(text, {
-      romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
-      romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
-    });
+    if (chineseTranslitMode === "pinyin" && pinyinPlacement === "above") {
+      const projection = await projectChineseAboveReading(text);
+      if (projection.valid && projection.aboveReadingSegments.length > 0) {
+        text = projection.text;
+        target.AboveReadingSegments = projection.aboveReadingSegments;
+      } else {
+        delete target.AboveReadingSegments;
+        text = await romanizeChineseDominantCjkText(text, {
+          romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
+          romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
+        });
+      }
+    } else {
+      delete target.AboveReadingSegments;
+      text = await romanizeChineseDominantCjkText(text, {
+        romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
+        romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
+      });
+    }
     changed = text !== target.Text;
   }
 
@@ -804,18 +891,28 @@ export const ProcessLyrics = async (
           entry.lineText || entry.target.Text || "",
           docContext
         );
-        if (joinMandarinWords && chineseTranslitMode === "pinyin" && cjkLineRoute === "Chinese") {
+        if (
+          joinMandarinWords &&
+          chineseTranslitMode === "pinyin" &&
+          pinyinPlacement === "below" &&
+          cjkLineRoute === "Chinese"
+        ) {
           display = joinMandarinReadingWords(entry.target.Text || "", display);
         }
         entry.target.ReadingRenderPlan = buildLineFallbackPlan(
           entry.target.Text || "",
           display,
-          `line-${index}`
+          `line-${index}`,
+          entry.target.AboveReadingSegments,
         );
         delete entry.target.RomanizedText;
         delete entry.target.TransliteratedText;
       });
     }
+  }
+
+  for (const entry of entries) {
+    delete entry.target.AboveReadingSegments;
   }
 
   const hasAnyTransliteration = lyricsHaveAnyTransliteration(lyrics);

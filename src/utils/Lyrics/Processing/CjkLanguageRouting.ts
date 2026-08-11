@@ -1,4 +1,5 @@
 import { needsSyllableSpaceBefore } from "./SyllableBoundaries.ts";
+import type { AboveReadingKind, AboveReadingSegment } from "./Model.ts";
 
 export type CjkReadingRunKind = "Han" | "Kana" | "Other";
 
@@ -10,6 +11,30 @@ export type CjkReadingRun = {
 type ChineseDominantProcessors = {
   romanizeHan: (text: string) => string | undefined | Promise<string | undefined>;
   romanizeKana: (text: string) => string | undefined | Promise<string | undefined>;
+};
+
+export type CjkRunReadingSegment = {
+  startCp: number;
+  endCp: number;
+  reading: string;
+  kind: AboveReadingKind;
+};
+
+export type CjkRunReadingProjection = {
+  text: string;
+  segments: readonly CjkRunReadingSegment[];
+  valid: boolean;
+};
+
+type ChineseDominantProjectionProcessors = {
+  projectHan: (text: string) => CjkRunReadingProjection | Promise<CjkRunReadingProjection>;
+  projectKana: (text: string) => CjkRunReadingProjection | Promise<CjkRunReadingProjection>;
+};
+
+export type ChineseDominantReadingProjection = {
+  text: string;
+  aboveReadingSegments: readonly AboveReadingSegment[];
+  valid: boolean;
 };
 
 type TimedReadingTextUnit = {
@@ -79,4 +104,58 @@ export async function romanizeChineseDominantCjkText(
   }
 
   return output;
+}
+
+export async function projectChineseDominantCjkReadings(
+  text: string,
+  processors: ChineseDominantProjectionProcessors,
+): Promise<ChineseDominantReadingProjection> {
+  const runs = partitionCjkReadingRuns(text);
+  const aboveReadingSegments: AboveReadingSegment[] = [];
+  let output = "";
+  let sourceCursorCp = 0;
+  let previousKind: CjkReadingRunKind | undefined;
+  // The existing run partition normalizes for analyzer compatibility. Above
+  // readings need exact source coordinates, so fail closed if normalization
+  // changed the authored text rather than guessing at a range projection.
+  let valid = runs.map((run) => run.text).join("") === text;
+
+  for (const run of runs) {
+    let projection: CjkRunReadingProjection = { text: run.text, segments: [], valid: true };
+    if (run.kind === "Han") projection = await processors.projectHan(run.text);
+    else if (run.kind === "Kana") projection = await processors.projectKana(run.text);
+
+    const runLengthCp = Array.from(run.text).length;
+    valid &&= projection.valid && projection.segments.every((segment) =>
+      segment.reading.length > 0 &&
+      segment.startCp >= 0 &&
+      segment.endCp > segment.startCp &&
+      segment.endCp <= runLengthCp
+    );
+    for (const segment of projection.segments) {
+      aboveReadingSegments.push({
+        canonicalRange: {
+          startCp: sourceCursorCp + segment.startCp,
+          endCp: sourceCursorCp + segment.endCp,
+        },
+        reading: segment.reading,
+        kind: segment.kind,
+        provenance: "local",
+      });
+    }
+
+    const transformed = projection.text || run.text;
+    const crossesReadableScriptBoundary =
+      (previousKind === "Han" || previousKind === "Kana") &&
+      (run.kind === "Han" || run.kind === "Kana") &&
+      previousKind !== run.kind;
+    if (crossesReadableScriptBoundary && output && !/\s$/u.test(output) && !/^\s/u.test(transformed)) {
+      output += " ";
+    }
+    output += transformed;
+    sourceCursorCp += runLengthCp;
+    previousKind = run.kind;
+  }
+
+  return { text: output, aboveReadingSegments, valid };
 }

@@ -25,6 +25,7 @@ import {
   cyrillicRomanizationMode,
   joinMandarinWords,
   koreanDisplayMode,
+  pinyinPlacement,
   translationEnabled,
   translationTargetLang,
 } from "./lyrics.ts";
@@ -110,6 +111,7 @@ function currentProcessingContextKey(): string {
     chineseTranslitMode,
     chineseTones,
     joinMandarinWords,
+    pinyinPlacement,
     chineseCharacterForm: $chineseCharacterForm.get(),
     koreanDisplayMode,
     cyrillicRomanizationMode,

@@ -1,6 +1,12 @@
 import { buildCanonicalLine } from "./Canonical.ts";
 import { buildRenderPlan, validateRenderPlan } from "./RenderPlan.ts";
-import type { ParsedLine, ReadingAnnotation, ReadingProvenance, RenderPlan } from "./Model.ts";
+import type {
+  AboveReadingSegment,
+  ParsedLine,
+  ReadingAnnotation,
+  ReadingProvenance,
+  RenderPlan,
+} from "./Model.ts";
 
 function align(chunks: string[], display: string): string[] {
   const out = [...chunks];
@@ -70,7 +76,33 @@ type TimedGenericPlanOptions = {
     continuationTokenIndices: ReadonlySet<number>;
   };
   provenance?: ReadingProvenance;
+  aboveReadingSegments?: readonly AboveReadingSegment[];
 };
+
+function withAboveReadingSegments(
+  plan: RenderPlan,
+  segments: readonly AboveReadingSegment[] | undefined,
+  requireSingleTimingOwner: boolean,
+): RenderPlan {
+  if (!segments?.length) return plan;
+  const canonicalLength = plan.sourceUnits.reduce(
+    (max, unit) => Math.max(max, unit.canonicalRange.endCp),
+    0,
+  );
+  const valid = canonicalLength > 0 && segments.every((segment, index) => {
+    const { startCp, endCp } = segment.canonicalRange;
+    const owners = plan.sourceUnits.filter((unit) =>
+      startCp < unit.canonicalRange.endCp && endCp > unit.canonicalRange.startCp
+    );
+    return segment.reading.length > 0
+      && startCp >= 0
+      && endCp > startCp
+      && endCp <= canonicalLength
+      && (!requireSingleTimingOwner || owners.length === 1)
+      && (index === 0 || segments[index - 1].canonicalRange.endCp <= startCp);
+  });
+  return valid ? { ...plan, aboveReadingSegments: segments } : plan;
+}
 
 type TimedReadingSyllable = {
   Text?: string;
@@ -209,7 +241,11 @@ export function buildTimedGenericPlan(
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",
       logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId], provenance })) };
-  const plan = buildRenderPlan(parsed, canonical, [annotation]);
+  const plan = withAboveReadingSegments(
+    buildRenderPlan(parsed, canonical, [annotation]),
+    options.aboveReadingSegments,
+    true,
+  );
   if (!validateRenderPlan(plan).valid) return undefined;
   return processor === "Chinese" ? { ...plan, primaryScript: "Chinese" } : plan;
 }
@@ -246,12 +282,21 @@ export function buildTimedContextReadingPlan(
   return validateRenderPlan(plan).valid ? plan : undefined;
 }
 
-export function buildLineFallbackPlan(source: string, display: string, id: string): RenderPlan {
+export function buildLineFallbackPlan(
+  source: string,
+  display: string,
+  id: string,
+  aboveReadingSegments?: readonly AboveReadingSegment[],
+): RenderPlan {
   const parsed: ParsedLine = { id, displayText: source, paragraphProvenance: "lineBoundary",
     spans: [{ id: "line", rawText: source, cleanText: source, startMs: 0, endMs: 0, providerPartOfWord: false }] };
   const canonical = buildCanonicalLine(parsed);
   const annotation: ReadingAnnotation = { processor: "Fallback", mode: "line", provenance: "provider",
     units: [{ canonicalRange: { startCp: 0, endCp: Array.from(canonical.text).length }, text: display,
       kind: "transformed", logicalGroupId: "line", timingRefs: [] }] };
-  return buildRenderPlan(parsed, canonical, [annotation]);
+  return withAboveReadingSegments(
+    buildRenderPlan(parsed, canonical, [annotation]),
+    aboveReadingSegments,
+    false,
+  );
 }

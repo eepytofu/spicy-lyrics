@@ -21,11 +21,13 @@ import Emphasize from "../Utils/Emphasize.ts";
 import { IsLetterCapable } from "../Utils/IsLetterCapable.ts";
 import {
   appendSyllableRomanizedBelow,
+  aboveReadingSegmentsForSpan,
   isJapaneseEntry,
   packAdjacentFuriganaClusters,
   populateFuriganaReading,
   renderBaseTextWithReadings,
   shouldRenderFurigana,
+  shouldRenderAboveReadings,
 } from "../ReadingRenderer.ts";
 import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
@@ -147,8 +149,11 @@ const createSyllableWord = (
   const totalDuration = ConvertTime(syllable.EndTime) - ConvertTime(syllable.StartTime);
   const letterLength = syllable.Text.split("").length;
   const hasFurigana = shouldRenderFurigana(syllable, renderOptions);
+  const hasAboveReading = shouldRenderAboveReadings(syllable, renderOptions);
   const reservesFuriganaRow =
-    hasFurigana || (renderOptions.reserveFurigana === true && useRomanized);
+    hasFurigana ||
+    hasAboveReading ||
+    ((renderOptions.reserveFurigana === true || renderOptions.reserveAboveReading === true) && useRomanized);
   // Package-backed Japanese words need a registered word element in every
   // display mode. Letter emphasis returns before timing registration.
   const letterCapable =
@@ -403,9 +408,15 @@ export function ApplySyllableLyrics(
     const leadHasFurigana =
       shouldRenderFurigana(line.Lead, lineRenderOptions) ||
       line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
+    const leadHasAboveReading = shouldRenderAboveReadings(line.Lead, lineRenderOptions);
     const leadUsesSemanticGroups =
       line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
-    const leadRenderOptions = { ...lineRenderOptions, reserveFurigana: leadHasFurigana };
+    const leadRenderOptions = {
+      ...lineRenderOptions,
+      reserveFurigana: leadHasFurigana,
+      reserveAboveReading: leadHasAboveReading,
+      primaryScript: line.Lead.ReadingRenderPlan?.primaryScript,
+    };
     const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
     const leadTimedFurigana = leadHasFurigana
       ? timedFuriganaGroups(line.Lead.ReadingRenderPlan)
@@ -422,13 +433,20 @@ export function ApplySyllableLyrics(
         // group; member words suppress only their copy of that reading but
         // keep their timing registration. The line is never collapsed.
         const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
+        const wordRenderOptions = {
+          ...leadRenderOptions,
+          aboveReadingSegments: aboveReadingSegmentsForSpan(
+            line.Lead.ReadingRenderPlan,
+            String(iL),
+          ),
+        };
         const word = createSyllableWord(
           lead,
           iL,
           aL,
           timedFuriganaGroup
-            ? { ...leadRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-            : leadRenderOptions,
+            ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
+            : wordRenderOptions,
           UseRomanized
         );
         if (timedFuriganaGroup) {
@@ -520,9 +538,15 @@ export function ApplySyllableLyrics(
         const bgHasFurigana =
           shouldRenderFurigana(bg, bgRenderOptions) ||
           bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
+        const bgHasAboveReading = shouldRenderAboveReadings(bg, bgRenderOptions);
         const bgUsesSemanticGroups =
           bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
-        const bgWordRenderOptions = { ...bgRenderOptions, reserveFurigana: bgHasFurigana };
+        const bgWordRenderOptions = {
+          ...bgRenderOptions,
+          reserveFurigana: bgHasFurigana,
+          reserveAboveReading: bgHasAboveReading,
+          primaryScript: bg.ReadingRenderPlan?.primaryScript,
+        };
         const bgSourceText =
           bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
         const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
@@ -538,13 +562,17 @@ export function ApplySyllableLyrics(
           }
 
           const timedFuriganaGroup = bgTimedFurigana.bySpanId.get(String(bI));
+          const wordRenderOptions = {
+            ...bgWordRenderOptions,
+            aboveReadingSegments: aboveReadingSegmentsForSpan(bg.ReadingRenderPlan, String(bI)),
+          };
           const word = createSyllableWord(
             bw,
             bI,
             bA,
             timedFuriganaGroup
-              ? { ...bgWordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-              : bgWordRenderOptions,
+              ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
+              : wordRenderOptions,
             UseRomanized,
             { isBackground: true }
           );

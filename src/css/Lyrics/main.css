@@ -27,6 +27,8 @@
   --DefaultLyricsSize: clamp(1.85rem, calc(1cqw * 7), 3.5rem);
   --japanese-ruby-ratio: 0.46em;
   --japanese-ruby-gap: 0.12em;
+  --pinyin-ruby-ratio: 0.38em;
+  --pinyin-ruby-gap: 0.1em;
   --japanese-romaji-ratio: 0.48;
   --japanese-translation-ratio: 0.44;
   --amll-lyric-player-font-size: var(--DefaultLyricsSize);
@@ -147,12 +149,28 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   overflow: visible;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .has-above-reading {
+  --furigana-rt-size: var(--pinyin-ruby-ratio);
+  --furigana-rt-gap: var(--pinyin-ruby-gap);
+  overflow: visible;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.has-furigana,
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line:has(.has-furigana),
+#SpicyLyricsPage .LyricsContainer .LyricsContent .line:has(.has-above-reading),
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending {
   row-gap: 0.12em;
   padding-top: 0.08em;
   padding-bottom: 0.16em;
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent ruby.above-reading-cluster {
+  ruby-position: over;
+  text-indent: 0;
+}
+
+#SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-text {
+  font-variant-east-asian: normal;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending::before {

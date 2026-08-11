@@ -7,6 +7,7 @@ import {
   $cyrillicRomanizationMode,
   $japaneseReadingMode,
   $joinMandarinWords,
+  $pinyinPlacement,
   $koreanDisplayMode,
 } from "../../../utils/uiState.ts";
 import { matches, Row, Select, SectionTitle, SubsectionTitle, Toggle } from "./components.tsx";
@@ -22,6 +23,7 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
   const chineseMode = useStore($chineseTranslitMode);
   const chineseTones = useStore($chineseTones);
   const joinMandarinWords = useStore($joinMandarinWords);
+  const pinyinPlacement = useStore($pinyinPlacement);
   const japaneseMode = useStore($japaneseReadingMode);
   const koreanMode = useStore($koreanDisplayMode);
   const cyrillicMode = useStore($cyrillicRomanizationMode);
@@ -45,6 +47,11 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
       "Group Pinyin by Word",
       "Keep Pinyin syllables together when they belong to the same detected Mandarin word."
     ),
+    pinyinPlacement: matches(
+      query,
+      "Pinyin Placement",
+      "Show Mandarin Pinyin below the lyric or above its characters."
+    ),
     japanese: matches(query, "Japanese Reading", "Choose romaji, furigana, or both."),
     korean: matches(query, "Korean Reading", "Choose transliteration or pronunciation output."),
     cyrillic: matches(
@@ -59,7 +66,7 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
   return (
     <>
       <SectionTitle>{SECTION_NAME}</SectionTitle>
-      {(rows.chineseForm || rows.chineseMode || rows.chineseTones || rows.mandarinWords) && (
+      {(rows.chineseForm || rows.chineseMode || rows.chineseTones || rows.mandarinWords || rows.pinyinPlacement) && (
         <SubsectionTitle>Chinese</SubsectionTitle>
       )}
       {rows.chineseForm && (
@@ -90,16 +97,36 @@ export default function LanguagesSection({ query, sectionFilter }: Props) {
           <Toggle checked={chineseTones} onChange={(value) => $chineseTones.set(value)} />
         </Row>
       )}
+      {rows.pinyinPlacement && (
+        <Row
+          label="Pinyin Placement"
+          description="Show Mandarin Pinyin below the lyric or above its characters."
+          disabled={chineseMode !== "pinyin"}
+          disabledReason="Choose Mandarin Pinyin first."
+        >
+          <Select
+            value={pinyinPlacement}
+            options={["below", "above"]}
+            labels={["Below lyrics", "Above characters"]}
+            onChange={(value) => $pinyinPlacement.set(value as typeof pinyinPlacement)}
+            disabled={chineseMode !== "pinyin"}
+          />
+        </Row>
+      )}
       {rows.mandarinWords && (
         <Row
           label="Group Pinyin by Word"
           description="Keep Pinyin syllables together when they belong to the same detected Mandarin word."
-          disabled={chineseMode !== "pinyin"}
-          disabledReason="Choose Mandarin Pinyin first."
+          disabled={chineseMode !== "pinyin" || pinyinPlacement === "above"}
+          disabledReason={
+            chineseMode !== "pinyin"
+              ? "Choose Mandarin Pinyin first."
+              : "Only available when Pinyin is below lyrics."
+          }
         >
           <Toggle
             checked={joinMandarinWords}
-            disabled={chineseMode !== "pinyin"}
+            disabled={chineseMode !== "pinyin" || pinyinPlacement === "above"}
             onChange={(value) => $joinMandarinWords.set(value)}
           />
         </Row>

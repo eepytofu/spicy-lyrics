@@ -136,14 +136,59 @@ export function stripJyutpingTones(text: string): string {
   return text.replace(/(?<=[a-zA-Z])[1-6]/g, "");
 }
 
-export function romanizeMandarin(text: string, tones = true): string {
+export type MandarinReadingSegment = {
+  startCp: number;
+  endCp: number;
+  reading: string;
+};
+
+export type MandarinReadingProjection = {
+  text: string;
+  segments: MandarinReadingSegment[];
+  valid: boolean;
+};
+
+export function projectMandarinReading(text: string, tones = true): MandarinReadingProjection {
   const readings = pinyin(text, {
-    type: "array",
+    type: "all",
     toneType: tones ? "symbol" : "none",
     toneSandhi: false,
     nonZh: "consecutive",
   });
-  return readings.join(" ").replace(/\s+/gu, " ").trim();
+  const segments: MandarinReadingSegment[] = [];
+  let cursorCp = 0;
+  let reconstructed = "";
+
+  for (const result of readings) {
+    const origin = result.origin || "";
+    const originLength = Array.from(origin).length;
+    reconstructed += origin;
+    if (
+      result.isZh &&
+      originLength === 1 &&
+      isChineseHanChar(origin) &&
+      result.result &&
+      result.result !== origin
+    ) {
+      segments.push({
+        startCp: cursorCp,
+        endCp: cursorCp + 1,
+        reading: result.result,
+      });
+    }
+    cursorCp += originLength;
+  }
+
+  const hanCount = Array.from(text).filter(isChineseHanChar).length;
+  return {
+    text: readings.map((result) => result.result).join(" ").replace(/\s+/gu, " ").trim(),
+    segments,
+    valid: reconstructed === text && segments.length === hanCount,
+  };
+}
+
+export function romanizeMandarin(text: string, tones = true): string {
+  return projectMandarinReading(text, tones).text;
 }
 
 export type MandarinWordLayout = {

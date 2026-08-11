@@ -76,6 +76,7 @@ const storage = new Map<string, string>();
 };
 
 const {
+  appendAboveReadingText,
   appendFuriganaText,
   appendLineExtras,
   appendSyllableRomanizedBelow,
@@ -86,7 +87,11 @@ const {
 } = await import(
   "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
 );
-const { $japaneseReadingMode } = await import("../src/utils/uiState.ts");
+const {
+  $chineseTranslitMode,
+  $japaneseReadingMode,
+  $pinyinPlacement,
+} = await import("../src/utils/uiState.ts");
 const staticApplyerSource = readFileSync(
   new URL("../src/utils/Lyrics/Applyer/Static.ts", import.meta.url),
   "utf8",
@@ -1008,6 +1013,98 @@ test("an explicit Chinese reading route overrides an embedded kana island", () =
     Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",
     ReadingPrimaryScript: "Chinese",
   }), false);
+});
+
+test("semantic above readings keep Pinyin and sumimasen in one ruby row", () => {
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("above");
+  const line = new FakeElement();
+  appendAboveReadingText(
+    line as unknown as HTMLElement,
+    "如果すみません",
+    [
+      { canonicalRange: { startCp: 0, endCp: 1 }, reading: "rú", kind: "mandarinPinyin", provenance: "local" },
+      { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guǒ", kind: "mandarinPinyin", provenance: "local" },
+      { canonicalRange: { startCp: 2, endCp: 7 }, reading: "sumimasen", kind: "japaneseRomaji", provenance: "local" },
+    ],
+  );
+
+  const ruby = line.children.filter((child) => child.className.includes("above-reading-cluster"));
+  assert.equal(ruby.length, 3);
+  assert.equal(ruby[0].children[0].textContent, "如");
+  assert.equal(ruby[0].children[1].textContent, "rú");
+  assert.equal(ruby[2].children[0].textContent, "すみません");
+  assert.equal(ruby[2].children[1].textContent, "sumimasen");
+  assert.equal(ruby[2].children[1].lang, "ja-Latn");
+  assert.match(
+    readFileSync(new URL("../src/utils/Lyrics/Applyer/ReadingRenderer.ts", import.meta.url), "utf8"),
+    /createElement\("ruby"\)[\s\S]*?createElement\("rt"\)/u,
+  );
+  $pinyinPlacement.set("below");
+});
+
+test("above placement suppresses the mixed Chinese bottom lane without dropping its plan", () => {
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("above");
+  const line = new FakeElement();
+  const mixedPlan = {
+    ...plan,
+    primaryScript: "Chinese" as const,
+    sourceUnits: [
+      { spanId: "0", canonicalRange: { startCp: 0, endCp: 2 } },
+      { spanId: "1", canonicalRange: { startCp: 2, endCp: 7 } },
+    ],
+    joinedDisplayText: "ru guo sumimasen",
+    timedReadingUnits: [
+      { spanId: "0", canonicalRange: { startCp: 0, endCp: 2 }, text: "ru guo", logicalGroupId: "cn-0" },
+      { spanId: "1", canonicalRange: { startCp: 2, endCp: 7 }, text: " sumimasen", logicalGroupId: "jp-1" },
+    ],
+    aboveReadingSegments: [
+      { canonicalRange: { startCp: 0, endCp: 1 }, reading: "ru", kind: "mandarinPinyin" as const, provenance: "local" as const },
+      { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guo", kind: "mandarinPinyin" as const, provenance: "local" as const },
+      { canonicalRange: { startCp: 2, endCp: 7 }, reading: "sumimasen", kind: "japaneseRomaji" as const, provenance: "local" as const },
+    ],
+  };
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [{ Text: "如果" }, { Text: "すみません" }],
+    "如果すみません",
+    undefined, undefined, undefined,
+    [{}, {}], mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false },
+  );
+  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), false);
+  assert.equal(mixedPlan.joinedDisplayText, "ru guo sumimasen");
+
+  $pinyinPlacement.set("below");
+  appendSyllableRomanizedBelow(
+    line as unknown as HTMLElement,
+    [{ Text: "如果" }, { Text: "すみません" }],
+    "如果すみません",
+    undefined, undefined, undefined,
+    [{}, {}], mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false },
+  );
+  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true);
+
+  $pinyinPlacement.set("above");
+  $chineseTranslitMode.set("jyutping");
+  const jyutpingLine = new FakeElement();
+  appendSyllableRomanizedBelow(
+    jyutpingLine as unknown as HTMLElement,
+    [{ Text: "如果" }, { Text: "すみません" }],
+    "如果すみません",
+    undefined, undefined, undefined,
+    [{}, {}], mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false },
+  );
+  assert.equal(
+    jyutpingLine.children.some((child) => child.className.includes("reading-plan-row")),
+    true,
+  );
+  assert.equal($pinyinPlacement.get(), "above");
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("below");
 });
 
 test("Chinese-dominant mixed readings stay visible in Japanese furigana mode", () => {

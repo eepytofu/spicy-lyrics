@@ -3,12 +3,18 @@ import { test } from "node:test";
 import {
   buildTimedContextReadingPlan,
   buildTimedGenericPlan,
+  buildLineFallbackPlan,
 } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
 import {
   buildCjkReadingContextText,
+  projectChineseDominantCjkReadings,
   romanizeChineseDominantCjkText,
 } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
-import { buildMandarinWordLayout, romanizeMandarin } from "../src/utils/Lyrics/Fork/Romanization.ts";
+import {
+  buildMandarinWordLayout,
+  projectMandarinReading,
+  romanizeMandarin,
+} from "../src/utils/Lyrics/Fork/Romanization.ts";
 
 test("sentence-context Arabic reading keeps one logical unit across provider timing spans", () => {
   const group = {
@@ -84,6 +90,93 @@ test("Mandarin complete dictionary keeps contextual polyphones on provider timin
   assert.ok(plan);
   assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.text), ["sh\u012b", " h\u00e1ng"]);
   assert.deepEqual(plan.timedReadingUnits.map((unit) => unit.spanId), ["0", "1"]);
+});
+
+test("structured Mandarin projection keeps contextual readings on exact Han ranges", () => {
+  const projection = projectMandarinReading("如果我下手太重");
+  assert.equal(projection.valid, true);
+  assert.equal(projection.text, "rú guǒ wǒ xià shǒu tài zhòng");
+  assert.deepEqual(
+    projection.segments.map(({ startCp, endCp, reading }) => [startCp, endCp, reading]),
+    [
+      [0, 1, "rú"], [1, 2, "guǒ"], [2, 3, "wǒ"], [3, 4, "xià"],
+      [4, 5, "shǒu"], [5, 6, "tài"], [6, 7, "zhòng"],
+    ],
+  );
+  assert.deepEqual(projectMandarinReading("重", false).segments.map(({ reading }) => reading), ["zhong"]);
+});
+
+test("Chinese-dominant above projection keeps sumimasen in the shared annotation row", async () => {
+  const projection = await projectChineseDominantCjkReadings("如果我下手太重すみません", {
+    projectHan: (text) => {
+      const mandarin = projectMandarinReading(text);
+      return {
+        text: mandarin.text,
+        valid: mandarin.valid,
+        segments: mandarin.segments.map((segment) => ({ ...segment, kind: "mandarinPinyin" as const })),
+      };
+    },
+    projectKana: () => ({
+      text: "sumimasen",
+      valid: true,
+      segments: [{ startCp: 0, endCp: 5, reading: "sumimasen", kind: "japaneseRomaji" }],
+    }),
+  });
+  assert.equal(projection.valid, true);
+  assert.equal(projection.text, "rú guǒ wǒ xià shǒu tài zhòng sumimasen");
+  assert.deepEqual(projection.aboveReadingSegments.at(-1), {
+    canonicalRange: { startCp: 7, endCp: 12 },
+    reading: "sumimasen",
+    kind: "japaneseRomaji",
+    provenance: "local",
+  });
+  const staticPlan = buildLineFallbackPlan(
+    "如果我下手太重すみません",
+    projection.text,
+    "mixed-static",
+    projection.aboveReadingSegments,
+  );
+  assert.equal(staticPlan.aboveReadingSegments?.length, 8);
+});
+
+test("above projection fails closed when analyzer normalization changes source text", async () => {
+  const projection = await projectChineseDominantCjkReadings("Ａ如果", {
+    projectHan: (text) => {
+      const mandarin = projectMandarinReading(text);
+      return {
+        text: mandarin.text,
+        valid: mandarin.valid,
+        segments: mandarin.segments.map((segment) => ({ ...segment, kind: "mandarinPinyin" as const })),
+      };
+    },
+    projectKana: (text) => ({ text, segments: [], valid: true }),
+  });
+  assert.equal(projection.valid, false);
+});
+
+test("timed above projection falls back below when one annotation crosses timing owners", () => {
+  const aboveReadingSegments = [
+    { canonicalRange: { startCp: 0, endCp: 1 }, reading: "rú", kind: "mandarinPinyin" as const, provenance: "local" as const },
+    { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guǒ", kind: "mandarinPinyin" as const, provenance: "local" as const },
+    { canonicalRange: { startCp: 2, endCp: 7 }, reading: "sumimasen", kind: "japaneseRomaji" as const, provenance: "local" as const },
+  ];
+  const singleOwner = buildTimedGenericPlan({
+    Syllables: [
+      { Text: "如果", RomanizedText: "ru guo", StartTime: 0, EndTime: 1 },
+      { Text: "すみません", RomanizedText: "sumimasen", StartTime: 1, EndTime: 2 },
+    ],
+  }, "ru guo sumimasen", "Chinese", { aboveReadingSegments });
+  assert.equal(singleOwner?.aboveReadingSegments?.length, 3);
+
+  const splitOwner = buildTimedGenericPlan({
+    Syllables: [
+      { Text: "如果", RomanizedText: "ru guo", StartTime: 0, EndTime: 1 },
+      { Text: "すみ", RomanizedText: "sumi", StartTime: 1, EndTime: 1.5 },
+      { Text: "ません", RomanizedText: "masen", StartTime: 1.5, EndTime: 2 },
+    ],
+  }, "ru guo sumimasen", "Chinese", { aboveReadingSegments });
+  assert.equal(splitOwner?.aboveReadingSegments, undefined);
+  assert.equal(splitOwner?.joinedDisplayText.replace(/\s+/gu, " ").trim(), "ru guo sumimasen");
 });
 
 test("optional Mandarin word joining changes display boundaries but not timing owners", () => {

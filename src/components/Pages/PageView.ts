@@ -17,6 +17,7 @@ import {
   $japaneseReadingMode,
   $joinMandarinWords,
   $koreanDisplayMode,
+  $pinyinPlacement,
   $showBuiltInTranslationButton,
   $showChineseTranslitButton,
   $translationEnabled,
@@ -1103,6 +1104,7 @@ $chineseCharacterForm.listen(queueProcessingSettingsRefresh);
 $chineseTranslitMode.listen(queueProcessingSettingsRefresh);
 $chineseTones.listen(queueProcessingSettingsRefresh);
 $joinMandarinWords.listen(queueProcessingSettingsRefresh);
+$pinyinPlacement.listen(queueProcessingSettingsRefresh);
 $koreanDisplayMode.listen(queueProcessingSettingsRefresh);
 $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
