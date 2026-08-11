@@ -958,7 +958,7 @@ test("only full-line applyers add the shared base-flow owner", () => {
   assert.match(syllableApplyerSource, /renderBaseTextWithReadings\(word,/u);
 });
 
-test("Japanese syllable emphasis keeps rendered base runs in Pure, Furigana, and Romaji", () => {
+test("Japanese syllable emphasis keeps rendered base runs in every display mode", () => {
   const entry = {
     Text: "エーテル麻",
     JapaneseReading: {
@@ -971,6 +971,7 @@ test("Japanese syllable emphasis keeps rendered base runs in Pure, Furigana, and
   const cases = [
     { name: "Pure", mode: "furigana", useRomanized: false, rendersReading: false },
     { name: "Furigana", mode: "furigana", useRomanized: true, rendersReading: true },
+    { name: "Both", mode: "both", useRomanized: true, rendersReading: true },
     { name: "Romaji", mode: "romaji", useRomanized: true, rendersReading: false },
   ] as const;
 

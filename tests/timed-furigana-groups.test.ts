@@ -38,13 +38,17 @@ test("crossing ruby groups every intersecting timed span", () => {
   assert.deepEqual(result.groups[0].spanIds, ["0", "1"]);
   assert.equal(result.groups[0].segmentKey, "0:2\u0000うんめい");
   assert.equal(result.groups[0].reading, "うんめい");
+  assert.deepEqual([...result.groups[0].baseSweepRanges], [
+    ["0", { start: 0, end: 0.5 }],
+    ["1", { start: 0.5, end: 1 }],
+  ]);
   assert.equal(result.groups[0].rubyCenterCh, 1);
   assert.equal(result.bySpanId.get("0"), result.groups[0]);
   assert.equal(result.bySpanId.get("1"), result.groups[0]);
   assert.equal(result.bySpanId.has("2"), false);
 });
 
-test("ateji reading stays whole across separate Apple timing owners", () => {
+test("ateji reading projects one Furigana sweep across Apple source owners", () => {
   const parsed: ParsedLine = {
     id: "apple-tokei",
     displayText: "時計の",
@@ -91,10 +95,51 @@ test("ateji reading stays whole across separate Apple timing owners", () => {
   assert.equal(result.groups[0].reading, "とけい");
   assert.equal(result.groups[0].segmentKey, "0:2\u0000とけい");
   assert.equal(result.groups[0].rubyCenterCh, 1);
+  assert.deepEqual([...result.groups[0].baseSweepRanges], [
+    ["apple-tokei-0", { start: 0, end: 0.5 }],
+    ["apple-tokei-1", { start: 0.5, end: 1 }],
+  ]);
   assert.deepEqual(result.groups[0].spanIds, ["apple-tokei-0", "apple-tokei-1"]);
   assert.equal(result.bySpanId.get("apple-tokei-0"), result.groups[0]);
   assert.equal(result.bySpanId.get("apple-tokei-1"), result.groups[0]);
   assert.equal(result.bySpanId.has("apple-tokei-2"), false);
+});
+
+test("base sweep slices follow unequal canonical owner widths", () => {
+  const parsed: ParsedLine = {
+    id: "unequal-owners",
+    displayText: "情報量",
+    paragraphProvenance: "unavailable",
+    spans: [
+      {
+        id: "wide",
+        rawText: "情報",
+        cleanText: "情報",
+        startMs: 0,
+        endMs: 2,
+        providerPartOfWord: true,
+      },
+      {
+        id: "narrow",
+        rawText: "量",
+        cleanText: "量",
+        startMs: 2,
+        endMs: 3,
+        providerPartOfWord: true,
+      },
+    ],
+  };
+  const canonical = buildCanonicalLine(parsed);
+  const result = timedFuriganaGroups({
+    sourceUnits: canonical.spanMappings,
+    furigana: [{ canonicalRange: { startCp: 0, endCp: 3 }, reading: "じょうほうりょう" }],
+  } as any);
+
+  assert.equal(result.groups.length, 1);
+  assert.deepEqual([...result.groups[0].baseSweepRanges], [
+    ["wide", { start: 0, end: 2 / 3 }],
+    ["narrow", { start: 2 / 3, end: 1 }],
+  ]);
 });
 
 test("ruby centers over the annotated range inside oversized provider fragments", () => {
@@ -118,6 +163,7 @@ test("ruby centers over the annotated range inside oversized provider fragments"
   assert.deepEqual(result.groups[0].spanIds, ["0", "1"]);
   // 麻酔 starts 4 code points into the group, so the ruby midpoint sits at 5ch.
   assert.equal(result.groups[0].rubyCenterCh, 5);
+  assert.equal(result.groups[0].baseSweepRanges.size, 0);
 });
 
 test("ruby contained by one timed span creates no group", () => {
@@ -178,6 +224,7 @@ test("adjacent crossing rubies form separate consecutive groups", () => {
   ]);
   const result = timedFuriganaGroups(plan);
   assert.equal(result.groups.length, 2);
+  assert.equal(result.groups.every((group) => group.baseSweepRanges.size === 2), true);
   assert.deepEqual(result.groups[0].spanIds, ["0", "1"]);
   assert.deepEqual(result.groups[1].spanIds, ["2", "3"]);
   assert.notEqual(result.bySpanId.get("1"), result.bySpanId.get("2"));

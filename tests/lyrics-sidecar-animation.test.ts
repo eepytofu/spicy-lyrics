@@ -299,6 +299,18 @@ test("syllable furigana follows its timing owner without a masked rectangular gl
   );
 });
 
+test("exact Furigana compounds project the existing ruby sweep across their base", () => {
+  assert.match(syllableApplyerSource, /"timed-furigana-base-sweep-member"/u);
+  assert.match(
+    mixedCss,
+    /SpicyRenderer:not\(\.SimpleLyricsMode\)[\s\S]*?\.word\.timed-furigana-base-sweep-member\s*\{[\s\S]*?--timed-furigana-base-gradient-position[\s\S]*?--timed-furigana-base-gradient-width/u,
+  );
+  assert.match(
+    animatorSource,
+    /applyTimedRubyAnchorState\(word, currentScale, timedGroupGradientPosition\)[\s\S]*?projectTimedFuriganaBaseGradient\(\s*timedGroupGradientPosition/u,
+  );
+});
+
 test("line furigana follows Active line paint without delaying glow", () => {
   assert.match(
     mainCss,

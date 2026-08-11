@@ -31,6 +31,7 @@ import {
   gradientTargetsAt,
   getElementState,
   getProgressPercentage,
+  projectTimedFuriganaBaseGradient,
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
@@ -863,9 +864,8 @@ export function Animate(position: number): void {
               targetGlow = GlowSpline.at(1);
             }
 
-            // Timed furigana group members lift, scale, and glow as one unit
-            // over the group's window; the gradient sweep keeps each word's
-            // own timing so the karaoke fill stays provider-accurate.
+            // Timed ruby members lift, scale, and glow as one unit while each
+            // source owner keeps its exact registered timing.
             if (word.TimedGroupTimes && !$simpleLyricsMode.get()) {
               targetScale = ScaleSpline.at(
                 timedGroupEnvelopeAt(word.TimedGroupTimes, ProcessedPosition, TimedGroupScaleHold)
@@ -895,18 +895,15 @@ export function Animate(position: number): void {
                 0.5,
               );
             }
-            applyTimedRubyAnchorState(
-              word,
-              currentScale,
-              word.TimedGroupTimes
-                ? gradientTargetsAt(
-                    ProcessedPosition,
-                    word.TimedGroupTimes.start,
-                    word.TimedGroupTimes.end,
-                    $simpleLyricsMode.get(),
-                  ).base
-                : undefined,
-            );
+            const timedGroupGradientPosition = word.TimedGroupTimes
+              ? gradientTargetsAt(
+                  ProcessedPosition,
+                  word.TimedGroupTimes.start,
+                  word.TimedGroupTimes.end,
+                  $simpleLyricsMode.get(),
+                ).base
+              : undefined;
+            applyTimedRubyAnchorState(word, currentScale, timedGroupGradientPosition);
 
             setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
             // Use translate3d to ensure GPU-accelerated transforms
@@ -993,6 +990,28 @@ export function Animate(position: number): void {
                   }
                 }
               } else {
+                const timedFuriganaBaseGradient =
+                  timedGroupGradientPosition !== undefined &&
+                  word.TimedFuriganaBaseSweepRange
+                    ? projectTimedFuriganaBaseGradient(
+                        timedGroupGradientPosition,
+                        word.TimedFuriganaBaseSweepRange,
+                      )
+                    : undefined;
+                if (timedFuriganaBaseGradient) {
+                  setStyleIfChanged(
+                    word.HTMLElement,
+                    "--timed-furigana-base-gradient-position",
+                    `${timedFuriganaBaseGradient.position}%`,
+                    0.5,
+                  );
+                  setStyleIfChanged(
+                    word.HTMLElement,
+                    "--timed-furigana-base-gradient-width",
+                    `${timedFuriganaBaseGradient.width}%`,
+                    0,
+                  );
+                }
                 setStyleIfChanged(
                   word.HTMLElement,
                   "--gradient-position",

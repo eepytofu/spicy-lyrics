@@ -83,6 +83,26 @@
       calc(var(--gradient-position) + 20% + var(--gradient-offset))
   );
 }
+
+/* Exact full-owner Furigana compounds reuse the timed ruby's single sweep.
+   Each source owner receives the matching spatial slice, including the same
+   soft edge width, without changing provider timing or Simple Mode. */
+#SpicyLyricsPage.SpicyRenderer:not(.SimpleLyricsMode)
+  .LyricsContainer
+  .LyricsContent
+  .line.Active
+  .word.timed-furigana-base-sweep-member {
+  background-image: linear-gradient(
+    var(--gradient-degrees),
+    rgba(255, 255, 255, var(--gradient-alpha))
+      var(--timed-furigana-base-gradient-position, -20%),
+    rgba(255, 255, 255, var(--gradient-alpha-end))
+      calc(
+        var(--timed-furigana-base-gradient-position, -20%) +
+          var(--timed-furigana-base-gradient-width, 20%) + var(--gradient-offset)
+      )
+  );
+}
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.NotSung,
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.NotSung .word,
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.NotSung .letter {

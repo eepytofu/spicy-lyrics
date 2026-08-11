@@ -16,6 +16,13 @@ export type TimedFuriganaGroup = {
   segmentKey: string;
   reading: string;
   spanIds: readonly string[];
+  /**
+   * Exact full-owner Furigana groups project the existing ruby sweep onto
+   * each member's canonical slice. Partial-owner groups leave this empty so
+   * unrelated text in an oversized source span retains its provider-local
+   * animation and established ruby geometry.
+   */
+  baseSweepRanges: ReadonlyMap<string, { start: number; end: number }>;
   provenance?: ReadingProvenance;
   /**
    * Code points from the group's first character to the middle of the
@@ -69,11 +76,33 @@ export function timedFuriganaGroups(plan: RenderPlan | undefined): TimedFurigana
     // Do not create nested or duplicated timing owners for malformed overlapping ruby.
     if (intersecting.some((unit) => bySpanId.has(unit.spanId))) return;
 
+    const exactFullOwnerCoverage =
+      intersecting[0].canonicalRange.startCp === start &&
+      intersecting.at(-1)?.canonicalRange.endCp === end &&
+      intersecting.every(
+        (unit, unitIndex) =>
+          unit.canonicalRange.endCp > unit.canonicalRange.startCp &&
+          (unitIndex === 0 ||
+            intersecting[unitIndex - 1].canonicalRange.endCp ===
+              unit.canonicalRange.startCp)
+      );
+    const baseSweepRanges = new Map<string, { start: number; end: number }>();
+    if (exactFullOwnerCoverage) {
+      const segmentLength = end - start;
+      intersecting.forEach((unit) => {
+        baseSweepRanges.set(unit.spanId, {
+          start: (unit.canonicalRange.startCp - start) / segmentLength,
+          end: (unit.canonicalRange.endCp - start) / segmentLength,
+        });
+      });
+    }
+
     const group: TimedFuriganaGroup = {
       id: `timed-ruby-${index}`,
       segmentKey: furiganaSegmentKey(start, end, segment.reading),
       reading: segment.reading,
       spanIds: intersecting.map((unit) => unit.spanId),
+      baseSweepRanges,
       ...(segment.provenance ? { provenance: segment.provenance } : {}),
       rubyCenterCh: start - intersecting[0].canonicalRange.startCp + (end - start) / 2,
     };

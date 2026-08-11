@@ -8,6 +8,7 @@ import {
   gradientTargetsAt,
   getElementState,
   getProgressPercentage,
+  projectTimedFuriganaBaseGradient,
   safeAnimationDelay,
   setClassPresence,
   shouldHideDotLine,
@@ -178,6 +179,22 @@ test("a grouped reading sweep follows its derived window without changing ordina
   );
   assert.equal(gradientTargetsAt(150, 0, 100, false).extra, 100);
   assert.equal(gradientTargetsAt(150, 0, 300, false).extra, 30);
+});
+
+test("eligible Furigana bases reuse spatial slices of one group sweep", () => {
+  assert.deepEqual(projectTimedFuriganaBaseGradient(50, { start: 0, end: 0.5 }), {
+    position: 100,
+    width: 40,
+  });
+  assert.deepEqual(projectTimedFuriganaBaseGradient(50, { start: 0.5, end: 1 }), {
+    position: 0,
+    width: 40,
+  });
+  assert.deepEqual(projectTimedFuriganaBaseGradient(50, { start: 0, end: 0.25 }), {
+    position: 200,
+    width: 80,
+  });
+  assert.equal(projectTimedFuriganaBaseGradient(50, { start: 0.5, end: 0.5 }), undefined);
 });
 
 test("timed group attack, hold, and release remain monotonic", () => {

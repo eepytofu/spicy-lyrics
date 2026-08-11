@@ -27,6 +27,11 @@ export interface GradientTargets {
   extra: number;
 }
 
+export interface TimedFuriganaBaseGradient {
+  position: number;
+  width: number;
+}
+
 export function getElementState(
   currentTime: number,
   startTime: number,
@@ -45,6 +50,29 @@ export function getProgressPercentage(
   if (currentTime <= startTime) return 0;
   if (currentTime >= endTime) return 1;
   return (currentTime - startTime) / (endTime - startTime);
+}
+
+/** Project the existing group-wide ruby sweep onto one canonical base slice. */
+export function projectTimedFuriganaBaseGradient(
+  groupPosition: number,
+  range: { start: number; end: number },
+  groupGradientWidth = 20,
+): TimedFuriganaBaseGradient | undefined {
+  if (
+    Number.isFinite(groupPosition) &&
+    Number.isFinite(range.start) &&
+    Number.isFinite(range.end) &&
+    range.start >= 0 &&
+    range.end <= 1 &&
+    range.end > range.start
+  ) {
+    const scale = 1 / (range.end - range.start);
+    return {
+      position: (groupPosition - range.start * 100) * scale,
+      width: groupGradientWidth * scale,
+    };
+  }
+  return undefined;
 }
 
 export function safeAnimationDelay(candidate: number, fallback: number): number {

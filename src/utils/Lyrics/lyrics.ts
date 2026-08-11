@@ -82,6 +82,8 @@ export interface SyllableLead {
   TimedRubyAnchorElement?: HTMLElement;
   TimedRubyAnchorOffsetEm?: number;
   TimedGroupTimes?: TimedGroupWindow;
+  /** Canonical slice used to project the existing Furigana-group sweep. */
+  TimedFuriganaBaseSweepRange?: { start: number; end: number };
   StartTime: number;
   EndTime: number;
   TotalTime: number;

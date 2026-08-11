@@ -136,6 +136,7 @@ const registerSyllableWord = (
 
 interface SyllableWordPresentation {
   isBackground?: boolean;
+  timedFuriganaBaseSweepRange?: { start: number; end: number };
 }
 
 const renderedEmphasisUnits = (word: HTMLElement) =>
@@ -165,7 +166,9 @@ const createSyllableWord = (
   const reservesReadingRow = readingRow.kind !== "none";
   const rendersEmphasisWithReadings = reservesReadingRow || !!syllable.JapaneseReading;
   const letterCapable =
-    IsLetterCapable(letterLength, totalDuration) && !isRtl(syllable.Text);
+    !presentation.timedFuriganaBaseSweepRange &&
+    IsLetterCapable(letterLength, totalDuration) &&
+    !isRtl(syllable.Text);
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
@@ -198,6 +201,10 @@ const createSyllableWord = (
 
   renderBaseTextWithReadings(word, syllable, renderOptions, readingRow);
 
+  if (presentation.timedFuriganaBaseSweepRange) {
+    word.classList.add("timed-furigana-base-sweep-member");
+  }
+
   if (!$simpleLyricsMode.get()) {
     word.style.setProperty("--gradient-position", isBackground ? `0%` : `-20%`);
     word.style.setProperty("--text-shadow-opacity", `0%`);
@@ -223,10 +230,11 @@ const rendersReadingRow = (
 ): boolean => presentation.kind === kind && presentation.state === "rendered";
 
 /**
- * One visual ruby drawn once above several timed syllables. The group is
- * display-only: every member word keeps its own animator registration, so
- * karaoke timing ownership never changes. Provider fragments may carry
- * extra characters around the annotated kanji (e.g. one AMLL span holding
+ * One visual ruby drawn once above several timed syllables. Every member
+ * keeps its exact provider registration. An exact full-owner Furigana group
+ * may additionally project the existing group sweep across its base; partial-
+ * owner and above-reading groups do not. Provider fragments may carry extra
+ * characters around the annotated kanji (e.g. one AMLL span holding
  * エーテル麻), so the ruby is centered over the annotated range itself via
  * the group's code-point midpoint instead of over the whole group.
  */
@@ -295,9 +303,13 @@ const appendTimedRubyMember = (
   lineElement: HTMLElement,
   word: HTMLElement,
   syllable: SyllableData,
+  spanId: string,
   group: TimedRubyGroup,
   state: TimedRubyRenderState
 ): void => {
+  const timedFuriganaBaseSweepRange =
+    "kind" in group ? undefined : group.baseSweepRanges.get(spanId);
+  const entry = lastRegisteredWordEntry();
   if (!state.root || group.id !== state.groupId) {
     const timedGroup = createTimedRubyGroup(group);
     lineElement.appendChild(timedGroup.root);
@@ -309,7 +321,6 @@ const appendTimedRubyMember = (
     state.root = timedGroup.root;
     state.groupId = group.id;
 
-    const entry = lastRegisteredWordEntry();
     if (entry) {
       entry.TimedRubyAnchorElement = timedGroup.anchor;
       entry.TimedRubyAnchorOffsetEm =
@@ -323,12 +334,15 @@ const appendTimedRubyMember = (
       entry.TimedGroupTimes = state.times;
     }
   } else {
-    const entry = lastRegisteredWordEntry();
     if (entry && state.times) {
       entry.TimedGroupTimes = state.times;
       state.times.lastStart = ConvertTime(syllable.StartTime);
       state.times.end = ConvertTime(syllable.EndTime);
     }
+  }
+
+  if (entry && timedFuriganaBaseSweepRange) {
+    entry.TimedFuriganaBaseSweepRange = timedFuriganaBaseSweepRange;
   }
 
   state.root.appendChild(word);
@@ -491,9 +505,10 @@ export function ApplySyllableLyrics(
         lineElem.classList.add("rtl");
       }
 
-      // Ruby crossing timed syllables is drawn once above a display-only
-      // group; member words suppress only their copy of that reading but
-      // keep their timing registration. The line is never collapsed.
+      // Ruby crossing timed syllables is drawn once above a display group.
+      // Exact full-owner Furigana compounds project the existing group sweep
+      // across their base; source timing and partial-owner geometry stay
+      // unchanged. The line is never collapsed.
       const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
       const timedAboveReadingGroup = leadTimedAboveReading.bySpanId.get(String(iL));
       const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
@@ -507,10 +522,20 @@ export function ApplySyllableLyrics(
         aL,
         timedFuriganaGroup
           ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-          : wordRenderOptions
+          : wordRenderOptions,
+        {
+          timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(iL)),
+        }
       );
       if (timedRubyGroup) {
-        appendTimedRubyMember(lineElem, word, lead, timedRubyGroup, leadTimedRubyState);
+        appendTimedRubyMember(
+          lineElem,
+          word,
+          lead,
+          String(iL),
+          timedRubyGroup,
+          leadTimedRubyState
+        );
         currentWordGroup = null;
         currentSemanticGroupId = undefined;
         return;
@@ -645,10 +670,20 @@ export function ApplySyllableLyrics(
             timedFuriganaGroup
               ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
               : wordRenderOptions,
-            { isBackground: true }
+            {
+              isBackground: true,
+              timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(bI)),
+            }
           );
           if (timedRubyGroup) {
-            appendTimedRubyMember(lineE, word, bw, timedRubyGroup, bgTimedRubyState);
+            appendTimedRubyMember(
+              lineE,
+              word,
+              bw,
+              String(bI),
+              timedRubyGroup,
+              bgTimedRubyState
+            );
             currentBGWordGroup = null;
             currentBGSemanticGroupId = undefined;
             return;
