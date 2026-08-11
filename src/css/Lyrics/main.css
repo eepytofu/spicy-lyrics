@@ -291,8 +291,9 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   line-height: 1;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-furigana {
-  /* Ruby-row grid tracks describe typographic advance, but some fonts paint
+#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-furigana,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-above-reading {
+  /* Reading-row grid tracks describe typographic advance, but some fonts paint
      descenders below that box. Extend only the clipped paint box and cancel
      the added flow size so the word's timing, wrapping, and baseline stay put. */
   --lyric-clip-block-end-guard: 0.125em;

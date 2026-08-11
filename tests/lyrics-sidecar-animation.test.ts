@@ -147,17 +147,19 @@ test("timed romanization preserves end-glyph ink without changing layout advance
   assert.match(syllable, /margin-inline-end:\s*-0\.125em/u);
 });
 
-test("clipped furigana-row words and whole-line sidecars protect block-end ink without changing flow", () => {
-  const furiganaWord = ruleBody(
-    "#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-furigana",
+test("clipped reading-row words and whole-line sidecars protect block-end ink without changing flow", () => {
+  const readingWordRule = mainCss.match(
+    /#SpicyLyricsPage \.LyricsContainer \.LyricsContent \.word\.has-furigana,\s*#SpicyLyricsPage \.LyricsContainer \.LyricsContent \.word\.has-above-reading\s*\{([\s\S]*?)\}/u,
   );
-  assert.match(furiganaWord, /--lyric-clip-block-end-guard:\s*0\.125em/u);
+  assert.ok(readingWordRule, "furigana and Pinyin Above must share the clipped-ink guard");
+  const readingWord = readingWordRule[1];
+  assert.match(readingWord, /--lyric-clip-block-end-guard:\s*0\.125em/u);
   assert.match(
-    furiganaWord,
+    readingWord,
     /padding-block-end:\s*var\(--lyric-clip-block-end-guard\)/u,
   );
   assert.match(
-    furiganaWord,
+    readingWord,
     /margin-block-end:\s*calc\(var\(--lyric-clip-block-end-guard\)\s*\*\s*-1\)/u,
   );
 
