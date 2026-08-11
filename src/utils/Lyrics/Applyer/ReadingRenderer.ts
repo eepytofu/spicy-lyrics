@@ -46,6 +46,7 @@ export type ReadingRenderOptions = {
   reserveAboveReading?: boolean;
   aboveReadingSegments?: readonly AboveReadingSegment[];
   primaryScript?: "Japanese" | "Chinese";
+  chineseDocument?: boolean;
   hanLanguageContext?: HanLanguageContext;
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
@@ -125,8 +126,17 @@ export function shouldRenderFurigana(entry: JapaneseReadable | undefined, option
 export function shouldRenderRomanization(entry: JapaneseReadable | undefined, options: ReadingRenderOptions): boolean {
   if (!options.useRomanized) return false;
   if (shouldRenderAboveReadings(entry, options)) return false;
+  if (shouldReservePendingAboveReading(options)) return false;
   const isJapanese = isJapaneseEntry(entry, options.isJapaneseLyrics);
   return !isJapanese || $japaneseReadingMode.get() !== "furigana";
+}
+
+function shouldReservePendingAboveReading(options: ReadingRenderOptions): boolean {
+  return options.useRomanized
+    && options.romanizationPending === true
+    && options.chineseDocument === true
+    && $chineseTranslitMode.get() === "pinyin"
+    && $pinyinPlacement.get() === "above";
 }
 
 export function shouldRenderAboveReadings(
@@ -528,6 +538,12 @@ export function renderBaseTextWithReadings(
     entry.ReadingPrimaryScript === "Chinese"
   ) {
     element.classList.add("has-above-reading");
+    appendPlainText(element, text, 0, hanLanguageContext, "aboveReadingRow");
+    return true;
+  }
+
+  if (shouldReservePendingAboveReading(options)) {
+    element.classList.add("has-above-reading", "above-reading-pending");
     appendPlainText(element, text, 0, hanLanguageContext, "aboveReadingRow");
     return true;
   }

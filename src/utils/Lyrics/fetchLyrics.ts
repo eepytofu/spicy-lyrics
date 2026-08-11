@@ -60,6 +60,7 @@ import {
   ArabicTextTest,
   RomanizableScriptTextTest,
 } from "./Fork/TextDetection.ts";
+import { isChineseDocumentPendingReading } from "./Processing/PendingReadingPresentation.ts";
 import {
   getActiveLyricsSourceOrder,
   lyricsSourceCacheSignature,
@@ -236,8 +237,7 @@ function collectLyricsText(lyrics: any): string[] {
 }
 
 function detectChineseQuick(lyrics: any): boolean {
-  const text = collectLyricsText(lyrics).join("");
-  return /[\u4E00-\u9FFF]/.test(text) && !/[ぁ-んァ-ン]/.test(text);
+  return isChineseDocumentPendingReading(lyrics);
 }
 
 function hasRomanizationWorkQuick(lyrics: any): boolean {

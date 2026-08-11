@@ -28,6 +28,13 @@ const syllableApplyerSource = readFileSync(
   "utf8",
 );
 
+test("pending Above Pinyin draws its skeleton in the reserved ruby track", () => {
+  assert.match(
+    mainCss,
+    /\.above-reading-pending \.above-reading-plain-cluster::before\s*\{[\s\S]*?grid-row:\s*1;[\s\S]*?justify-self:\s*center;/u,
+  );
+});
+
 function ruleBody(selector: string): string {
   const selectorStart = mainCss.indexOf(selector);
   assert.notEqual(selectorStart, -1, `missing CSS selector: ${selector}`);

@@ -63,6 +63,7 @@ export function ApplyStaticLyrics(
     const renderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,
+      chineseDocument: (data as any).DetectedChinese === true,
       translationPending,
       showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,

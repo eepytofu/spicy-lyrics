@@ -798,6 +798,68 @@ test("timed syllable rendering keeps one Above romaji group across Kana owners",
   assert.match(syllableApplyerSource, /word\.querySelector\("\.above-reading-plain-cluster"\)/u);
 });
 
+test("pending Pinyin Above reserves the ruby row without a Below skeleton", () => {
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("above");
+  const line = new FakeElement();
+  const options = {
+    useRomanized: true,
+    romanizationPending: true,
+    chineseDocument: true,
+  };
+
+  assert.equal(renderFullLineBaseTextWithReadings(
+    line as unknown as HTMLElement,
+    { Text: "如果" },
+    options,
+  ), true);
+  assert.equal(appendLineExtras(
+    line as unknown as HTMLElement,
+    { Text: "如果" },
+    options,
+  ), false);
+
+  const baseFlow = line.children[0];
+  assert.equal(baseFlow.classList.contains("has-above-reading"), true);
+  assert.equal(baseFlow.classList.contains("above-reading-pending"), true);
+  assert.equal(baseFlow.children[0].className.includes("above-reading-plain-cluster"), true);
+  assert.equal(line.children.some((child) => child.className.includes("romanized-below")), false);
+
+  const syllableLine = new FakeElement();
+  assert.equal(appendSyllableRomanizedBelow(
+    syllableLine as unknown as HTMLElement,
+    [{ Text: "如" }, { Text: "果" }],
+    "如果",
+    undefined,
+    undefined,
+    undefined,
+    [{}, {}],
+    undefined,
+    options,
+  ), false);
+  assert.equal(syllableLine.children.length, 0);
+
+  assert.match(staticApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
+  assert.match(lineApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
+  assert.match(syllableApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
+
+  $pinyinPlacement.set("below");
+});
+
+test("pending Below Pinyin keeps the existing romanization skeleton", () => {
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("below");
+  const line = new FakeElement();
+  const appended = appendLineExtras(
+    line as unknown as HTMLElement,
+    { Text: "如果" },
+    { useRomanized: true, romanizationPending: true, chineseDocument: true },
+  );
+
+  assert.equal(appended, true);
+  assert.equal(line.children[0].className, "romanized-below romanization-placeholder");
+});
+
 test("explicit readings tint only derived furigana while displaying the immutable source as ruby", () => {
   $japaneseReadingMode.set("furigana");
   const line = new FakeElement();

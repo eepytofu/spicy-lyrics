@@ -383,6 +383,7 @@ export function ApplySyllableLyrics(
     const lineRenderOptions = {
       useRomanized: UseRomanized,
       romanizationPending,
+      chineseDocument: (data as any).DetectedChinese === true,
       translationPending,
       showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
