@@ -65,6 +65,7 @@ import {
   buildTimedGenericPlan,
 } from "./Processing/GenericReadingProcessor.ts";
 import {
+  buildCjkContextualHanRoutes,
   buildCjkReadingContextText,
   projectChineseDominantCjkReadings,
   romanizeChineseDominantCjkText,
@@ -89,8 +90,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v65: route bilingual kana-free Han lines from conservative document evidence.
-export const LYRICS_PROCESSING_VERSION = 65;
+// v66: infer ambiguous bilingual Han lines only from agreeing sequence evidence.
+export const LYRICS_PROCESSING_VERSION = 66;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -233,7 +234,12 @@ const normalizedSyllableLine = (syllables: any[]): string => {
 
 const gatherText = (
   lyrics: any
-): { francText: string; scriptText: string; entries: RomanizeEntry[] } => {
+): {
+  francText: string;
+  scriptText: string;
+  cjkBlocks: string[][];
+  entries: RomanizeEntry[];
+} => {
   const entries: RomanizeEntry[] = [];
   const textLines: string[] = [];
   const bgTextLines: string[] = [];
@@ -287,7 +293,8 @@ const gatherText = (
 
   const francText = textLines.join("\n");
   const scriptText = bgTextLines.length > 0 ? `${francText}\n${bgTextLines.join("\n")}` : francText;
-  return { francText, scriptText, entries };
+  const cjkBlocks = [textLines, bgTextLines].filter((block) => block.length > 0);
+  return { francText, scriptText, cjkBlocks, entries };
 };
 
 const detectPresentScripts = (
@@ -804,6 +811,10 @@ export const ProcessLyrics = async (
     iso2Language: languageISO2,
     cjkDominantBranch,
     cjkBilingual: cjkDocumentContext.bilingual,
+    cjkContextualHanRoutes: buildCjkContextualHanRoutes(
+      gathered.cjkBlocks,
+      cjkDocumentContext,
+    ),
   };
   const allowChineseProviderJapaneseRepair =
     isChineseProviderJapaneseRepairSource(lyrics);
@@ -821,6 +832,10 @@ export const ProcessLyrics = async (
         ItemChineseTest.test(text) && scriptBranchForLine(text, docContext).includes("Chinese")
     );
     gathered = gatherText(lyrics);
+    docContext.cjkContextualHanRoutes = buildCjkContextualHanRoutes(
+      gathered.cjkBlocks,
+      cjkDocumentContext,
+    );
   }
   const entries = gathered.entries;
   for (const entry of entries) {

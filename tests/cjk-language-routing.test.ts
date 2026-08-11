@@ -7,6 +7,7 @@ import {
   scriptBranchForLine,
 } from "../src/utils/Lyrics/Fork/TextDetection.ts";
 import {
+  buildCjkContextualHanRoutes,
   partitionCjkReadingRuns,
   romanizeChineseDominantCjkText,
 } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
@@ -88,23 +89,96 @@ test("Traditional Chinese form evidence can establish a bilingual document", () 
   assert.equal(resolveCjkLineRoute(lines[3], context), "Chinese");
 });
 
-test("bounded Mandarin phrases resolve short Han lines only in established CJK context", () => {
-  const bilingualContext = {
+test("agreeing sequence evidence resolves short Han lines without lexical patches", () => {
+  const lines = [
+    "静かな庭で猫が眠っている",
+    "明日の朝までここで待とう",
+    "远山风雨终归寂静",
+    "春山秋水",
+    "长夜无声灯火微明",
+  ];
+  const document = resolveCjkDocumentContext(lines.join("\n"), "jpn", "ja");
+  const contextualRoutes = buildCjkContextualHanRoutes([lines], document);
+  const context = {
     presentScripts: ["Japanese", "Chinese"] as const,
     primaryLanguage: "jpn",
     iso2Language: "ja",
-    cjkDominantBranch: "Japanese" as const,
-    cjkBilingual: true,
-  };
-  const japaneseContext = {
-    ...bilingualContext,
-    presentScripts: ["Japanese"] as const,
-    cjkBilingual: false,
+    cjkDominantBranch: document.branch,
+    cjkBilingual: document.bilingual,
+    cjkContextualHanRoutes: contextualRoutes,
   };
 
-  // Constructed equivalent of the private corpus miss, not a lyric excerpt.
-  assert.equal(resolveCjkLineRoute("我知道呀", bilingualContext), "Chinese");
-  assert.equal(resolveCjkLineRoute("我知道呀", japaneseContext), "Japanese");
+  assert.deepEqual(contextualRoutes.get("春山秋水"), {
+    route: "Chinese",
+    evidence: "agreeingSequence",
+  });
+  assert.equal(resolveCjkLineRoute("春山秋水", context), "Chinese");
+});
+
+test("sequence evidence protects long shared-form Japanese lines from bilingual length fallback", () => {
+  const lines = [
+    "静かな庭で猫が眠っている",
+    "山川草木天地",
+    "明日の朝までここで待とう",
+    "远山风雨终归寂静",
+    "长夜无声灯火微明",
+  ];
+  const document = resolveCjkDocumentContext(lines.join("\n"), "jpn", "ja");
+  const contextualRoutes = buildCjkContextualHanRoutes([lines], document);
+  const context = {
+    presentScripts: ["Japanese", "Chinese"] as const,
+    primaryLanguage: "jpn",
+    iso2Language: "ja",
+    cjkDominantBranch: document.branch,
+    cjkBilingual: document.bilingual,
+    cjkContextualHanRoutes: contextualRoutes,
+  };
+
+  assert.deepEqual(contextualRoutes.get("山川草木天地"), {
+    route: "Japanese",
+    evidence: "agreeingSequence",
+  });
+  assert.equal(resolveCjkLineRoute("山川草木天地", context), "Japanese");
+});
+
+test("one-sided, conflicting, and cross-block evidence leaves Han ambiguity unresolved", () => {
+  const document = { branch: "Japanese" as const, bilingual: true };
+  const oneSided = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水"],
+  ], document);
+  const conflicting = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水", "明日の朝までここで待とう"],
+  ], document);
+  const separated = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水"],
+    ["长夜无声灯火微明"],
+  ], document);
+  const bounded = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水", "Composer", "长夜无声灯火微明"],
+  ], document);
+
+  assert.equal(oneSided.has("春山秋水"), false);
+  assert.equal(conflicting.has("春山秋水"), false);
+  assert.equal(separated.has("春山秋水"), false);
+  assert.equal(bounded.has("春山秋水"), false);
+});
+
+test("repeated ambiguous text requires one consistent contextual route", () => {
+  const document = { branch: "Japanese" as const, bilingual: true };
+  const consistent = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水", "长夜无声灯火微明"],
+    ["遠山風雨終歸寂靜", "春山秋水", "長夜無聲燈火微明"],
+  ], document);
+  const conflicting = buildCjkContextualHanRoutes([
+    ["远山风雨终归寂静", "春山秋水", "长夜无声灯火微明"],
+    ["静かな庭で猫が眠っている", "春山秋水", "明日の朝までここで待とう"],
+  ], document);
+
+  assert.deepEqual(consistent.get("春山秋水"), {
+    route: "Chinese",
+    evidence: "agreeingSequence",
+  });
+  assert.equal(conflicting.has("春山秋水"), false);
 });
 
 test("Japanese Han forms and repeated lines cannot invent bilingual evidence", () => {

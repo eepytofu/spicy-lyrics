@@ -8,11 +8,19 @@
  */
 
 import {
-  countHanCodePoints,
-  hasChineseOnlyHanForms,
-  hasJapaneseOnlyHanForms,
-  hasMandarinLexicalEvidence,
-} from "../Processing/CjkLanguageEvidence.ts";
+  resolveCjkLineRoute,
+  type CjkDocumentContext,
+  type CjkLineRoute,
+  type CjkReadingBranch,
+  type CjkScriptBranchContext,
+} from "../Processing/CjkLanguageRouting.ts";
+
+export {
+  resolveCjkDocumentBranch,
+  resolveCjkDocumentContext,
+  resolveCjkLineRoute,
+} from "../Processing/CjkLanguageRouting.ts";
+export type { CjkDocumentContext, CjkLineRoute, CjkReadingBranch };
 
 // Korean Hangul (syllables, jamo, compatibility jamo, extended)
 export const KoreanTextTest =
@@ -77,13 +85,6 @@ export function cleanInvisiblesPreserveEdges(text: string): string {
 export type ScriptType = "japanese" | "chinese" | "korean" | "cyrillic" | "greek" | "arabic" | "latin" | "unknown";
 
 export type RomanizationBranch = "Japanese" | "Chinese" | "Korean" | "Cyrillic" | "Greek" | "Arabic";
-export type CjkReadingBranch = Extract<RomanizationBranch, "Japanese" | "Chinese">;
-export type CjkLineRoute = CjkReadingBranch | "MixedChinese";
-export type CjkDocumentContext = {
-  branch?: CjkReadingBranch;
-  bilingual: boolean;
-};
-
 export const SCRIPT_PRIORITY: RomanizationBranch[] = [
   "Japanese",
   "Chinese",
@@ -169,139 +170,9 @@ export function romanizationBranchFromLanguage(
   return undefined;
 }
 
-export function resolveCjkDocumentContext(
-  text: string,
-  primaryLanguage: string,
-  iso2Language?: string
-): CjkDocumentContext {
-  const lines = cleanInvisibles(text.normalize("NFKC")).split(/\r?\n/u);
-  let kanaLines = 0;
-  let hanOnlyLines = 0;
-
-  for (const line of lines) {
-    const hasKana = JapaneseTextTest.test(line);
-    const hasHan = ChineseTextTest.test(line);
-    if (hasKana) kanaLines += 1;
-    else if (hasHan) hanOnlyLines += 1;
-  }
-
-  let branch: CjkReadingBranch | undefined;
-  if (kanaLines === 0 && hanOnlyLines === 0) {
-    branch = undefined;
-  } else if (hanOnlyLines >= 2 && hanOnlyLines >= kanaLines * 2) {
-    // A small Japanese island must not flip an otherwise Chinese document.
-    branch = "Chinese";
-  } else if (kanaLines >= 2 && kanaLines >= hanOnlyLines) {
-    branch = "Japanese";
-  } else {
-    const languageBranch = romanizationBranchFromLanguage(primaryLanguage, iso2Language);
-    branch =
-      languageBranch === "Japanese" || languageBranch === "Chinese"
-        ? languageBranch
-        : kanaLines > hanOnlyLines
-          ? "Japanese"
-          : "Chinese";
-  }
-
-  let distinctKanaLines = 0;
-  let chineseEvidenceLines = 0;
-  let longHanOnlyLines = 0;
-  for (const line of new Set(lines)) {
-    if (JapaneseTextTest.test(line)) {
-      distinctKanaLines += 1;
-      continue;
-    }
-    if (!ChineseTextTest.test(line)) continue;
-    const chineseEvidence = hasChineseOnlyHanForms(line);
-    if (chineseEvidence) chineseEvidenceLines += 1;
-    if (chineseEvidence || (!hasJapaneseOnlyHanForms(line) && countHanCodePoints(line) >= 5)) {
-      longHanOnlyLines += 1;
-    }
-  }
-
-  return {
-    branch,
-    bilingual: distinctKanaLines >= 2 && chineseEvidenceLines >= 1 && longHanOnlyLines >= 2,
-  };
-}
-
-export function resolveCjkDocumentBranch(
-  text: string,
-  primaryLanguage: string,
-  iso2Language?: string
-): CjkReadingBranch | undefined {
-  return resolveCjkDocumentContext(text, primaryLanguage, iso2Language).branch;
-}
-
-export type ScriptBranchDocContext = {
+export type ScriptBranchDocContext = Omit<CjkScriptBranchContext, "presentScripts"> & {
   presentScripts: readonly RomanizationBranch[];
-  primaryLanguage: string;
-  iso2Language?: string;
-  cjkDominantBranch?: CjkReadingBranch;
-  cjkBilingual?: boolean;
 };
-
-const hanBranchForLine = (docContext: ScriptBranchDocContext): RomanizationBranch => {
-  if (docContext.cjkDominantBranch) return docContext.cjkDominantBranch;
-
-  const hasDocJapanese = docContext.presentScripts.includes("Japanese");
-  const hasDocChinese = docContext.presentScripts.includes("Chinese");
-
-  if (hasDocJapanese && !hasDocChinese) return "Japanese";
-  if (hasDocChinese && !hasDocJapanese) return "Chinese";
-
-  const languageBranch = romanizationBranchFromLanguage(docContext.primaryLanguage, docContext.iso2Language);
-  if (languageBranch === "Japanese" || languageBranch === "Chinese") return languageBranch;
-
-  return hasDocJapanese ? "Japanese" : "Chinese";
-};
-
-export function resolveCjkLineRoute(
-  lineText: string,
-  docContext: ScriptBranchDocContext
-): CjkLineRoute | undefined {
-  const text = cleanInvisibles(lineText.normalize("NFKC"));
-  const hasKana = JapaneseTextTest.test(text);
-  const hasHan = ChineseTextTest.test(text);
-  if (!hasKana) {
-    if (!hasHan) return undefined;
-    if (hasJapaneseOnlyHanForms(text)) return "Japanese";
-    if (
-      (hasChineseOnlyHanForms(text) || hasMandarinLexicalEvidence(text)) &&
-      (docContext.cjkDominantBranch === "Chinese" || docContext.cjkBilingual)
-    )
-      return "Chinese";
-    if (docContext.cjkBilingual && countHanCodePoints(text) >= 5) return "Chinese";
-    return hanBranchForLine(docContext) as CjkReadingBranch;
-  }
-  if (!hasHan || docContext.cjkDominantBranch !== "Chinese") return "Japanese";
-
-  let kanaCount = 0;
-  let hanCount = 0;
-  let kanaRuns = 0;
-  let inKanaRun = false;
-  let firstCjk: CjkReadingBranch | undefined;
-  let lastCjk: CjkReadingBranch | undefined;
-
-  for (const char of Array.from(text)) {
-    if (JapaneseTextTest.test(char)) {
-      kanaCount += 1;
-      if (!inKanaRun) kanaRuns += 1;
-      inKanaRun = true;
-      firstCjk ||= "Japanese";
-      lastCjk = "Japanese";
-    } else if (ChineseTextTest.test(char)) {
-      hanCount += 1;
-      inKanaRun = false;
-      firstCjk ||= "Chinese";
-      lastCjk = "Chinese";
-    }
-  }
-
-  const kanaIsInternal = firstCjk === "Chinese" && lastCjk === "Chinese";
-  if (kanaRuns >= 2 || kanaIsInternal || kanaCount >= hanCount) return "Japanese";
-  return "MixedChinese";
-}
 
 export function scriptBranchForLine(
   lineText: string,
