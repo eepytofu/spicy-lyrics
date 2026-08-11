@@ -179,6 +179,64 @@ test("timed above projection falls back below when one annotation crosses timing
   assert.equal(splitOwner?.joinedDisplayText.replace(/\s+/gu, " ").trim(), "ru guo sumimasen");
 });
 
+test("AMLL-style provider boundary spaces preserve above-reading timing owners", () => {
+  const syllables = [
+    { Text: "赴", StartTime: 0, EndTime: 1, IsPartOfWord: false },
+    { Text: "斩", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+  ];
+  const contextText = buildCjkReadingContextText(syllables);
+  const projection = projectMandarinReading(contextText);
+  const aboveReadingSegments = projection.segments.map((segment) => ({
+    canonicalRange: { startCp: segment.startCp, endCp: segment.endCp },
+    reading: segment.reading,
+    kind: "mandarinPinyin" as const,
+    provenance: "local" as const,
+  }));
+  const plan = buildTimedGenericPlan(
+    { StartTime: 0, EndTime: 2, Syllables: syllables },
+    projection.text,
+    "Chinese",
+    { aboveReadingSegments, aboveReadingSourceText: contextText },
+  );
+
+  assert.equal(contextText, "赴斩");
+  assert.deepEqual(plan?.sourceUnits.map(({ canonicalRange }) => canonicalRange), [
+    { startCp: 0, endCp: 1 },
+    { startCp: 2, endCp: 3 },
+  ]);
+  assert.deepEqual(plan?.aboveReadingSegments?.map(({ canonicalRange, reading }) => ({
+    canonicalRange,
+    reading,
+  })), [
+    { canonicalRange: { startCp: 0, endCp: 1 }, reading: "fù" },
+    { canonicalRange: { startCp: 2, endCp: 3 }, reading: "zhǎn" },
+  ]);
+});
+
+test("above-reading coordinate remap abstains on non-whitespace text drift", () => {
+  const plan = buildTimedGenericPlan(
+    {
+      StartTime: 0,
+      EndTime: 2,
+      Syllables: [
+        { Text: "甲", StartTime: 0, EndTime: 1, IsPartOfWord: true },
+        { Text: "丙", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+      ],
+    },
+    "jiǎ yǐ",
+    "Chinese",
+    {
+      aboveReadingSourceText: "甲乙",
+      aboveReadingSegments: [
+        { canonicalRange: { startCp: 0, endCp: 1 }, reading: "jiǎ", kind: "mandarinPinyin", provenance: "local" },
+        { canonicalRange: { startCp: 1, endCp: 2 }, reading: "yǐ", kind: "mandarinPinyin", provenance: "local" },
+      ],
+    },
+  );
+
+  assert.equal(plan?.aboveReadingSegments, undefined);
+});
+
 test("optional Mandarin word joining changes display boundaries but not timing owners", () => {
   const group = {
     StartTime: 0,

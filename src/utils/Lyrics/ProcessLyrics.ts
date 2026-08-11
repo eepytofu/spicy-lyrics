@@ -576,7 +576,12 @@ const postProcessSyllableRomanization = async (
             group,
             fullRomaji,
             isChineseLine ? "Chinese" : "Generic",
-            { mandarinWordLayout, provenance: reading.provenance, aboveReadingSegments },
+            {
+              mandarinWordLayout,
+              provenance: reading.provenance,
+              aboveReadingSegments,
+              aboveReadingSourceText: effectiveLineText,
+            },
           );
         if (plan) {
           group.ReadingRenderPlan = plan;

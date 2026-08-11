@@ -113,6 +113,7 @@ export type RenderPlan = {
   readonly joinedDisplayText: string;
   readonly translation?: string;
   readonly furigana?: readonly PlanFuriganaSegment[];
+  readonly aboveReadingSegments?: readonly AboveReadingSegment[];
   readonly primaryScript?: "Japanese" | "Chinese";
 };
 

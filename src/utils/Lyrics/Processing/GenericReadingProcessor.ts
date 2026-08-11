@@ -77,7 +77,67 @@ type TimedGenericPlanOptions = {
   };
   provenance?: ReadingProvenance;
   aboveReadingSegments?: readonly AboveReadingSegment[];
+  aboveReadingSourceText?: string;
 };
+
+const WhitespaceCodePointTest = /^\s$/u;
+
+// Contextual Mandarin analysis deliberately removes provider-only boundaries,
+// while the canonical render line preserves them as visual spaces. Carry the
+// exact character alignment across that whitespace-only difference; any real
+// text mismatch still abstains so an annotation cannot move to another glyph.
+function remapAboveReadingSegmentsToCanonical(
+  segments: readonly AboveReadingSegment[] | undefined,
+  sourceText: string | undefined,
+  canonicalText: string,
+): readonly AboveReadingSegment[] | undefined {
+  if (!segments?.length || sourceText === undefined || sourceText === canonicalText) return segments;
+
+  const source = Array.from(sourceText);
+  const canonical = Array.from(canonicalText);
+  const sourceToCanonical = new Map<number, number>();
+  let sourceIndex = 0;
+  let canonicalIndex = 0;
+
+  while (sourceIndex < source.length && canonicalIndex < canonical.length) {
+    if (source[sourceIndex] === canonical[canonicalIndex]) {
+      sourceToCanonical.set(sourceIndex, canonicalIndex);
+      sourceIndex += 1;
+      canonicalIndex += 1;
+    } else if (WhitespaceCodePointTest.test(canonical[canonicalIndex])) {
+      canonicalIndex += 1;
+    } else if (WhitespaceCodePointTest.test(source[sourceIndex])) {
+      sourceIndex += 1;
+    } else {
+      return undefined;
+    }
+  }
+  while (sourceIndex < source.length && WhitespaceCodePointTest.test(source[sourceIndex])) sourceIndex += 1;
+  while (canonicalIndex < canonical.length && WhitespaceCodePointTest.test(canonical[canonicalIndex])) canonicalIndex += 1;
+  if (sourceIndex !== source.length || canonicalIndex !== canonical.length) return undefined;
+
+  const remapped: AboveReadingSegment[] = [];
+  for (const segment of segments) {
+    const { startCp, endCp } = segment.canonicalRange;
+    if (startCp < 0 || endCp <= startCp || endCp > source.length) return undefined;
+    const mapped = source.slice(startCp, endCp)
+      .map((character, offset) => ({ character, canonical: sourceToCanonical.get(startCp + offset) }))
+      .filter(({ character }) => !WhitespaceCodePointTest.test(character));
+    if (mapped.length === 0 || mapped.some(({ canonical: index }) => index === undefined)) return undefined;
+    const mappedStart = mapped[0].canonical!;
+    const mappedEnd = mapped.at(-1)!.canonical! + 1;
+    const sourceSlice = source.slice(startCp, endCp).filter((character) => !WhitespaceCodePointTest.test(character)).join("");
+    const canonicalSlice = canonical.slice(mappedStart, mappedEnd)
+      .filter((character) => !WhitespaceCodePointTest.test(character))
+      .join("");
+    if (sourceSlice !== canonicalSlice) return undefined;
+    remapped.push({
+      ...segment,
+      canonicalRange: { startCp: mappedStart, endCp: mappedEnd },
+    });
+  }
+  return remapped;
+}
 
 function withAboveReadingSegments(
   plan: RenderPlan,
@@ -241,9 +301,14 @@ export function buildTimedGenericPlan(
     units: canonical.spanMappings.map((mapping, index) => ({ canonicalRange: mapping.canonicalRange,
       text: chunks[index], kind: chunks[index].trim() === (syllables[index].Text || "").trim() ? "passthrough" : "transformed",
       logicalGroupId: `generic-${index}`, timingRefs: [mapping.spanId], provenance })) };
+  const canonicalAboveReadingSegments = remapAboveReadingSegmentsToCanonical(
+    options.aboveReadingSegments,
+    options.aboveReadingSourceText,
+    canonical.text,
+  );
   const plan = withAboveReadingSegments(
     buildRenderPlan(parsed, canonical, [annotation]),
-    options.aboveReadingSegments,
+    canonicalAboveReadingSegments,
     true,
   );
   if (!validateRenderPlan(plan).valid) return undefined;
