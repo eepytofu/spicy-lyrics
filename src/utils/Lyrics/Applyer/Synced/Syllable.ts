@@ -162,20 +162,15 @@ const createSyllableWord = (
   const totalDuration = ConvertTime(syllable.EndTime) - ConvertTime(syllable.StartTime);
   const letterLength = Array.from(syllable.Text).length;
   const readingRow = resolveReadingRowPresentation(syllable, renderOptions);
-  const reservesAboveReadingRow = readingRow.kind === "pinyinAbove";
   const reservesReadingRow = readingRow.kind !== "none";
-  // Package-backed Japanese words need a registered word element in every
-  // display mode. Letter emphasis returns before timing registration.
+  const rendersEmphasisWithReadings = reservesReadingRow || !!syllable.JapaneseReading;
   const letterCapable =
-    IsLetterCapable(letterLength, totalDuration) &&
-    !isRtl(syllable.Text) &&
-    (!reservesReadingRow || reservesAboveReadingRow) &&
-    !syllable.JapaneseReading;
+    IsLetterCapable(letterLength, totalDuration) && !isRtl(syllable.Text);
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
     word = document.createElement("div");
-    if (reservesAboveReadingRow) {
+    if (rendersEmphasisWithReadings) {
       renderBaseTextWithReadings(
         word,
         syllable,

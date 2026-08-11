@@ -43,7 +43,7 @@ export type ReadingRenderOptions = {
   primaryScript?: "Japanese" | "Chinese";
   chineseDocument?: boolean;
   hanLanguageContext?: HanLanguageContext;
-  /** Split unannotated Above-row text into animator-sized glyph runs. */
+  /** Split timed base text into animator-sized glyph runs. */
   splitBaseRunsForEmphasis?: boolean;
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
@@ -260,7 +260,7 @@ function appendPlainText(
   hanLanguageContext?: HanLanguageContext,
   layout: "inline" | "furiganaRow" | "aboveReadingRow" = "inline",
   splitBaseRunsForEmphasis = false,
-  syntheticGapCodePointOffsets?: ReadonlySet<number>
+  syntheticGapOffsets?: ReadonlySet<number>
 ): void {
   if (!text) return;
 
@@ -286,9 +286,8 @@ function appendPlainText(
                 : "lyric-base-run lyric-base-plain";
         run.dataset.sourceStart = String(cursor);
         if (
-          layout === "aboveReadingRow" &&
           WhitespaceOnlyText.test(displayText) &&
-          syntheticGapCodePointOffsets?.has(cursor)
+          syntheticGapOffsets?.has(cursor)
         ) {
           run.classList.add("lyric-base-synthetic-gap");
         }
@@ -381,7 +380,9 @@ export function appendFuriganaText(
   parent: HTMLElement,
   text: string,
   rawSegments: FuriganaSegment[],
-  hanLanguageContext?: HanLanguageContext
+  hanLanguageContext?: HanLanguageContext,
+  splitBaseRunsForEmphasis = false,
+  syntheticGapUtf16Offsets?: ReadonlySet<number>
 ): void {
   parent.textContent = "";
 
@@ -403,7 +404,9 @@ export function appendFuriganaText(
       text.slice(cursor, segment.start),
       cursor,
       hanLanguageContext,
-      "furiganaRow"
+      "furiganaRow",
+      splitBaseRunsForEmphasis,
+      syntheticGapUtf16Offsets
     );
 
     const cluster = document.createElement("span");
@@ -435,7 +438,15 @@ export function appendFuriganaText(
     cursor = segment.end;
   }
 
-  appendPlainText(parent, text.slice(cursor), cursor, hanLanguageContext, "furiganaRow");
+  appendPlainText(
+    parent,
+    text.slice(cursor),
+    cursor,
+    hanLanguageContext,
+    "furiganaRow",
+    splitBaseRunsForEmphasis,
+    syntheticGapUtf16Offsets
+  );
   groupWrapPunctuationRuns(parent);
 }
 
@@ -576,6 +587,9 @@ export function renderBaseTextWithReadings(
   const syntheticGapCodePointOffsets = options.splitBaseRunsForEmphasis
     ? new Set(readabilityProjection.insertedBeforeCodePoint.map((offset, index) => offset + index))
     : undefined;
+  const syntheticGapUtf16Offsets = options.splitBaseRunsForEmphasis
+    ? new Set(readabilityProjection.insertedBeforeUtf16.map((offset, index) => offset + index))
+    : undefined;
   const hanLanguageContext = options.hanLanguageContext
     ? {
         ...options.hanLanguageContext,
@@ -620,7 +634,14 @@ export function renderBaseTextWithReadings(
     const segments = projectFuriganaSegmentsForReadability(sourceSegments, readabilityProjection);
     if (segments.length > 0) {
       markReadingRowHost(element, presentation);
-      appendFuriganaText(element, text, segments, hanLanguageContext);
+      appendFuriganaText(
+        element,
+        text,
+        segments,
+        hanLanguageContext,
+        options.splitBaseRunsForEmphasis === true,
+        syntheticGapUtf16Offsets
+      );
       packAdjacentFuriganaClusters(
         Array.from(element.children).filter((child) =>
           hasElementClass(child, "lyric-base-run")
@@ -674,7 +695,15 @@ export function renderBaseTextWithReadings(
   }
 
   element.textContent = "";
-  appendPlainText(element, text, 0, hanLanguageContext);
+  appendPlainText(
+    element,
+    text,
+    0,
+    hanLanguageContext,
+    "inline",
+    options.splitBaseRunsForEmphasis === true,
+    syntheticGapUtf16Offsets
+  );
   return false;
 }
 

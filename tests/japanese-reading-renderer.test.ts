@@ -900,6 +900,82 @@ test("only full-line applyers add the shared base-flow owner", () => {
   assert.match(syllableApplyerSource, /renderBaseTextWithReadings\(word,/u);
 });
 
+test("Japanese syllable emphasis keeps rendered base runs in Pure, Furigana, and Romaji", () => {
+  const entry = {
+    Text: "エーテル麻",
+    JapaneseReading: {
+      sourceText: "エーテル麻",
+      displayText: "エーテル麻",
+      romaji: "eeteru ma",
+      furigana: [{ start: 4, end: 5, reading: "ま" }],
+    },
+  };
+  const cases = [
+    { name: "Pure", mode: "furigana", useRomanized: false, rendersReading: false },
+    { name: "Furigana", mode: "furigana", useRomanized: true, rendersReading: true },
+    { name: "Romaji", mode: "romaji", useRomanized: true, rendersReading: false },
+  ] as const;
+
+  for (const fixture of cases) {
+    $japaneseReadingMode.set(fixture.mode);
+    const word = new FakeElement();
+    const renderedReading = renderBaseTextWithReadings(
+      word as unknown as HTMLElement,
+      entry,
+      {
+        useRomanized: fixture.useRomanized,
+        isJapaneseLyrics: true,
+        splitBaseRunsForEmphasis: true,
+      }
+    );
+
+    assert.equal(renderedReading, fixture.rendersReading, fixture.name);
+    assert.equal(word.children.length, 5, fixture.name);
+    assert.deepEqual(
+      word.children.map((run) =>
+        run.children.find((child) => child.className === "furigana-base")?.textContent ??
+        run.textContent
+      ),
+      ["エ", "ー", "テ", "ル", "麻"],
+      fixture.name
+    );
+    assert.equal(entry.Text, "エーテル麻", fixture.name);
+    assert.equal(entry.JapaneseReading.sourceText, "エーテル麻", fixture.name);
+
+    const mixedWord = new FakeElement();
+    renderBaseTextWithReadings(
+      mixedWord as unknown as HTMLElement,
+      {
+        Text: "命shout",
+        JapaneseReading: {
+          sourceText: "命shout",
+          romaji: "inochi shout",
+          furigana: [{ start: 0, end: 1, reading: "いのち" }],
+        },
+      },
+      {
+        useRomanized: fixture.useRomanized,
+        isJapaneseLyrics: true,
+        splitBaseRunsForEmphasis: true,
+      }
+    );
+    assert.equal(mixedWord.children.length, 7, fixture.name);
+    assert.equal(mixedWord.children[1].textContent, " ", fixture.name);
+    assert.equal(
+      mixedWord.children[1].classList.contains("lyric-base-synthetic-gap"),
+      true,
+      fixture.name
+    );
+  }
+
+  assert.doesNotMatch(syllableApplyerSource, /(?<!!)!syllable\.JapaneseReading/u);
+  assert.match(
+    syllableApplyerSource,
+    /const rendersEmphasisWithReadings = reservesReadingRow \|\| !!syllable\.JapaneseReading/u
+  );
+  assert.match(syllableApplyerSource, /if \(rendersEmphasisWithReadings\)/u);
+});
+
 test("timed syllable rendering keeps one Above romaji group across Kana owners", () => {
   assert.match(syllableApplyerSource, /timedAboveReadingGroups\(/u);
   assert.match(syllableApplyerSource, /"timed-above-reading-group"/u);
