@@ -26,7 +26,7 @@ import {
 } from "./Fork/index.ts";
 import {
   romanizationBranchFromLanguage,
-  resolveCjkDocumentBranch,
+  resolveCjkDocumentContext,
   resolveCjkLineRoute,
   scriptBranchForLine,
   SCRIPT_PRIORITY,
@@ -89,8 +89,8 @@ import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v64: add structured above-line readings for Mandarin and mixed Kana runs.
-export const LYRICS_PROCESSING_VERSION = 64;
+// v65: route bilingual kana-free Han lines from conservative document evidence.
+export const LYRICS_PROCESSING_VERSION = 65;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -774,11 +774,12 @@ export const ProcessLyrics = async (
 
   const detectedLanguage = franc(gathered.francText);
   const detectedLanguageISO2 = langs.where("3", detectedLanguage)?.["1"];
-  const cjkDominantBranch = resolveCjkDocumentBranch(
+  const cjkDocumentContext = resolveCjkDocumentContext(
     gathered.scriptText,
     detectedLanguage,
     detectedLanguageISO2
   );
+  const cjkDominantBranch = cjkDocumentContext.branch;
   const language =
     cjkDominantBranch === "Japanese"
       ? "jpn"
@@ -802,6 +803,7 @@ export const ProcessLyrics = async (
     primaryLanguage: language,
     iso2Language: languageISO2,
     cjkDominantBranch,
+    cjkBilingual: cjkDocumentContext.bilingual,
   };
   const allowChineseProviderJapaneseRepair =
     isChineseProviderJapaneseRepairSource(lyrics);
