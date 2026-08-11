@@ -26,11 +26,8 @@ import {
 } from "./Fork/index.ts";
 import {
   romanizationBranchFromLanguage,
-  resolveCjkDocumentContext,
-  resolveCjkLineRoute,
   scriptBranchForLine,
   SCRIPT_PRIORITY,
-  type CjkReadingBranch,
   type RomanizationBranch,
   type ScriptBranchDocContext,
 } from "./Fork/TextDetection.ts";
@@ -68,7 +65,10 @@ import {
   buildCjkContextualHanRoutes,
   buildCjkReadingContextText,
   projectChineseDominantCjkReadings,
+  resolveCjkDocumentContext,
+  resolveCjkLineRoute,
   romanizeChineseDominantCjkText,
+  type CjkReadingBranch,
   type CjkRunReadingProjection,
 } from "./Processing/CjkLanguageRouting.ts";
 import {

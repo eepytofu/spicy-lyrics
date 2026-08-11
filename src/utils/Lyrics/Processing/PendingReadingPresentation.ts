@@ -1,4 +1,4 @@
-import { resolveCjkDocumentBranch } from "../Fork/TextDetection.ts";
+import { resolveCjkDocumentBranch } from "./CjkLanguageRouting.ts";
 
 function lyricLineTexts(lyrics: any): string[] {
   if (lyrics?.Type === "Static") {

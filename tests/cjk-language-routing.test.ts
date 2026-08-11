@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  resolveCjkDocumentBranch,
-  resolveCjkDocumentContext,
-  resolveCjkLineRoute,
   scriptBranchForLine,
 } from "../src/utils/Lyrics/Fork/TextDetection.ts";
 import {
   buildCjkContextualHanRoutes,
   partitionCjkReadingRuns,
+  resolveCjkDocumentBranch,
+  resolveCjkDocumentContext,
+  resolveCjkLineRoute,
   romanizeChineseDominantCjkText,
 } from "../src/utils/Lyrics/Processing/CjkLanguageRouting.ts";
 import { buildTimedGenericPlan } from "../src/utils/Lyrics/Processing/GenericReadingProcessor.ts";
