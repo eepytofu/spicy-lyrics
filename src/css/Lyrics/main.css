@@ -177,23 +177,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   padding-inline: 0.1em;
 }
 
-/* While contextual Pinyin is still processing, reserve its real ruby track
-   instead of adding the generic romanization skeleton below the lyric. */
-#SpicyLyricsPage .LyricsContainer .LyricsContent
-  .above-reading-pending .above-reading-plain-cluster::before {
-  content: "";
-  grid-row: 1;
-  align-self: end;
-  justify-self: center;
-  width: min(70%, 2.8em);
-  min-width: 0.5em;
-  height: 0.12em;
-  margin-block-end: 0.06em;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.2);
-  opacity: 0.28;
-}
-
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending::before {
   content: "";
   display: block;

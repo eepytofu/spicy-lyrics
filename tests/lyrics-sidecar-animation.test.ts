@@ -28,10 +28,10 @@ const syllableApplyerSource = readFileSync(
   "utf8",
 );
 
-test("pending Above Pinyin draws its skeleton in the reserved ruby track", () => {
-  assert.match(
+test("pending Above Pinyin reserves ruby geometry without a visible skeleton", () => {
+  assert.doesNotMatch(
     mainCss,
-    /\.above-reading-pending \.above-reading-plain-cluster::before\s*\{[\s\S]*?grid-row:\s*1;[\s\S]*?justify-self:\s*center;/u,
+    /\.above-reading-pending \.above-reading-plain-cluster::before/u,
   );
 });
 
