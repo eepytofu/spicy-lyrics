@@ -1,5 +1,5 @@
 import type { ProviderMatchMetadata, ProviderRequestContext, TrackMetadata } from "../types";
-import { candidateScore, fetchWithTimeout, matchMetadata, readResponseJson, readResponseText, simplify } from "./shared";
+import { assessAndRankCandidates, candidateScore, fetchWithTimeout, matchMetadata, readResponseJson, readResponseText, simplify } from "./shared";
 
 type FetchLike = typeof fetch;
 type SearchResult = {
@@ -35,8 +35,9 @@ function resultScore(track: TrackMetadata, result: SearchResult): number {
   return Math.max(-100, ...titles.map((title) => candidateScore(track, title, artists)));
 }
 
-async function search(fetchImpl: FetchLike, track: TrackMetadata, signal?: AbortSignal): Promise<SearchResult[]> {
+async function search(fetchImpl: FetchLike, track: TrackMetadata, signal?: AbortSignal) {
   const found = new Map<string, SearchResult>();
+  let assessed = assessAndRankCandidates(found.values(), (result) => ({ score: resultScore(track, result) }));
   for (const query of new Set([simplify(track.title), track.title].map((value) => value.trim()).filter(Boolean))) {
     const init: RequestInit = {
       method: "POST",
@@ -49,22 +50,24 @@ async function search(fetchImpl: FetchLike, track: TrackMetadata, signal?: Abort
     for (const result of await readResponseJson<SearchResult[]>(response)) {
       if (result.file) found.set(result.file, result);
     }
-    if ([...found.values()].some((result) => resultScore(track, result) >= 75)) break;
+    assessed = assessAndRankCandidates(found.values(), (result) => ({ score: resultScore(track, result) }));
+    if (assessed.some(({ assessment }) => assessment.score >= 75)) break;
   }
-  return [...found.values()].sort((a, b) => resultScore(track, b) - resultScore(track, a));
+  return assessed;
 }
 
 export function createAmllDbProvider(fetchImpl: FetchLike = fetch) {
   return async (track: TrackMetadata, context: ProviderRequestContext = {}): Promise<AmllDbResult | undefined> => {
     const direct = await fetchTtml(fetchImpl, `${spotifyBaseUrl}/${encodeURIComponent(track.id)}?format=ttml`, context.signal);
     if (direct) return { ttml: direct, match: { ...matchMetadata(track, track.title, track.artists, track.durationMs, "spotify-id", track.album), confidence: 1 } };
-    for (const result of await search(fetchImpl, track, context.signal)) {
-      if (!result.file || resultScore(track, result) < 75) continue;
+    for (const { candidate: result, assessment } of await search(fetchImpl, track, context.signal)) {
+      if (!result.file || assessment.score < 75) continue;
       const ttml = await fetchTtml(fetchImpl, `${rawLyricsBaseUrl}/${encodeURIComponent(result.file)}`, context.signal);
       if (ttml) {
         const titles = [...new Set([result.title ?? "", ...(result.titles ?? [])].filter(Boolean))];
         const artists = [...new Set([result.artist ?? "", ...(result.artists ?? [])].filter(Boolean))];
-        const title = titles.sort((a, b) => candidateScore(track, b, artists) - candidateScore(track, a, artists))[0] ?? track.title;
+        const title = assessAndRankCandidates(titles, (value) => ({ score: candidateScore(track, value, artists) }))[0]?.candidate
+          ?? track.title;
         return { ttml, match: matchMetadata(track, title, artists, undefined, "title-search") };
       }
     }

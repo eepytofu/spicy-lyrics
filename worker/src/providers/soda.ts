@@ -12,6 +12,7 @@ import { parseYrc } from "./netease";
 import { parseQrc } from "./qq";
 import {
   assessCandidate,
+  assessAndRankCandidates,
   fetchWithTimeout,
   isAcceptableCandidate,
   isStrongCandidate,
@@ -105,12 +106,13 @@ function successfulSodaBody(body: any): boolean {
   return !Number.isFinite(status) || status === 0;
 }
 
-export async function searchSoda(
+async function searchSodaAssessed(
   track: Parameters<LyricsProvider>[0],
   clientParams = sodaClientParams(),
   signal?: AbortSignal,
-): Promise<SodaSong[]> {
+) {
   const found = new Map<string, SodaSong>();
+  let assessed = assessAndRankCandidates(found.values(), (song) => assessSodaSong(track, song));
   for (const query of searchQueries(track)) {
     throwIfAborted(signal);
     const url = new URL("https://api.qishui.com/luna/pc/search/track");
@@ -152,9 +154,18 @@ export async function searchSoda(
       throwIfProviderRequestFailed(error, signal);
       /* try the next metadata query */
     }
-    if ([...found.values()].some((song) => isStrongCandidate(assessSodaSong(track, song)))) break;
+    assessed = assessAndRankCandidates(found.values(), (song) => assessSodaSong(track, song));
+    if (assessed.some(({ assessment }) => isStrongCandidate(assessment))) break;
   }
-  return [...found.values()].sort((a, b) => assessSodaSong(track, b).score - assessSodaSong(track, a).score);
+  return assessed;
+}
+
+export async function searchSoda(
+  track: Parameters<LyricsProvider>[0],
+  clientParams = sodaClientParams(),
+  signal?: AbortSignal,
+): Promise<SodaSong[]> {
+  return (await searchSodaAssessed(track, clientParams, signal)).map(({ candidate }) => candidate);
 }
 
 export async function fetchSodaDetail(
@@ -243,9 +254,8 @@ function convertSodaLyrics(body: any, durationMs: number): NativeLyrics | undefi
 // failure behavior. See worker/NOTICE.md and worker/LICENSES/Apache-2.0.txt.
 export const sodaProvider: LyricsProvider = async (track, context = {}) => {
   const clientParams = sodaClientParams();
-  for (const song of await searchSoda(track, clientParams, context.signal)) {
+  for (const { candidate: song, assessment: searchAssessment } of await searchSodaAssessed(track, clientParams, context.signal)) {
     throwIfAborted(context.signal);
-    const searchAssessment = assessSodaSong(track, song);
     if (!isAcceptableCandidate(searchAssessment) || searchAssessment.evidence.versionConflict) continue;
     const body = await fetchSodaDetail(song, clientParams, context.signal);
     if (!body) continue;

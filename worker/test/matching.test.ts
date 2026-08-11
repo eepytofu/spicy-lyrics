@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  assessAndRankCandidates,
   assessCandidate,
   candidateScore,
   isAcceptableCandidate,
@@ -13,6 +14,17 @@ import {
 const track = (title: string, artists = ["洛天依"], durationMs = 240_000) => ({ id: "spotify-id", title, artists, album: "", durationMs });
 
 describe("provider candidate matching", () => {
+  it("ranks one assessment per candidate and preserves upstream order for exact ties", () => {
+    const calls: string[] = [];
+    const ranked = assessAndRankCandidates(["first", "winner", "second"], (candidate) => {
+      calls.push(candidate);
+      return { score: candidate === "winner" ? 2 : 1 };
+    });
+
+    expect(calls).toEqual(["first", "winner", "second"]);
+    expect(ranked.map(({ candidate }) => candidate)).toEqual(["winner", "first", "second"]);
+  });
+
   it("compares Traditional and Simplified Chinese consistently", () => {
     expect(normalize("樂鳴東方")).toBe(normalize("乐鸣东方"));
     expect(searchQueries(track("樂鳴東方"))).toContain("乐鸣东方 洛天依");

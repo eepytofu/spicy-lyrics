@@ -3,7 +3,7 @@ import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../conver
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
+import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
 export function decryptQrc(hex: string): string | undefined {
@@ -164,8 +164,9 @@ async function searchQqLegacy(track: Parameters<LyricsProvider>[0], signal?: Abo
   });
 }
 
-export async function searchQq(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<SearchSong[]> {
+async function searchQqAssessed(track: Parameters<LyricsProvider>[0], signal?: AbortSignal) {
   const found = new Map<number, SearchSong>();
+  let assessed = assessAndRankCandidates(found.values(), (song) => assessSearchSong(track, song));
   for (const query of qqSearchQueries(track)) {
     throwIfAborted(signal);
     const body = { req_1: { method: "DoSearchForQQMusicDesktop", module: "music.search.SearchCgiService", param: { num_per_page: "20", page_num: "1", query, search_type: 0 } } };
@@ -190,12 +191,18 @@ export async function searchQq(track: Parameters<LyricsProvider>[0], signal?: Ab
     if (desktopSearchUnavailable) {
       addQqSearchItems(found, await searchQqCatalogFallback(query, signal));
     }
-    if ([...found.values()].some((song) => isStrongCandidate(assessSearchSong(track, song)))) break;
+    assessed = assessAndRankCandidates(found.values(), (song) => assessSearchSong(track, song));
+    if (assessed.some(({ assessment }) => isStrongCandidate(assessment))) break;
   }
-  if (![...found.values()].some((song) => isAcceptableCandidate(assessSearchSong(track, song)))) {
+  if (!assessed.some(({ assessment }) => isAcceptableCandidate(assessment))) {
     for (const song of await searchQqLegacy(track, signal)) found.set(song.id, song);
+    assessed = assessAndRankCandidates(found.values(), (song) => assessSearchSong(track, song));
   }
-  return [...found.values()].sort((a, b) => assessSearchSong(track, b).score - assessSearchSong(track, a).score);
+  return assessed;
+}
+
+export async function searchQq(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<SearchSong[]> {
+  return (await searchQqAssessed(track, signal)).map(({ candidate }) => candidate);
 }
 
 export async function fetchQqLyric(song: SearchSong, track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<any | undefined> {
@@ -306,9 +313,9 @@ function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong,
 
 export const qqProvider: LyricsProvider = async (track, context = {}) => {
   let canUseLegacyFallback = true;
-  for (const song of await searchQq(track, context.signal)) {
+  for (const { candidate: song, assessment } of await searchQqAssessed(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessSearchSong(track, song))) continue;
+    if (!isAcceptableCandidate(assessment)) continue;
     const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track, context.signal)), "search");
     if (current) return current;
     if (canUseLegacyFallback) {

@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags } from "./shared";
+import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags, type CandidateAssessment } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -98,12 +98,13 @@ function assessKugouCandidate(track: Parameters<LyricsProvider>[0], song: KugouS
   });
 }
 
-export function isKugouCandidateCompatible(
+function isKugouCandidateAssessmentCompatible(
   track: Parameters<LyricsProvider>[0],
   song: KugouSong,
   candidate: KugouCandidate,
+  candidateAssessment: CandidateAssessment,
+  catalogAssessment: CandidateAssessment,
 ): boolean {
-  const candidateAssessment = assessKugouCandidate(track, song, candidate);
   if (!isAcceptableCandidate(candidateAssessment)) return false;
   if (!candidateAssessment.evidence.versionConflict) return true;
 
@@ -111,7 +112,7 @@ export function isKugouCandidateCompatible(
   // `Song (DJ lowered-key version)` back to `Song`. Trust that omission only
   // when the selected catalog/hash is already strong and every child field
   // still corroborates it. An explicit conflicting child tag remains a veto.
-  if (versionTags(candidate.song).size > 0 || !isStrongCandidate(assessKugouSong(track, song))) return false;
+  if (versionTags(candidate.song).size > 0 || !isStrongCandidate(catalogAssessment)) return false;
   const childTitle = normalize(candidate.song);
   const catalogTitle = normalize(song.title);
   const shortenedCatalogTitle = [...childTitle].length >= 3 && catalogTitle.includes(childTitle);
@@ -120,9 +121,24 @@ export function isKugouCandidateCompatible(
     && (candidateAssessment.evidence.duration ?? 1) >= 0.8;
 }
 
-export async function searchKugouSongs(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<KugouSong[]> {
+export function isKugouCandidateCompatible(
+  track: Parameters<LyricsProvider>[0],
+  song: KugouSong,
+  candidate: KugouCandidate,
+): boolean {
+  return isKugouCandidateAssessmentCompatible(
+    track,
+    song,
+    candidate,
+    assessKugouCandidate(track, song, candidate),
+    assessKugouSong(track, song),
+  );
+}
+
+async function searchKugouSongsAssessed(track: Parameters<LyricsProvider>[0], signal?: AbortSignal) {
   const queries = searchQueries(track);
   const found = new Map<string, KugouSong>();
+  let assessed = assessAndRankCandidates(found.values(), (song) => assessKugouSong(track, song));
   const addResults = (items: any[], catalog: KugouSong["catalog"]) => {
     const addSong = (item: any) => {
       const hash = String(item?.FileHash ?? item?.hash ?? "").trim();
@@ -178,12 +194,17 @@ export async function searchKugouSongs(track: Parameters<LyricsProvider>[0], sig
       showtype: "1",
     }).toString();
     await requestCatalog(mobileUrl, "mobile-http");
-    if ([...found.values()].some((song) => isStrongCandidate(assessKugouSong(track, song)))) break;
+    assessed = assessAndRankCandidates(found.values(), (song) => assessKugouSong(track, song));
+    if (assessed.some(({ assessment }) => isStrongCandidate(assessment))) break;
   }
-  return [...found.values()].sort((a, b) => assessKugouSong(track, b).score - assessKugouSong(track, a).score);
+  return assessed;
 }
 
-export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0], song: KugouSong, signal?: AbortSignal): Promise<KugouCandidate[]> {
+export async function searchKugouSongs(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<KugouSong[]> {
+  return (await searchKugouSongsAssessed(track, signal)).map(({ candidate }) => candidate);
+}
+
+async function searchKugouCandidatesAssessed(track: Parameters<LyricsProvider>[0], song: KugouSong, signal?: AbortSignal) {
   const url = new URL("https://lyrics.kugou.com/search");
   url.search = new URLSearchParams({
     ver: "1",
@@ -201,7 +222,7 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
   let body: any;
   try { body = await readResponseJson<any>(response); }
   catch { return []; }
-  return (body?.candidates ?? [])
+  const candidates = (body?.candidates ?? [])
     .map((candidate: any) => ({
       id: String(candidate?.id ?? ""),
       accesskey: String(candidate?.accesskey ?? ""),
@@ -209,9 +230,15 @@ export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0]
       singer: String(candidate?.singer ?? ""),
       duration: Number(candidate?.duration) || undefined,
     }))
-    .filter((candidate: KugouCandidate) => candidate.id && candidate.accesskey)
-    .sort((a: KugouCandidate, b: KugouCandidate) =>
-      assessKugouCandidate(track, song, b).score - assessKugouCandidate(track, song, a).score);
+    .filter((candidate: KugouCandidate) => candidate.id && candidate.accesskey);
+  return assessAndRankCandidates<KugouCandidate, CandidateAssessment>(
+    candidates,
+    (candidate) => assessKugouCandidate(track, song, candidate),
+  );
+}
+
+export async function searchKugouCandidates(track: Parameters<LyricsProvider>[0], song: KugouSong, signal?: AbortSignal): Promise<KugouCandidate[]> {
+  return (await searchKugouCandidatesAssessed(track, song, signal)).map(({ candidate }) => candidate);
 }
 
 export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSignal): Promise<string | undefined> {
@@ -229,12 +256,12 @@ export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSig
 }
 
 export const kugouProvider: LyricsProvider = async (track, context = {}) => {
-  for (const song of await searchKugouSongs(track, context.signal)) {
+  for (const { candidate: song, assessment: catalogAssessment } of await searchKugouSongsAssessed(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessKugouSong(track, song))) continue;
-    for (const candidate of await searchKugouCandidates(track, song, context.signal)) {
+    if (!isAcceptableCandidate(catalogAssessment)) continue;
+    for (const { candidate, assessment } of await searchKugouCandidatesAssessed(track, song, context.signal)) {
       throwIfAborted(context.signal);
-      if (!isKugouCandidateCompatible(track, song, candidate)) continue;
+      if (!isKugouCandidateAssessmentCompatible(track, song, candidate, assessment, catalogAssessment)) continue;
       const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
       const result = toSyllableLyrics(parseKrc(raw), "kugou");
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);

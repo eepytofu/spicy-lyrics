@@ -2,7 +2,7 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, toLineLyrics, toSyllableLyrics } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
-import { assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
+import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const EAPI_KEY = Latin1.parse("e82ckenh8dichen8");
@@ -105,8 +105,9 @@ function addNeteaseSongs(found: Map<number, Song>, values: any[], searchMethod: 
   }
 }
 
-export async function searchNetease(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<Song[]> {
+async function searchNeteaseAssessed(track: Parameters<LyricsProvider>[0], signal?: AbortSignal) {
   const found = new Map<number, Song>();
+  let assessed = assessAndRankCandidates(found.values(), (song) => assessSong(track, song));
   for (const keyword of searchQueries(track)) {
     throwIfAborted(signal);
     const batch = await eapi<any>("https://interface.music.163.com/eapi/batch", "/api/search/song/list/page", {
@@ -117,7 +118,8 @@ export async function searchNetease(track: Parameters<LyricsProvider>[0], signal
       (batch?.data?.resources ?? []).map((resource: any) => resource?.baseInfo?.simpleSongData).filter(Boolean),
       "batch-search",
     );
-    if (![...found.values()].some((song) => isStrongCandidate(assessSong(track, song)))) {
+    assessed = assessAndRankCandidates(found.values(), (song) => assessSong(track, song));
+    if (!assessed.some(({ assessment }) => isStrongCandidate(assessment))) {
       // Lyricify's newer search path exposes 30 results and works outside
       // mainland China. Keep the newer Spicy batch route primary, then merge
       // this HTTPS catalog only when the primary has not found a strong match.
@@ -125,10 +127,15 @@ export async function searchNetease(track: Parameters<LyricsProvider>[0], signal
         s: keyword, type: "1", limit: "30", offset: "0", total: "true",
       }, signal);
       addNeteaseSongs(found, cloud?.result?.songs ?? [], "cloud-search");
+      assessed = assessAndRankCandidates(found.values(), (song) => assessSong(track, song));
     }
-    if ([...found.values()].some((song) => isStrongCandidate(assessSong(track, song)))) break;
+    if (assessed.some(({ assessment }) => isStrongCandidate(assessment))) break;
   }
-  return [...found.values()].sort((a, b) => assessSong(track, b).score - assessSong(track, a).score);
+  return assessed;
+}
+
+export async function searchNetease(track: Parameters<LyricsProvider>[0], signal?: AbortSignal): Promise<Song[]> {
+  return (await searchNeteaseAssessed(track, signal)).map(({ candidate }) => candidate);
 }
 
 export function parseYrc(value: string): TimedLine[] {
@@ -201,9 +208,9 @@ function hasNeteaseLyrics(body: any): boolean {
 }
 
 export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
-  for (const song of await searchNetease(track, context.signal)) {
+  for (const { candidate: song, assessment } of await searchNeteaseAssessed(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessSong(track, song))) continue;
+    if (!isAcceptableCandidate(assessment)) continue;
     let lyricMethod = "eapi-lyric";
     let body = await eapi<any>("https://interface3.music.163.com/eapi/song/lyric/v1", "/api/song/lyric/v1", {
       id: song.id, cp: false, tv: 0, lv: 0, rv: 0, kv: 0, yv: 0, ytv: 0, yrv: 0,

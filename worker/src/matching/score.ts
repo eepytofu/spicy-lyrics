@@ -249,6 +249,22 @@ export type CandidateAssessment = {
   };
 };
 
+export type AssessedCandidate<T, TAssessment extends { score: number } = CandidateAssessment> = {
+  candidate: T;
+  assessment: TAssessment;
+  upstreamIndex: number;
+};
+
+export function assessAndRankCandidates<T, TAssessment extends { score: number }>(
+  candidates: Iterable<T>,
+  assess: (candidate: T) => TAssessment,
+): AssessedCandidate<T, TAssessment>[] {
+  return [...candidates]
+    .map((candidate, upstreamIndex) => ({ candidate, assessment: assess(candidate), upstreamIndex }))
+    .sort((left, right) => right.assessment.score - left.assessment.score
+      || left.upstreamIndex - right.upstreamIndex);
+}
+
 export function assessCandidate(track: TrackMetadata, candidate: TrackCandidate): CandidateAssessment {
   const titleForms = unique([candidate.title, ...(candidate.titleAliases ?? [])]);
   const titleEvidence = titleForms.map((value) => ({
