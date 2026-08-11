@@ -26,11 +26,9 @@ import {
   packAdjacentFuriganaClusters,
   populateFuriganaReading,
   renderBaseTextWithReadings,
-  shouldReservePendingAboveReading,
-  shouldRenderFurigana,
-  shouldRenderAboveReadings,
+  resolveReadingRowPresentation,
 } from "../ReadingRenderer.ts";
-import type { ReadingRenderOptions } from "../ReadingRenderer.ts";
+import type { ReadingRenderOptions, ReadingRowPresentation } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
 import { needsSyllableSpaceBefore } from "../../Processing/SyllableBoundaries.ts";
 import { needsMixedScriptReadabilityGapBefore } from "../../Processing/MixedScriptReadability.ts";
@@ -157,39 +155,36 @@ const createSyllableWord = (
   index: number,
   all: SyllableData[],
   renderOptions: ReadingRenderOptions,
-  useRomanized: boolean,
   presentation: SyllableWordPresentation = {}
 ): HTMLElement => {
   const isBackground = presentation.isBackground === true;
   let word = document.createElement("span");
   const totalDuration = ConvertTime(syllable.EndTime) - ConvertTime(syllable.StartTime);
-  const letterLength = syllable.Text.split("").length;
-  const hasFurigana = shouldRenderFurigana(syllable, renderOptions);
-  const hasAboveReading = shouldRenderAboveReadings(syllable, renderOptions);
-  const reservesAboveReadingRow =
-    hasAboveReading ||
-    (renderOptions.reserveAboveReading === true && useRomanized) ||
-    shouldReservePendingAboveReading(renderOptions);
-  const reservesFuriganaRow =
-    hasFurigana ||
-    reservesAboveReadingRow ||
-    ((renderOptions.reserveFurigana === true || renderOptions.reserveAboveReading === true) && useRomanized);
+  const letterLength = Array.from(syllable.Text).length;
+  const readingRow = resolveReadingRowPresentation(syllable, renderOptions);
+  const reservesAboveReadingRow = readingRow.kind === "pinyinAbove";
+  const reservesReadingRow = readingRow.kind !== "none";
   // Package-backed Japanese words need a registered word element in every
   // display mode. Letter emphasis returns before timing registration.
   const letterCapable =
     IsLetterCapable(letterLength, totalDuration) &&
     !isRtl(syllable.Text) &&
-    (!reservesFuriganaRow || reservesAboveReadingRow) &&
+    (!reservesReadingRow || reservesAboveReadingRow) &&
     !syllable.JapaneseReading;
   const sizeVar = isBackground ? "var(--font-size)" : "var(--DefaultLyricsSize)";
 
   if (letterCapable) {
     word = document.createElement("div");
     if (reservesAboveReadingRow) {
-      renderBaseTextWithReadings(word, syllable, {
-        ...renderOptions,
-        splitBaseRunsForEmphasis: true,
-      });
+      renderBaseTextWithReadings(
+        word,
+        syllable,
+        {
+          ...renderOptions,
+          splitBaseRunsForEmphasis: true,
+        },
+        readingRow
+      );
       EmphasizeRenderedUnits(renderedEmphasisUnits(word), word, syllable, isBackground);
     } else {
       Emphasize(syllable.Text.split(""), word, syllable, isBackground);
@@ -206,7 +201,7 @@ const createSyllableWord = (
     return word;
   }
 
-  renderBaseTextWithReadings(word, syllable, renderOptions);
+  renderBaseTextWithReadings(word, syllable, renderOptions, readingRow);
 
   if (!$simpleLyricsMode.get()) {
     word.style.setProperty("--gradient-position", isBackground ? `0%` : `-20%`);
@@ -227,6 +222,11 @@ const EMPTY_TIMED_FURIGANA: TimedFuriganaGroups = { groups: [], bySpanId: new Ma
 const EMPTY_TIMED_ABOVE_READING: TimedAboveReadingGroups = { groups: [], bySpanId: new Map() };
 type TimedRubyGroup = TimedFuriganaGroup | TimedAboveReadingGroup;
 
+const rendersReadingRow = (
+  presentation: ReadingRowPresentation,
+  kind: Exclude<ReadingRowPresentation["kind"], "none">
+): boolean => presentation.kind === kind && presentation.state === "rendered";
+
 /**
  * One visual ruby drawn once above several timed syllables. The group is
  * display-only: every member word keeps its own animator registration, so
@@ -243,8 +243,10 @@ const createTimedRubyGroup = (
   root.classList.add(
     "word-group",
     "semantic-word-group",
+    "has-reading-row",
+    "reading-row-rendered",
     isAboveReading ? "timed-above-reading-group" : "timed-furigana-group",
-    isAboveReading ? "has-above-reading" : "has-furigana",
+    isAboveReading ? "has-above-reading" : "has-furigana"
   );
   if (isAboveReading) root.dataset.timedAboveReadingGroup = group.id;
   else root.dataset.timedFuriganaGroup = group.id;
@@ -304,9 +306,10 @@ const appendTimedRubyMember = (
   if (!state.root || group.id !== state.groupId) {
     const timedGroup = createTimedRubyGroup(group);
     lineElement.appendChild(timedGroup.root);
-    const anchorOwner = "kind" in group
-      ? word.querySelector(".above-reading-plain-cluster")
-      : word.querySelector(".furigana-cluster");
+    const anchorOwner =
+      "kind" in group
+        ? word.querySelector(".above-reading-plain-cluster")
+        : word.querySelector(".furigana-cluster");
     (anchorOwner ?? word).appendChild(timedGroup.anchor);
     state.root = timedGroup.root;
     state.groupId = group.id;
@@ -402,7 +405,7 @@ export function ApplySyllableLyrics(
     const hanLanguageContext = createHanLanguageContext(
       data,
       joinSyllableDisplayText(line.Lead.Syllables),
-      fixHanGlyphVariants,
+      fixHanGlyphVariants
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
     const lineRenderOptions = {
@@ -416,9 +419,7 @@ export function ApplySyllableLyrics(
       hanLanguageContext,
     };
 
-    const nextLineStartTime = arr[index + 1]
-      ? arr[index + 1].Lead.StartTime
-      : 0;
+    const nextLineStartTime = arr[index + 1] ? arr[index + 1].Lead.StartTime : 0;
 
     const lineEndTimeAndNextLineStartTimeDistance =
       nextLineStartTime !== 0 ? nextLineStartTime - lineWindow.endTime : 0;
@@ -450,18 +451,30 @@ export function ApplySyllableLyrics(
 
     let currentWordGroup: HTMLSpanElement | null = null;
     let currentSemanticGroupId: string | undefined;
+    const leadReadingRow = resolveReadingRowPresentation(line.Lead, lineRenderOptions);
+    const leadSyllableReadingRows = line.Lead.Syllables.map((syllable) =>
+      resolveReadingRowPresentation(syllable, lineRenderOptions)
+    );
     const leadHasFurigana =
-      shouldRenderFurigana(line.Lead, lineRenderOptions) ||
-      line.Lead.Syllables.some((s) => shouldRenderFurigana(s, lineRenderOptions));
-    const leadHasAboveReading = shouldRenderAboveReadings(line.Lead, lineRenderOptions);
+      rendersReadingRow(leadReadingRow, "furigana") ||
+      leadSyllableReadingRows.some((presentation) => rendersReadingRow(presentation, "furigana"));
+    const leadHasAboveReading =
+      rendersReadingRow(leadReadingRow, "pinyinAbove") ||
+      leadSyllableReadingRows.some((presentation) =>
+        rendersReadingRow(presentation, "pinyinAbove")
+      );
+    const leadReservedReadingRow = leadHasAboveReading
+      ? "pinyinAbove"
+      : leadHasFurigana
+        ? "furigana"
+        : undefined;
     const leadUsesSemanticGroups =
       line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
     const leadRenderOptions = {
       ...lineRenderOptions,
-      reserveFurigana: leadHasFurigana,
-      reserveAboveReading: leadHasAboveReading,
+      reservedReadingRow: leadReservedReadingRow,
       primaryScript: line.Lead.ReadingRenderPlan?.primaryScript,
-    };
+    } satisfies ReadingRenderOptions;
     const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
     const leadTimedFurigana = leadHasFurigana
       ? timedFuriganaGroups(line.Lead.ReadingRenderPlan)
@@ -479,75 +492,60 @@ export function ApplySyllableLyrics(
     const leadTimedRubyState = createTimedRubyRenderState();
 
     line.Lead.Syllables.forEach((lead, iL, aL) => {
-        if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
-          lineElem.classList.add("rtl");
-        }
+      if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
+        lineElem.classList.add("rtl");
+      }
 
-        // Ruby crossing timed syllables is drawn once above a display-only
-        // group; member words suppress only their copy of that reading but
-        // keep their timing registration. The line is never collapsed.
-        const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
-        const timedAboveReadingGroup = leadTimedAboveReading.bySpanId.get(String(iL));
-        const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
-        const wordRenderOptions = {
-          ...leadRenderOptions,
-          aboveReadingSegments: aboveReadingSegmentsForSpan(
-            line.Lead.ReadingRenderPlan,
-            String(iL),
-          ),
-        };
-        const word = createSyllableWord(
-          lead,
-          iL,
-          aL,
-          timedFuriganaGroup
-            ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-            : wordRenderOptions,
-          UseRomanized
-        );
-        if (timedRubyGroup) {
-          appendTimedRubyMember(
-            lineElem,
-            word,
-            lead,
-            timedRubyGroup,
-            leadTimedRubyState
-          );
-          currentWordGroup = null;
-          currentSemanticGroupId = undefined;
-          return;
-        }
-        // Authored whitespace spans between members stay inside the open group
-        // so the ruby is not split into duplicates.
-        if (
-          leadTimedRubyState.root &&
-          !(lead.Text || "").trim() &&
-          timedGroupContinuesAt(
-            leadTexts,
-            leadTimedRubyLookup,
-            iL + 1,
-            leadTimedRubyState.groupId
-          )
-        ) {
-          leadTimedRubyState.root.appendChild(word);
-          currentWordGroup = null;
-          currentSemanticGroupId = undefined;
-          return;
-        }
-        resetTimedRubyRenderState(leadTimedRubyState);
+      // Ruby crossing timed syllables is drawn once above a display-only
+      // group; member words suppress only their copy of that reading but
+      // keep their timing registration. The line is never collapsed.
+      const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
+      const timedAboveReadingGroup = leadTimedAboveReading.bySpanId.get(String(iL));
+      const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
+      const wordRenderOptions = {
+        ...leadRenderOptions,
+        aboveReadingSegments: aboveReadingSegmentsForSpan(line.Lead.ReadingRenderPlan, String(iL)),
+      };
+      const word = createSyllableWord(
+        lead,
+        iL,
+        aL,
+        timedFuriganaGroup
+          ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
+          : wordRenderOptions
+      );
+      if (timedRubyGroup) {
+        appendTimedRubyMember(lineElem, word, lead, timedRubyGroup, leadTimedRubyState);
+        currentWordGroup = null;
+        currentSemanticGroupId = undefined;
+        return;
+      }
+      // Authored whitespace spans between members stay inside the open group
+      // so the ruby is not split into duplicates.
+      if (
+        leadTimedRubyState.root &&
+        !(lead.Text || "").trim() &&
+        timedGroupContinuesAt(leadTexts, leadTimedRubyLookup, iL + 1, leadTimedRubyState.groupId)
+      ) {
+        leadTimedRubyState.root.appendChild(word);
+        currentWordGroup = null;
+        currentSemanticGroupId = undefined;
+        return;
+      }
+      resetTimedRubyRenderState(leadTimedRubyState);
 
-        const semanticGroupId = leadLogicalGroupIds.get(String(iL));
-        if (leadUsesSemanticGroups && semanticGroupId) {
-          if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
-            currentWordGroup = document.createElement("span");
-            currentWordGroup.classList.add("word-group", "semantic-word-group");
-            lineElem.appendChild(currentWordGroup);
-            currentSemanticGroupId = semanticGroupId;
-          }
-          currentWordGroup.appendChild(word);
-        } else {
-          currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+      const semanticGroupId = leadLogicalGroupIds.get(String(iL));
+      if (leadUsesSemanticGroups && semanticGroupId) {
+        if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
+          currentWordGroup = document.createElement("span");
+          currentWordGroup.classList.add("word-group", "semantic-word-group");
+          lineElem.appendChild(currentWordGroup);
+          currentSemanticGroupId = semanticGroupId;
         }
+        currentWordGroup.appendChild(word);
+      } else {
+        currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+      }
     });
     packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".lyric-base-run"));
 
@@ -591,18 +589,30 @@ export function ApplySyllableLyrics(
 
         let currentBGWordGroup: HTMLSpanElement | null = null;
         let currentBGSemanticGroupId: string | undefined;
+        const bgReadingRow = resolveReadingRowPresentation(bg, bgRenderOptions);
+        const bgSyllableReadingRows = bg.Syllables.map((syllable) =>
+          resolveReadingRowPresentation(syllable, bgRenderOptions)
+        );
         const bgHasFurigana =
-          shouldRenderFurigana(bg, bgRenderOptions) ||
-          bg.Syllables.some((s) => shouldRenderFurigana(s, bgRenderOptions));
-        const bgHasAboveReading = shouldRenderAboveReadings(bg, bgRenderOptions);
+          rendersReadingRow(bgReadingRow, "furigana") ||
+          bgSyllableReadingRows.some((presentation) => rendersReadingRow(presentation, "furigana"));
+        const bgHasAboveReading =
+          rendersReadingRow(bgReadingRow, "pinyinAbove") ||
+          bgSyllableReadingRows.some((presentation) =>
+            rendersReadingRow(presentation, "pinyinAbove")
+          );
+        const bgReservedReadingRow = bgHasAboveReading
+          ? "pinyinAbove"
+          : bgHasFurigana
+            ? "furigana"
+            : undefined;
         const bgUsesSemanticGroups =
           bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
         const bgWordRenderOptions = {
           ...bgRenderOptions,
-          reserveFurigana: bgHasFurigana,
-          reserveAboveReading: bgHasAboveReading,
+          reservedReadingRow: bgReservedReadingRow,
           primaryScript: bg.ReadingRenderPlan?.primaryScript,
-        };
+        } satisfies ReadingRenderOptions;
         const bgSourceText =
           bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
         const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
@@ -640,7 +650,6 @@ export function ApplySyllableLyrics(
             timedFuriganaGroup
               ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
               : wordRenderOptions,
-            UseRomanized,
             { isBackground: true }
           );
           if (timedRubyGroup) {

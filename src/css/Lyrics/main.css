@@ -14,7 +14,7 @@
 }
 
 @property --SL-LyricsContent_MaskTopPadding {
-  syntax: '<length>';
+  syntax: "<length>";
   inherits: false;
   initial-value: 0px;
 }
@@ -59,10 +59,14 @@
   mask-image: var(--ImageMask);
   container-type: size;
   opacity: 1;
-  transition: opacity 0.25s, --SL-LyricsContent_MaskTopPadding 0.5s;
+  transition:
+    opacity 0.25s,
+    --SL-LyricsContent_MaskTopPadding 0.5s;
 }
 
-#SpicyLyricsPage:not(.Fullscreen):has(.ViewControls .ViewControl:hover) .LyricsContainer .LyricsContent {
+#SpicyLyricsPage:not(.Fullscreen):has(.ViewControls .ViewControl:hover)
+  .LyricsContainer
+  .LyricsContent {
   --SL-LyricsContent_MaskTopPadding: 32px;
 }
 
@@ -99,12 +103,20 @@
   margin-top: 25cqh;
 }
 
-body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsContent .SpicyLyricsScrollContainer {
+body:has(.Root:not(.global-nav))
+  #SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
+  .SpicyLyricsScrollContainer {
   margin-top: 0cqh;
   padding-top: 25cqh;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .SpicyLyricsScrollContainer .VirtualLyricsContainer {
+#SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
+  .SpicyLyricsScrollContainer
+  .VirtualLyricsContainer {
   position: relative;
   width: 100%;
   container-type: size;
@@ -114,7 +126,12 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 /* With position:absolute, CSS margins don't collapse between siblings.
    Clear them here — TanStack Virtual's gap option provides equivalent spacing.
    Specificity (1,6,0) beats Mixed.css rules at (1,5,0) that are loaded after this file. */
-#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .SpicyLyricsScrollContainer .VirtualLyricsContainer .line {
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .SpicyLyricsScrollContainer
+  .VirtualLyricsContainer
+  .line {
   margin: 0 !important;
   box-sizing: border-box;
   max-width: 100%;
@@ -143,21 +160,22 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   width: 100%;
 }
 
+#SpicyLyricsPage .LyricsContainer .LyricsContent .has-reading-row {
+  overflow: visible;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .has-furigana {
   --furigana-rt-size: var(--japanese-ruby-ratio);
   --furigana-rt-gap: var(--japanese-ruby-gap);
-  overflow: visible;
 }
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .has-above-reading {
   --furigana-rt-size: var(--pinyin-ruby-ratio);
   --furigana-rt-gap: var(--pinyin-ruby-gap);
-  overflow: visible;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .line.has-furigana,
-#SpicyLyricsPage .LyricsContainer .LyricsContent .line:has(.has-furigana),
-#SpicyLyricsPage .LyricsContainer .LyricsContent .line:has(.has-above-reading),
+#SpicyLyricsPage .LyricsContainer .LyricsContent .line.has-reading-row,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .line:has(.has-reading-row),
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending {
   row-gap: 0.12em;
   padding-top: 0.08em;
@@ -242,24 +260,14 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   --furigana-bright-alpha: var(--gradient-alpha, 0.85);
   --furigana-dim-alpha: var(--gradient-alpha-end, 0.5);
   --furigana-overlay-alpha: calc(
-    (var(--furigana-bright-alpha) - var(--furigana-dim-alpha)) /
-      (1 - var(--furigana-dim-alpha))
+    (var(--furigana-bright-alpha) - var(--furigana-dim-alpha)) / (1 - var(--furigana-dim-alpha))
   );
-  --furigana-fill-bright: rgba(
-    var(--furigana-color-rgb),
-    var(--furigana-bright-alpha)
-  );
-  --furigana-fill-dim: rgba(
-    var(--furigana-color-rgb),
-    var(--furigana-dim-alpha)
-  );
+  --furigana-fill-bright: rgba(var(--furigana-color-rgb), var(--furigana-bright-alpha));
+  --furigana-fill-dim: rgba(var(--furigana-color-rgb), var(--furigana-dim-alpha));
   /* The bright syllable layer is composited over the real dim layer. Use only
      the incremental alpha required to reach the same endpoint as the main
      lyric instead of painting the full bright alpha twice. */
-  --furigana-fill-overlay: rgba(
-    var(--furigana-color-rgb),
-    var(--furigana-overlay-alpha)
-  );
+  --furigana-fill-overlay: rgba(var(--furigana-color-rgb), var(--furigana-overlay-alpha));
   grid-row: 1;
   grid-template-areas: "reading";
   width: max-content;
@@ -291,8 +299,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   line-height: 1;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-furigana,
-#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-above-reading {
+#SpicyLyricsPage .LyricsContainer .LyricsContent .word.has-reading-row,
+#SpicyLyricsPage .LyricsContainer .LyricsContent .letterGroup.has-reading-row {
   /* Reading-row grid tracks describe typographic advance, but some fonts paint
      descenders below that box. Extend only the clipped paint box and cancel
      the added flow size so the word's timing, wrapping, and baseline stay put. */
@@ -348,9 +356,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    synced ruby deliberately does not use this spatial sweep: its timing has no
    word boundary, so it follows the line's uniform breathing state below.
    Static lyrics stay flat. */
-#SpicyLyricsPage
-  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
-  .furigana-reading {
+#SpicyLyricsPage .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"] .furigana-reading {
   --furigana-local-gradient-position: var(
     --timed-furigana-gradient-position,
     calc(
@@ -365,9 +371,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   -webkit-text-fill-color: var(--furigana-fill-dim);
 }
 
-#SpicyLyricsPage
-  .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"]
-  .furigana-reading::after {
+#SpicyLyricsPage .SpicyLyricsScrollContainer[data-lyrics-type="Syllable"] .furigana-reading::after {
   content: attr(data-furigana);
   color: var(--furigana-fill-overlay);
   -webkit-text-fill-color: var(--furigana-fill-overlay);
@@ -375,22 +379,14 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
     90deg,
     #000 0%,
     #000 var(--furigana-local-gradient-position),
-    transparent
-      calc(
-        var(--furigana-local-gradient-position) +
-          var(--furigana-local-gradient-width)
-      ),
+    transparent calc(var(--furigana-local-gradient-position) + var(--furigana-local-gradient-width)),
     transparent 100%
   );
   mask-image: linear-gradient(
     90deg,
     #000 0%,
     #000 var(--furigana-local-gradient-position),
-    transparent
-      calc(
-        var(--furigana-local-gradient-position) +
-          var(--furigana-local-gradient-width)
-      ),
+    transparent calc(var(--furigana-local-gradient-position) + var(--furigana-local-gradient-width)),
     transparent 100%
   );
   /* A shadow on the masked duplicate is clipped at the mask boundary and
@@ -405,9 +401,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
    Line ruby uses the shared derived-text defocus with a bounded filter ease,
    without taking over line opacity, scale, typography, or the animator-owned
    breathing glow. */
-#SpicyLyricsPage
-  .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
-  .furigana-reading {
+#SpicyLyricsPage .SpicyLyricsScrollContainer[data-lyrics-type="Line"] .furigana-reading {
   --FuriganaBlurAmount: var(--DerivedTextBlurAmount, 0px);
 }
 
@@ -422,7 +416,9 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
 /* A source-authored reading such as 天(そら) is pronunciation evidence, not
    lyric or karaoke state. Tint only the derived reading while the provider's
    base word keeps its ordinary styling and timing. */
-#SpicyLyricsPage .LyricsContainer .LyricsContent
+#SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
   .furigana-reading.reading-origin-provider-explicit {
   --furigana-color-rgb: 255, 207, 128;
   --furigana-bright-alpha: 0.9;
@@ -438,7 +434,6 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   > .word::after {
   margin-right: 0;
 }
-
 
 #SpicyLyricsPage .LyricsContainer .LyricsContent .reading-plan-row {
   display: flex;
@@ -475,11 +470,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   margin-top: calc(0.15em + var(--bottom, 0px) * 2);
 }
 
-#SpicyLyricsPage
-  .LyricsContainer
-  .LyricsContent
-  .line.rtl
-  > .romanized-below.reading-plan-row {
+#SpicyLyricsPage .LyricsContainer .LyricsContent .line.rtl > .romanized-below.reading-plan-row {
   justify-content: flex-end;
 }
 
@@ -490,16 +481,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   /* Main-lyric glow reaches 12px/50% in line mode and 6px/35% in ordinary
      syllable mode. Reusing it unchanged on half-size readings muddies their
      counters, so keep the same timing owner with a bounded smaller footprint. */
-  --FuriganaTextShadowBlurRadius: clamp(
-    2px,
-    calc(var(--text-shadow-blur-radius, 4px) * 0.5),
-    6px
-  );
-  --FuriganaTextShadowOpacity: clamp(
-    0%,
-    calc(var(--text-shadow-opacity, 0%) * 0.55),
-    28%
-  );
+  --FuriganaTextShadowBlurRadius: clamp(2px, calc(var(--text-shadow-blur-radius, 4px) * 0.5), 6px);
+  --FuriganaTextShadowOpacity: clamp(0%, calc(var(--text-shadow-opacity, 0%) * 0.55), 28%);
   text-shadow: 0 0 var(--FuriganaTextShadowBlurRadius)
     rgba(255, 255, 255, var(--FuriganaTextShadowOpacity));
 }
@@ -521,16 +504,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   .SpicyLyricsScrollContainer:not([data-lyrics-type="Static"])
   .line.Active
   :is(.romanized-below, .romanized-syllable) {
-  --RomanizedTextShadowBlurRadius: clamp(
-    2px,
-    calc(var(--text-shadow-blur-radius, 4px) * 0.5),
-    6px
-  );
-  --RomanizedTextShadowOpacity: clamp(
-    0%,
-    calc(var(--text-shadow-opacity, 0%) * 0.55),
-    28%
-  );
+  --RomanizedTextShadowBlurRadius: clamp(2px, calc(var(--text-shadow-blur-radius, 4px) * 0.5), 6px);
+  --RomanizedTextShadowOpacity: clamp(0%, calc(var(--text-shadow-opacity, 0%) * 0.55), 28%);
   text-shadow: 0 0 var(--RomanizedTextShadowBlurRadius)
     rgba(255, 255, 255, var(--RomanizedTextShadowOpacity));
 }
@@ -563,20 +538,28 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   --RomanizedGradientOffset: var(--gradient-offset, 0%);
   background-image: linear-gradient(
     var(--RomanizedGradientDegrees),
-    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlpha)) var(--extra-gradient-position, -40%),
-    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlphaEnd)) calc(var(--extra-gradient-position, -40%) + 40% + var(--RomanizedGradientOffset))
+    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlpha))
+      var(--extra-gradient-position, -40%),
+    rgba(var(--RomanizedGradientColor), var(--RomanizedGradientAlphaEnd))
+      calc(var(--extra-gradient-position, -40%) + 40% + var(--RomanizedGradientOffset))
   );
   --extra-gradient-position: -40%;
   text-shadow: inherit;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below
+#SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
+  .romanized-below
   > .reading-origin-provider-explicit {
   color: rgba(255, 207, 128, 0.72);
   -webkit-text-fill-color: rgba(255, 207, 128, 0.72);
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .romanized-below
+#SpicyLyricsPage
+  .LyricsContainer
+  .LyricsContent
+  .romanized-below
   .romanized-syllable.reading-origin-provider-explicit {
   --RomanizedGradientColor: 255, 207, 128;
   --RomanizedGradientAlpha: var(--gradient-alpha, 0.9);
@@ -627,8 +610,7 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   -webkit-text-fill-color: transparent;
   background-image: linear-gradient(
     90deg,
-    rgba(255, 255, 255, var(--extra-gradient-alpha, 0.78))
-      var(--extra-gradient-position, -40%),
+    rgba(255, 255, 255, var(--extra-gradient-alpha, 0.78)) var(--extra-gradient-position, -40%),
     rgba(255, 255, 255, var(--extra-gradient-alpha-end, 0.28))
       calc(var(--extra-gradient-position, -40%) + 40%)
   );
@@ -701,7 +683,8 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   margin-top: 40cqh;
 }
 
-body:has(.Root:not(.global-nav)) #SpicyLyricsPage.Fullscreen.MinimalLyricsMode
+body:has(.Root:not(.global-nav))
+  #SpicyLyricsPage.Fullscreen.MinimalLyricsMode
   .LyricsContainer
   .LyricsContent
   .SpicyLyricsScrollContainer {

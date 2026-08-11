@@ -84,37 +84,35 @@ const {
   packAdjacentFuriganaClusters,
   renderBaseTextWithReadings,
   renderFullLineBaseTextWithReadings,
-} = await import(
-  "../src/utils/Lyrics/Applyer/ReadingRenderer.ts"
-);
-const {
-  $chineseTranslitMode,
-  $japaneseReadingMode,
-  $pinyinPlacement,
-} = await import("../src/utils/uiState.ts");
+  resolveReadingRowPresentation,
+} = await import("../src/utils/Lyrics/Applyer/ReadingRenderer.ts");
+const { $chineseTranslitMode, $japaneseReadingMode, $pinyinPlacement } =
+  await import("../src/utils/uiState.ts");
 const staticApplyerSource = readFileSync(
   new URL("../src/utils/Lyrics/Applyer/Static.ts", import.meta.url),
-  "utf8",
+  "utf8"
 );
 const lineApplyerSource = readFileSync(
   new URL("../src/utils/Lyrics/Applyer/Synced/Line.ts", import.meta.url),
-  "utf8",
+  "utf8"
 );
 const syllableApplyerSource = readFileSync(
   new URL("../src/utils/Lyrics/Applyer/Synced/Syllable.ts", import.meta.url),
-  "utf8",
+  "utf8"
 );
 
 const plan = {
   lineId: "jp",
   sourceUnits: [],
   readingUnits: [],
-  timedReadingUnits: [{
-    spanId: "0",
-    canonicalRange: { startCp: 0, endCp: 1 },
-    text: "watashi",
-    logicalGroupId: "jp-0",
-  }],
+  timedReadingUnits: [
+    {
+      spanId: "0",
+      canonicalRange: { startCp: 0, endCp: 1 },
+      text: "watashi",
+      logicalGroupId: "jp-0",
+    },
+  ],
   joinedDisplayText: "watashi",
 };
 
@@ -137,14 +135,127 @@ function render(mode: "romaji" | "furigana" | "both"): FakeElement {
 
 test("plan romaji follows Japanese reading display mode", () => {
   const furigana = render("furigana");
-  assert.equal(furigana.children.some((child) => child.className.includes("reading-plan-row")), false);
-  assert.equal(furigana.children.some((child) => child.className.includes("translated-below")), true);
+  assert.equal(
+    furigana.children.some((child) => child.className.includes("reading-plan-row")),
+    false
+  );
+  assert.equal(
+    furigana.children.some((child) => child.className.includes("translated-below")),
+    true
+  );
 
   for (const mode of ["romaji", "both"] as const) {
     const line = render(mode);
-    assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true, mode);
-    assert.equal(line.children.some((child) => child.className.includes("translated-below")), true, mode);
+    assert.equal(
+      line.children.some((child) => child.className.includes("reading-plan-row")),
+      true,
+      mode
+    );
+    assert.equal(
+      line.children.some((child) => child.className.includes("translated-below")),
+      true,
+      mode
+    );
   }
+});
+
+test("reading-row resolver preserves mode, reservation, pending, and precedence contracts", () => {
+  const furiganaEntry = {
+    Text: "漢字",
+    JapaneseReading: {
+      sourceText: "漢字",
+      furigana: [{ start: 0, end: 2, reading: "かんじ" }],
+    },
+  };
+  const aboveEntry = {
+    ...furiganaEntry,
+    ReadingPrimaryScript: "Chinese" as const,
+    ReadingRenderPlan: {
+      ...plan,
+      primaryScript: "Chinese" as const,
+      aboveReadingSegments: [
+        {
+          canonicalRange: { startCp: 0, endCp: 1 },
+          reading: "hàn",
+          kind: "mandarinPinyin" as const,
+          provenance: "local" as const,
+        },
+      ],
+    },
+  };
+
+  $japaneseReadingMode.set("both");
+  $chineseTranslitMode.set("pinyin");
+  $pinyinPlacement.set("above");
+  assert.deepEqual(resolveReadingRowPresentation(aboveEntry, { useRomanized: true }), {
+    kind: "pinyinAbove",
+    state: "rendered",
+  });
+  const aboveHost = new FakeElement();
+  renderBaseTextWithReadings(aboveHost as unknown as HTMLElement, aboveEntry, {
+    useRomanized: true,
+  });
+  assert.equal(aboveHost.classList.contains("has-reading-row"), true);
+  assert.equal(aboveHost.classList.contains("reading-row-rendered"), true);
+  assert.equal(aboveHost.classList.contains("has-above-reading"), true);
+  assert.deepEqual(
+    resolveReadingRowPresentation(
+      { Text: "漢", ReadingPrimaryScript: "Chinese" },
+      { useRomanized: true, reservedReadingRow: "pinyinAbove" }
+    ),
+    { kind: "pinyinAbove", state: "reserved" }
+  );
+  assert.deepEqual(
+    resolveReadingRowPresentation(
+      { Text: "漢" },
+      { useRomanized: true, romanizationPending: true, chineseDocument: true }
+    ),
+    { kind: "pinyinAbove", state: "pending" }
+  );
+
+  $pinyinPlacement.set("below");
+  assert.deepEqual(
+    resolveReadingRowPresentation(
+      {
+        Text: "漢",
+        ReadingPrimaryScript: "Chinese",
+        ReadingRenderPlan: aboveEntry.ReadingRenderPlan,
+      },
+      { useRomanized: true }
+    ),
+    { kind: "none" }
+  );
+  assert.deepEqual(resolveReadingRowPresentation(aboveEntry, { useRomanized: true }), {
+    kind: "furigana",
+    state: "rendered",
+  });
+  const furiganaLine = new FakeElement();
+  renderFullLineBaseTextWithReadings(furiganaLine as unknown as HTMLElement, furiganaEntry, {
+    useRomanized: true,
+    isJapaneseLyrics: true,
+  });
+  assert.equal(furiganaLine.children[0]?.classList.contains("has-reading-row"), true);
+  assert.equal(furiganaLine.children[0]?.classList.contains("has-furigana"), true);
+  assert.deepEqual(
+    resolveReadingRowPresentation(
+      { Text: "かな" },
+      { useRomanized: true, isJapaneseLyrics: true, reservedReadingRow: "furigana" }
+    ),
+    { kind: "furigana", state: "reserved" }
+  );
+  assert.deepEqual(
+    resolveReadingRowPresentation(
+      { Text: "かな" },
+      { useRomanized: true, isJapaneseLyrics: true, romanizationPending: true }
+    ),
+    { kind: "furigana", state: "pending" }
+  );
+
+  $japaneseReadingMode.set("romaji");
+  assert.deepEqual(
+    resolveReadingRowPresentation(furiganaEntry, { useRomanized: true, isJapaneseLyrics: true }),
+    { kind: "none" }
+  );
 });
 
 test("opaque Japanese readings bind their sidecar to the full compound window", () => {
@@ -190,7 +301,7 @@ test("opaque Japanese readings bind their sidecar to the full compound window", 
         },
       ],
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   assert.equal(animatorEntries[0].RomajiStartTime, 100);
@@ -258,7 +369,7 @@ test("Japanese romaji sweep interpolates token boundaries inside a timing span",
         },
       ],
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   assert.equal(animatorEntries[0].RomajiStartTime, 100);
@@ -282,14 +393,13 @@ test("timed-group suppression removes only the selected line segment", () => {
         ],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true, suppressedFuriganaKeys: ["0:1\u0000せい"] },
+    { useRomanized: true, isJapaneseLyrics: true, suppressedFuriganaKeys: ["0:1\u0000せい"] }
   );
 
   const renderedReadings = line.children
     .flatMap((cluster) => cluster.children)
-    .filter((child) =>
-      child.className.includes("furigana-reading") &&
-      child.dataset.furigana === "せい"
+    .filter(
+      (child) => child.className.includes("furigana-reading") && child.dataset.furigana === "せい"
     );
   assert.equal(renderedReadings.length, 1);
 });
@@ -328,7 +438,7 @@ test("furigana carries its source range into a non-positioned karaoke paint laye
         layer: "furigana-reading-text",
         text: "なか",
       },
-    ],
+    ]
   );
 });
 
@@ -343,11 +453,10 @@ test("Chinese-provider repair renders projected kanji without mutating source te
       furigana: [],
     },
   };
-  renderBaseTextWithReadings(
-    line as unknown as HTMLElement,
-    entry,
-    { useRomanized: false, isJapaneseLyrics: true },
-  );
+  renderBaseTextWithReadings(line as unknown as HTMLElement, entry, {
+    useRomanized: false,
+    isJapaneseLyrics: true,
+  });
   assert.equal(entry.Text, "梦见ては");
   assert.equal(entry.JapaneseReading.sourceText, "梦见ては");
   assert.equal(line.textContent, "夢見ては");
@@ -361,7 +470,10 @@ test("only directly adjacent ruby clusters reserve reading width", () => {
   ]);
   packAdjacentFuriganaClusters(adjacent.children as unknown as HTMLElement[]);
   assert.equal(adjacent.children.length, 2);
-  assert.equal(adjacent.children.every((cluster) => cluster.classList.values.has("furigana-cluster-packed")), true);
+  assert.equal(
+    adjacent.children.every((cluster) => cluster.classList.values.has("furigana-cluster-packed")),
+    true
+  );
 
   const isolated = new FakeElement();
   appendFuriganaText(isolated as unknown as HTMLElement, "極の星", [
@@ -372,11 +484,15 @@ test("only directly adjacent ruby clusters reserve reading width", () => {
   const rubyClusters = isolated.children.filter((run) =>
     run.className.includes("furigana-cluster")
   );
-  const plainRuns = isolated.children.filter((run) =>
-    run.className.includes("lyric-base-plain")
+  const plainRuns = isolated.children.filter((run) => run.className.includes("lyric-base-plain"));
+  assert.equal(
+    rubyClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")),
+    true
   );
-  assert.equal(rubyClusters.every((cluster) => !cluster.classList.values.has("furigana-cluster-packed")), true);
-  assert.equal(plainRuns.every((run) => !run.classList.values.has("furigana-cluster-packed")), true);
+  assert.equal(
+    plainRuns.every((run) => !run.classList.values.has("furigana-cluster-packed")),
+    true
+  );
 });
 
 test("full-line lyrics automatically pack split compounds without widening isolated ruby", () => {
@@ -398,7 +514,7 @@ test("full-line lyrics automatically pack split compounds without widening isola
         ],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   const clusters = line.children.map((cluster) => ({
@@ -423,9 +539,15 @@ test("timed provider spans reserve every real ruby without widening plain spacer
   const left = new FakeElement();
   const right = new FakeElement();
   const separated = new FakeElement();
-  appendFuriganaText(left as unknown as HTMLElement, "涙", [{ start: 0, end: 1, reading: "なみだ" }]);
-  appendFuriganaText(right as unknown as HTMLElement, "流", [{ start: 0, end: 1, reading: "なが" }]);
-  appendFuriganaText(separated as unknown as HTMLElement, "声", [{ start: 0, end: 1, reading: "こえ" }]);
+  appendFuriganaText(left as unknown as HTMLElement, "涙", [
+    { start: 0, end: 1, reading: "なみだ" },
+  ]);
+  appendFuriganaText(right as unknown as HTMLElement, "流", [
+    { start: 0, end: 1, reading: "なが" },
+  ]);
+  appendFuriganaText(separated as unknown as HTMLElement, "声", [
+    { start: 0, end: 1, reading: "こえ" },
+  ]);
 
   const spacer = new FakeElement();
   appendFuriganaText(spacer as unknown as HTMLElement, "を", []);
@@ -449,10 +571,7 @@ test("isolated inochi overhangs while adjacent tamashii and ooi stay packed", ()
     { start: 0, end: 1, reading: "いのち" },
   ]);
   appendFuriganaText(mo as unknown as HTMLElement, "も", []);
-  packAdjacentFuriganaClusters([
-    inochi.children[0],
-    mo.children[0],
-  ] as unknown as HTMLElement[]);
+  packAdjacentFuriganaClusters([inochi.children[0], mo.children[0]] as unknown as HTMLElement[]);
   assert.equal(inochi.children[0].classList.values.has("furigana-cluster-packed"), false);
 
   const tamashii = new FakeElement();
@@ -462,9 +581,7 @@ test("isolated inochi overhangs while adjacent tamashii and ooi stay packed", ()
     { start: 0, end: 1, reading: "たましい" },
   ]);
   appendFuriganaText(authoredSpace as unknown as HTMLElement, " ", []);
-  appendFuriganaText(ooi as unknown as HTMLElement, "大", [
-    { start: 0, end: 1, reading: "おお" },
-  ]);
+  appendFuriganaText(ooi as unknown as HTMLElement, "大", [{ start: 0, end: 1, reading: "おお" }]);
   packAdjacentFuriganaClusters([
     tamashii.children[0],
     authoredSpace.children[0],
@@ -486,19 +603,22 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
     ]);
 
     const renderedBase = line.children
-      .map((run) =>
-        run.children.find((child) => child.className === "furigana-base")?.textContent
-          ?? run.textContent
+      .map(
+        (run) =>
+          run.children.find((child) => child.className === "furigana-base")?.textContent ??
+          run.textContent
       )
       .join("");
     const plainBase = line.children
-      .filter((run) =>
-        run.className.includes("furigana-plain-cluster") ||
-        run.className.includes("lyric-base-whitespace")
+      .filter(
+        (run) =>
+          run.className.includes("furigana-plain-cluster") ||
+          run.className.includes("lyric-base-whitespace")
       )
-      .map((run) =>
-        run.children.find((child) => child.className === "furigana-base")?.textContent
-          ?? run.textContent
+      .map(
+        (run) =>
+          run.children.find((child) => child.className === "furigana-base")?.textContent ??
+          run.textContent
       );
 
     assert.equal(renderedBase, fixture.text);
@@ -510,7 +630,7 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
       line.children
         .filter((run) => run.className.includes("furigana-plain-cluster"))
         .some((run) => run.children.some((child) => child.className.includes("furigana-reading"))),
-      false,
+      false
     );
   }
 });
@@ -520,20 +640,19 @@ test("opening and closing punctuation stay with their lyric-side text", () => {
   const line = new FakeElement();
   appendFuriganaText(line as unknown as HTMLElement, source, []);
 
-  const chunks = line.children.map((run) =>
-    run.children.find((child) => child.className === "furigana-base")?.textContent
-      ?? run.textContent
+  const chunks = line.children.map(
+    (run) =>
+      run.children.find((child) => child.className === "furigana-base")?.textContent ??
+      run.textContent
   );
   assert.equal(chunks.join(""), source);
   assert.equal(
     chunks.some((chunk) => /[([{（［｛「『【〈《〔]$/u.test(chunk)),
-    false,
+    false
   );
   assert.equal(
-    chunks.slice(1).some((chunk) =>
-      /^[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]/u.test(chunk)
-    ),
-    false,
+    chunks.slice(1).some((chunk) => /^[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]/u.test(chunk)),
+    false
   );
 });
 
@@ -547,21 +666,18 @@ test("punctuation and adjacent ruby share one atomic wrap group", () => {
   const renderedBase = (node: FakeElement): string => {
     if (node.className.includes("furigana-reading")) return "";
     if (node.className === "furigana-base") return node.textContent;
-    return node.children.length > 0
-      ? node.children.map(renderedBase).join("")
-      : node.textContent;
+    return node.children.length > 0 ? node.children.map(renderedBase).join("") : node.textContent;
   };
   assert.equal(renderedBase(line), source);
-  const group = line.children.find((run) =>
-    run.className.includes("lyric-wrap-group")
-  );
+  const group = line.children.find((run) => run.className.includes("lyric-wrap-group"));
   assert.ok(group);
   assert.deepEqual(
-    group.children.map((run) =>
-      run.children.find((child) => child.className === "furigana-base")?.textContent
-        ?? run.textContent
+    group.children.map(
+      (run) =>
+        run.children.find((child) => child.className === "furigana-base")?.textContent ??
+        run.textContent
     ),
-    ["(", "信"],
+    ["(", "信"]
   );
 });
 
@@ -579,14 +695,15 @@ test("plain text beside or between ruby shares the ruby base row without placeho
         furigana: [{ start: 0, end: 1, reading: "たし" }],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   assert.deepEqual(
     partial.children.map((run) => ({
       classes: run.className,
       base: run.children.find((child) => child.className === "furigana-base")?.textContent,
-      reading: run.children.find((child) => child.className.includes("furigana-reading"))?.textContent,
+      reading: run.children.find((child) => child.className.includes("furigana-reading"))
+        ?.textContent,
     })),
     [
       {
@@ -599,7 +716,7 @@ test("plain text beside or between ruby shares the ruby base row without placeho
         base: "か",
         reading: undefined,
       },
-    ],
+    ]
   );
 
   const reserved = new FakeElement();
@@ -609,10 +726,11 @@ test("plain text beside or between ruby shares the ruby base row without placeho
     {
       useRomanized: true,
       isJapaneseLyrics: true,
-      reserveFurigana: true,
-    },
+      reservedReadingRow: "furigana",
+    }
   );
   assert.equal(reserved.classList.values.has("furigana-row-reserved"), true);
+  assert.equal(reserved.classList.values.has("has-reading-row"), true);
   assert.equal(reserved.children[0]?.className.includes("furigana-plain-cluster"), true);
   assert.equal(reserved.children[0]?.children[0]?.className, "furigana-base");
   assert.equal(reserved.children[0]?.children[0]?.textContent, "も");
@@ -633,7 +751,7 @@ test("whitespace beside ruby remains an ordinary wrapping boundary", () => {
         furigana: [{ start: 2, end: 3, reading: "こわ" }],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   const whitespaceRuns = line.children.filter((run) =>
@@ -641,14 +759,15 @@ test("whitespace beside ruby remains an ordinary wrapping boundary", () => {
   );
   assert.deepEqual(
     whitespaceRuns.map((run) => run.textContent),
-    [" ", " ", " ", " "],
+    [" ", " ", " ", " "]
   );
   assert.equal(
-    whitespaceRuns.every((run) =>
-      run.className.includes("lyric-base-plain") &&
-      !run.className.includes("furigana-plain-cluster")
+    whitespaceRuns.every(
+      (run) =>
+        run.className.includes("lyric-base-plain") &&
+        !run.className.includes("furigana-plain-cluster")
     ),
-    true,
+    true
   );
 });
 
@@ -665,38 +784,36 @@ test("reading modes preserve one exact base-text run contract", () => {
 
   const renderedBaseText = (line: FakeElement): string =>
     line.children
-      .map((run) =>
-        run.children.find((child) => child.className === "furigana-base")?.textContent
-          ?? run.textContent
+      .map(
+        (run) =>
+          run.children.find((child) => child.className === "furigana-base")?.textContent ??
+          run.textContent
       )
       .join("");
 
   for (const mode of ["romaji", "furigana", "both"] as const) {
     $japaneseReadingMode.set(mode);
     const line = new FakeElement();
-    renderBaseTextWithReadings(
-      line as unknown as HTMLElement,
-      entry,
-      {
-        useRomanized: true,
-        isJapaneseLyrics: true,
-        hanLanguageContext: {
-          enabled: true,
-          primaryScript: "Japanese",
-          lineLanguage: "ja",
-        },
+    renderBaseTextWithReadings(line as unknown as HTMLElement, entry, {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+      hanLanguageContext: {
+        enabled: true,
+        primaryScript: "Japanese",
+        lineLanguage: "ja",
       },
-    );
+    });
 
     assert.equal(renderedBaseText(line), source, mode);
     const japaneseRuns = line.children.filter((run) => run.lang === "ja");
     assert.equal(japaneseRuns.length, 1, mode);
     assert.equal(
       japaneseRuns[0]?.className.includes("furigana-cluster")
-        ? japaneseRuns[0]?.children.find((child) => child.className === "furigana-base")?.textContent
+        ? japaneseRuns[0]?.children.find((child) => child.className === "furigana-base")
+            ?.textContent
         : japaneseRuns[0]?.textContent,
       "暁",
-      mode,
+      mode
     );
     assert.equal(
       line.children
@@ -704,19 +821,19 @@ test("reading modes preserve one exact base-text run contract", () => {
         .map((run) => run.textContent)
         .join(""),
       source.replace("暁", ""),
-      mode,
+      mode
     );
     assert.equal(
       line.children
         .filter((run) => run.className.includes("lyric-base-plain"))
         .some((run) => run.textContent.includes("\u00a0")),
       false,
-      mode,
+      mode
     );
     assert.equal(
       line.children.some((run) => run.className.includes("furigana-placeholder")),
       false,
-      mode,
+      mode
     );
   }
 });
@@ -745,16 +862,8 @@ test("full-line modes keep base runs inside one stable wrapping owner", () => {
       isJapaneseLyrics: true,
     };
 
-    renderFullLineBaseTextWithReadings(
-      line as unknown as HTMLElement,
-      entry,
-      options,
-    );
-    appendLineExtras(
-      line as unknown as HTMLElement,
-      entry,
-      options,
-    );
+    renderFullLineBaseTextWithReadings(line as unknown as HTMLElement, entry, options);
+    appendLineExtras(line as unknown as HTMLElement, entry, options);
 
     const baseFlow = line.children[0];
     const renderedBase = baseFlow.children
@@ -769,17 +878,17 @@ test("full-line modes keep base runs inside one stable wrapping owner", () => {
     assert.equal(
       line.children.some((child) => child.className.includes("lyric-base-run")),
       false,
-      mode,
+      mode
     );
     assert.equal(
       baseFlow.children.some((child) => child.className.includes("lyric-base-run")),
       true,
-      mode,
+      mode
     );
     assert.equal(
       line.children.filter((child) => child.className.includes("romanized-below")).length,
       mode === "furigana" ? 0 : 1,
-      mode,
+      mode
     );
   }
 });
@@ -795,7 +904,15 @@ test("timed syllable rendering keeps one Above romaji group across Kana owners",
   assert.match(syllableApplyerSource, /timedAboveReadingGroups\(/u);
   assert.match(syllableApplyerSource, /"timed-above-reading-group"/u);
   assert.match(syllableApplyerSource, /"above-reading-text"/u);
+  assert.match(
+    syllableApplyerSource,
+    /"has-reading-row",\s*"reading-row-rendered",[\s\S]*?"timed-above-reading-group"/u
+  );
   assert.match(syllableApplyerSource, /word\.querySelector\("\.above-reading-plain-cluster"\)/u);
+  assert.match(
+    syllableApplyerSource,
+    /bg\.Syllables\.map\(\(syllable\) =>\s*resolveReadingRowPresentation\(syllable, bgRenderOptions\)/u
+  );
 });
 
 test("pending Pinyin Above reserves the ruby row without a Below skeleton", () => {
@@ -808,66 +925,78 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
     chineseDocument: true,
   };
 
-  assert.equal(renderFullLineBaseTextWithReadings(
-    line as unknown as HTMLElement,
-    { Text: "如果" },
-    options,
-  ), true);
-  assert.equal(appendLineExtras(
-    line as unknown as HTMLElement,
-    { Text: "如果" },
-    options,
-  ), false);
+  assert.equal(
+    renderFullLineBaseTextWithReadings(line as unknown as HTMLElement, { Text: "如果" }, options),
+    true
+  );
+  assert.equal(appendLineExtras(line as unknown as HTMLElement, { Text: "如果" }, options), false);
 
   const baseFlow = line.children[0];
+  assert.equal(baseFlow.classList.contains("has-reading-row"), true);
+  assert.equal(baseFlow.classList.contains("reading-row-pending"), true);
   assert.equal(baseFlow.classList.contains("has-above-reading"), true);
   assert.equal(baseFlow.classList.contains("above-reading-pending"), true);
   assert.equal(baseFlow.children[0].className.includes("above-reading-plain-cluster"), true);
-  assert.equal(line.children.some((child) => child.className.includes("romanized-below")), false);
+  assert.equal(
+    line.children.some((child) => child.className.includes("romanized-below")),
+    false
+  );
 
   const emphasizedWord = new FakeElement();
-  assert.equal(renderBaseTextWithReadings(
-    emphasizedWord as unknown as HTMLElement,
-    { Text: "如果" },
-    { ...options, splitBaseRunsForEmphasis: true },
-  ), true);
+  assert.equal(
+    renderBaseTextWithReadings(
+      emphasizedWord as unknown as HTMLElement,
+      { Text: "如果" },
+      { ...options, splitBaseRunsForEmphasis: true }
+    ),
+    true
+  );
   assert.equal(emphasizedWord.children.length, 2);
   assert.equal(
     emphasizedWord.children.every((child) =>
       child.className.includes("above-reading-plain-cluster")
     ),
-    true,
+    true
   );
 
   const mixedWord = new FakeElement();
-  assert.equal(renderBaseTextWithReadings(
-    mixedWord as unknown as HTMLElement,
-    { Text: "命shout" },
-    { ...options, splitBaseRunsForEmphasis: true },
-  ), true);
+  assert.equal(
+    renderBaseTextWithReadings(
+      mixedWord as unknown as HTMLElement,
+      { Text: "命shout" },
+      { ...options, splitBaseRunsForEmphasis: true }
+    ),
+    true
+  );
   assert.equal(mixedWord.children.length, 7);
   assert.equal(mixedWord.children[1].textContent, " ");
   assert.equal(mixedWord.children[1].classList.contains("lyric-base-synthetic-gap"), true);
 
   const syllableLine = new FakeElement();
-  assert.equal(appendSyllableRomanizedBelow(
-    syllableLine as unknown as HTMLElement,
-    [{ Text: "如" }, { Text: "果" }],
-    "如果",
-    undefined,
-    undefined,
-    undefined,
-    [{}, {}],
-    undefined,
-    options,
-  ), false);
+  assert.equal(
+    appendSyllableRomanizedBelow(
+      syllableLine as unknown as HTMLElement,
+      [{ Text: "如" }, { Text: "果" }],
+      "如果",
+      undefined,
+      undefined,
+      undefined,
+      [{}, {}],
+      undefined,
+      options
+    ),
+    false
+  );
   assert.equal(syllableLine.children.length, 0);
 
   assert.match(staticApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
   assert.match(lineApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
-  assert.match(syllableApplyerSource, /chineseDocument: \(data as any\)\.DetectedChinese === true/u);
+  assert.match(
+    syllableApplyerSource,
+    /chineseDocument: \(data as any\)\.DetectedChinese === true/u
+  );
   assert.match(syllableApplyerSource, /EmphasizeRenderedUnits\(renderedEmphasisUnits\(word\)/u);
-  assert.match(syllableApplyerSource, /shouldReservePendingAboveReading\(renderOptions\)/u);
+  assert.match(syllableApplyerSource, /resolveReadingRowPresentation\(syllable, renderOptions\)/u);
   assert.match(syllableApplyerSource, /!run\.classList\.contains\("lyric-base-synthetic-gap"\)/u);
 
   $pinyinPlacement.set("below");
@@ -880,7 +1009,7 @@ test("pending Below Pinyin keeps the existing romanization skeleton", () => {
   const appended = appendLineExtras(
     line as unknown as HTMLElement,
     { Text: "如果" },
-    { useRomanized: true, romanizationPending: true, chineseDocument: true },
+    { useRomanized: true, romanizationPending: true, chineseDocument: true }
   );
 
   assert.equal(appended, true);
@@ -901,7 +1030,7 @@ test("explicit readings tint only derived furigana while displaying the immutabl
         furigana: [{ start: 0, end: 1, reading: "そら", provenance: "providerExplicit" }],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
   const cluster = line.children[0];
   const reading = cluster.children.find((child) => child.textContent === "そら")!;
@@ -925,10 +1054,13 @@ test("romaji-only mode marks the explicit reading span", () => {
         furigana: [{ start: 0, end: 1, reading: "そら", provenance: "providerExplicit" }],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
   const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
-  assert.equal(romanized.children[0].classList.values.has("reading-origin-provider-explicit"), true);
+  assert.equal(
+    romanized.children[0].classList.values.has("reading-origin-provider-explicit"),
+    true
+  );
 });
 
 test("whitespace-only romaji projection differences retain explicit reading spans", () => {
@@ -952,12 +1084,18 @@ test("whitespace-only romaji projection differences retain explicit reading span
         furigana: [],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
   const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
   assert.equal(romanized.children.length, 4);
-  assert.equal(romanized.children[0].classList.values.has("reading-origin-provider-explicit"), true);
-  assert.equal(romanized.children[2].classList.values.has("reading-origin-provider-explicit"), true);
+  assert.equal(
+    romanized.children[0].classList.values.has("reading-origin-provider-explicit"),
+    true
+  );
+  assert.equal(
+    romanized.children[2].classList.values.has("reading-origin-provider-explicit"),
+    true
+  );
 });
 
 test("semantic romaji projection differences still fall back to plain text", () => {
@@ -976,7 +1114,7 @@ test("semantic romaji projection differences still fall back to plain text", () 
         furigana: [],
       },
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
   const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
   assert.equal(romanized.children.length, 0);
@@ -995,11 +1133,10 @@ test("attached mixed-script source stays exact while lyric and romaji display re
     },
   };
 
-  appendLineExtras(
-    line as unknown as HTMLElement,
-    entry,
-    { useRomanized: true, isJapaneseLyrics: true },
-  );
+  appendLineExtras(line as unknown as HTMLElement, entry, {
+    useRomanized: true,
+    isJapaneseLyrics: true,
+  });
 
   const romanized = line.children.find((child) => child.className.includes("romanized-below"))!;
   assert.equal(entry.Text, "ぶち壊してshout it out loud");
@@ -1009,11 +1146,10 @@ test("attached mixed-script source stays exact while lyric and romaji display re
   assert.equal(romanized.className, "romanized-below");
 
   const base = new FakeElement();
-  renderBaseTextWithReadings(
-    base as unknown as HTMLElement,
-    entry,
-    { useRomanized: false, isJapaneseLyrics: true },
-  );
+  renderBaseTextWithReadings(base as unknown as HTMLElement, entry, {
+    useRomanized: false,
+    isJapaneseLyrics: true,
+  });
   assert.equal(base.textContent, "ぶち壊して shout it out loud");
 });
 
@@ -1051,17 +1187,20 @@ test("timed mixed-script romaji gets a visual gap without changing timing units"
       timedReadingUnits: timedUnits,
       joinedDisplayText: "buchikowashiteshout it out loud",
     },
-    { useRomanized: true, isJapaneseLyrics: true },
+    { useRomanized: true, isJapaneseLyrics: true }
   );
 
   const row = line.children.find((child) => child.className.includes("reading-plan-row"))!;
-  assert.deepEqual(row.children.map((group) => group.style.marginLeft), ["", "0.25em"]);
+  assert.deepEqual(
+    row.children.map((group) => group.style.marginLeft),
+    ["", "0.25em"]
+  );
   assert.deepEqual(
     timedUnits.map((unit) => [unit.spanId, unit.text]),
     [
       ["0", "buchikowashite"],
       ["1", "shout it out loud"],
-    ],
+    ]
   );
 });
 
@@ -1092,7 +1231,7 @@ test("one sentence-context reading renders once across several timing owners", (
         },
       ],
     },
-    { useRomanized: true, isJapaneseLyrics: false },
+    { useRomanized: true, isJapaneseLyrics: false }
   );
 
   const row = line.children.find((child) => child.className.includes("reading-plan-row"));
@@ -1105,25 +1244,39 @@ test("one sentence-context reading renders once across several timing owners", (
 });
 
 test("an explicit Chinese reading route overrides an embedded kana island", () => {
-  assert.equal(isJapaneseEntry({
-    Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",
-    ReadingPrimaryScript: "Chinese",
-  }), false);
+  assert.equal(
+    isJapaneseEntry({
+      Text: "\u5982\u679c\u3059\u307f\u307e\u305b\u3093",
+      ReadingPrimaryScript: "Chinese",
+    }),
+    false
+  );
 });
 
 test("semantic above readings keep Pinyin and sumimasen in one ruby row", () => {
   $chineseTranslitMode.set("pinyin");
   $pinyinPlacement.set("above");
   const line = new FakeElement();
-  appendAboveReadingText(
-    line as unknown as HTMLElement,
-    "如果すみません",
-    [
-      { canonicalRange: { startCp: 0, endCp: 1 }, reading: "rú", kind: "mandarinPinyin", provenance: "local" },
-      { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guǒ", kind: "mandarinPinyin", provenance: "local" },
-      { canonicalRange: { startCp: 2, endCp: 7 }, reading: "sumimasen", kind: "japaneseRomaji", provenance: "local" },
-    ],
-  );
+  appendAboveReadingText(line as unknown as HTMLElement, "如果すみません", [
+    {
+      canonicalRange: { startCp: 0, endCp: 1 },
+      reading: "rú",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+    {
+      canonicalRange: { startCp: 1, endCp: 2 },
+      reading: "guǒ",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+    {
+      canonicalRange: { startCp: 2, endCp: 7 },
+      reading: "sumimasen",
+      kind: "japaneseRomaji",
+      provenance: "local",
+    },
+  ]);
 
   const ruby = line.children.filter((child) => child.className.includes("above-reading-cluster"));
   assert.equal(ruby.length, 3);
@@ -1133,10 +1286,77 @@ test("semantic above readings keep Pinyin and sumimasen in one ruby row", () => 
   assert.equal(ruby[2].children[1].textContent, "sumimasen");
   assert.equal(ruby[2].children[1].lang, "ja-Latn");
   assert.match(
-    readFileSync(new URL("../src/utils/Lyrics/Applyer/ReadingRenderer.ts", import.meta.url), "utf8"),
-    /createElement\("ruby"\)[\s\S]*?createElement\("rt"\)/u,
+    readFileSync(
+      new URL("../src/utils/Lyrics/Applyer/ReadingRenderer.ts", import.meta.url),
+      "utf8"
+    ),
+    /createElement\("ruby"\)[\s\S]*?createElement\("rt"\)/u
   );
   $pinyinPlacement.set("below");
+});
+
+test("reading rows preserve supplementary, variation-selector, and combining-mark boundaries", () => {
+  const baseText = (element: FakeElement): string => {
+    const directBase = element.children.find((child) => child.className.includes("furigana-base"));
+    if (directBase) return directBase.textContent;
+    if (element.className.includes("lyric-wrap-group")) {
+      return element.children.map(baseText).join("");
+    }
+    return element.textContent;
+  };
+
+  const aboveSource = "\u{20000}\u{1F642}\u6F22\u{E0100}\u597D";
+  const above = new FakeElement();
+  appendAboveReadingText(above as unknown as HTMLElement, aboveSource, [
+    {
+      canonicalRange: { startCp: 0, endCp: 1 },
+      reading: "yi\u0304",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+    {
+      canonicalRange: { startCp: 2, endCp: 3 },
+      reading: "h\u00e0n",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+    {
+      canonicalRange: { startCp: 2, endCp: 5 },
+      reading: "overlap-must-abstain",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+    {
+      canonicalRange: { startCp: 4, endCp: 5 },
+      reading: "h\u01ceo",
+      kind: "mandarinPinyin",
+      provenance: "local",
+    },
+  ]);
+  assert.equal(above.children.map(baseText).join(""), aboveSource);
+  const aboveRubies = above.children.filter((child) =>
+    child.className.includes("above-reading-cluster")
+  );
+  assert.deepEqual(
+    aboveRubies.map((ruby) => ruby.children[0]?.textContent),
+    ["\u{20000}", "\u6F22", "\u597D"]
+  );
+  assert.deepEqual(
+    aboveRubies.map((ruby) => ruby.children[1]?.textContent),
+    ["yi\u0304", "h\u00e0n", "h\u01ceo"]
+  );
+
+  const furiganaSource = "\u{20000}\u6F22\u{1F642}";
+  const furigana = new FakeElement();
+  appendFuriganaText(furigana as unknown as HTMLElement, furiganaSource, [
+    { start: 2, end: 3, reading: "\u304B\u3093" },
+  ]);
+  assert.equal(furigana.children.map(baseText).join(""), furiganaSource);
+  const furiganaRuby = furigana.children.find((child) =>
+    child.className.includes("furigana-cluster")
+  );
+  assert.equal(furiganaRuby?.children[1]?.textContent, "\u6F22");
+  assert.equal(furiganaRuby?.children[0]?.textContent, "\u304B\u3093");
 });
 
 test("above placement suppresses the mixed Chinese bottom lane without dropping its plan", () => {
@@ -1152,24 +1372,55 @@ test("above placement suppresses the mixed Chinese bottom lane without dropping 
     ],
     joinedDisplayText: "ru guo sumimasen",
     timedReadingUnits: [
-      { spanId: "0", canonicalRange: { startCp: 0, endCp: 2 }, text: "ru guo", logicalGroupId: "cn-0" },
-      { spanId: "1", canonicalRange: { startCp: 2, endCp: 7 }, text: " sumimasen", logicalGroupId: "jp-1" },
+      {
+        spanId: "0",
+        canonicalRange: { startCp: 0, endCp: 2 },
+        text: "ru guo",
+        logicalGroupId: "cn-0",
+      },
+      {
+        spanId: "1",
+        canonicalRange: { startCp: 2, endCp: 7 },
+        text: " sumimasen",
+        logicalGroupId: "jp-1",
+      },
     ],
     aboveReadingSegments: [
-      { canonicalRange: { startCp: 0, endCp: 1 }, reading: "ru", kind: "mandarinPinyin" as const, provenance: "local" as const },
-      { canonicalRange: { startCp: 1, endCp: 2 }, reading: "guo", kind: "mandarinPinyin" as const, provenance: "local" as const },
-      { canonicalRange: { startCp: 2, endCp: 7 }, reading: "sumimasen", kind: "japaneseRomaji" as const, provenance: "local" as const },
+      {
+        canonicalRange: { startCp: 0, endCp: 1 },
+        reading: "ru",
+        kind: "mandarinPinyin" as const,
+        provenance: "local" as const,
+      },
+      {
+        canonicalRange: { startCp: 1, endCp: 2 },
+        reading: "guo",
+        kind: "mandarinPinyin" as const,
+        provenance: "local" as const,
+      },
+      {
+        canonicalRange: { startCp: 2, endCp: 7 },
+        reading: "sumimasen",
+        kind: "japaneseRomaji" as const,
+        provenance: "local" as const,
+      },
     ],
   };
   appendSyllableRomanizedBelow(
     line as unknown as HTMLElement,
     [{ Text: "如果" }, { Text: "すみません" }],
     "如果すみません",
-    undefined, undefined, undefined,
-    [{}, {}], mixedPlan,
-    { useRomanized: true, isJapaneseLyrics: false },
+    undefined,
+    undefined,
+    undefined,
+    [{}, {}],
+    mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false }
   );
-  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), false);
+  assert.equal(
+    line.children.some((child) => child.className.includes("reading-plan-row")),
+    false
+  );
   assert.equal(mixedPlan.joinedDisplayText, "ru guo sumimasen");
 
   $pinyinPlacement.set("below");
@@ -1177,11 +1428,17 @@ test("above placement suppresses the mixed Chinese bottom lane without dropping 
     line as unknown as HTMLElement,
     [{ Text: "如果" }, { Text: "すみません" }],
     "如果すみません",
-    undefined, undefined, undefined,
-    [{}, {}], mixedPlan,
-    { useRomanized: true, isJapaneseLyrics: false },
+    undefined,
+    undefined,
+    undefined,
+    [{}, {}],
+    mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false }
   );
-  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true);
+  assert.equal(
+    line.children.some((child) => child.className.includes("reading-plan-row")),
+    true
+  );
 
   $pinyinPlacement.set("above");
   $chineseTranslitMode.set("jyutping");
@@ -1190,13 +1447,16 @@ test("above placement suppresses the mixed Chinese bottom lane without dropping 
     jyutpingLine as unknown as HTMLElement,
     [{ Text: "如果" }, { Text: "すみません" }],
     "如果すみません",
-    undefined, undefined, undefined,
-    [{}, {}], mixedPlan,
-    { useRomanized: true, isJapaneseLyrics: false },
+    undefined,
+    undefined,
+    undefined,
+    [{}, {}],
+    mixedPlan,
+    { useRomanized: true, isJapaneseLyrics: false }
   );
   assert.equal(
     jyutpingLine.children.some((child) => child.className.includes("reading-plan-row")),
-    true,
+    true
   );
   assert.equal($pinyinPlacement.get(), "above");
   $chineseTranslitMode.set("pinyin");
@@ -1222,13 +1482,26 @@ test("Chinese-dominant mixed readings stay visible in Japanese furigana mode", (
       primaryScript: "Chinese",
       joinedDisplayText: "ru guo sumimasen",
       timedReadingUnits: [
-        { spanId: "0", canonicalRange: { startCp: 0, endCp: 2 }, text: "ru guo", logicalGroupId: "cn-0" },
-        { spanId: "1", canonicalRange: { startCp: 2, endCp: 7 }, text: " sumimasen", logicalGroupId: "jp-1" },
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 2 },
+          text: "ru guo",
+          logicalGroupId: "cn-0",
+        },
+        {
+          spanId: "1",
+          canonicalRange: { startCp: 2, endCp: 7 },
+          text: " sumimasen",
+          logicalGroupId: "jp-1",
+        },
       ],
     },
     { useRomanized: true, isJapaneseLyrics: false }
   );
-  assert.equal(line.children.some((child) => child.className.includes("reading-plan-row")), true);
+  assert.equal(
+    line.children.some((child) => child.className.includes("reading-plan-row")),
+    true
+  );
 });
 
 test("active Chinese reading plans render contextual spaces between timing units", () => {
@@ -1246,20 +1519,38 @@ test("active Chinese reading plans render contextual spaces between timing units
       primaryScript: "Chinese",
       joinedDisplayText: "b\u00f9 hu\u00ec b\u0101 \uff1f",
       timedReadingUnits: [
-        { spanId: "0", canonicalRange: { startCp: 0, endCp: 1 }, text: "b\u00f9", logicalGroupId: "cn-0" },
-        { spanId: "1", canonicalRange: { startCp: 1, endCp: 2 }, text: " hu\u00ec", logicalGroupId: "cn-1" },
-        { spanId: "2", canonicalRange: { startCp: 2, endCp: 4 }, text: " b\u0101 \uff1f", logicalGroupId: "cn-2" },
+        {
+          spanId: "0",
+          canonicalRange: { startCp: 0, endCp: 1 },
+          text: "b\u00f9",
+          logicalGroupId: "cn-0",
+        },
+        {
+          spanId: "1",
+          canonicalRange: { startCp: 1, endCp: 2 },
+          text: " hu\u00ec",
+          logicalGroupId: "cn-1",
+        },
+        {
+          spanId: "2",
+          canonicalRange: { startCp: 2, endCp: 4 },
+          text: " b\u0101 \uff1f",
+          logicalGroupId: "cn-2",
+        },
       ],
     },
-    { useRomanized: true, isJapaneseLyrics: false },
+    { useRomanized: true, isJapaneseLyrics: false }
   );
 
   const row = line.children.find((child) => child.className.includes("reading-plan-row"));
   assert.ok(row);
-  assert.deepEqual(row.children.map((group) => group.style.marginLeft), ["", "0.25em", "0.25em"]);
+  assert.deepEqual(
+    row.children.map((group) => group.style.marginLeft),
+    ["", "0.25em", "0.25em"]
+  );
   assert.deepEqual(
     row.children.map((group) => group.children[0]?.textContent),
-    ["b\u00f9", "hu\u00ec", "b\u0101 \uff1f"],
+    ["b\u00f9", "hu\u00ec", "b\u0101 \uff1f"]
   );
 });
 

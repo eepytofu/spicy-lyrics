@@ -5,11 +5,7 @@
  * decisions and stable markup so furigana does not leak into every renderer.
  */
 
-import {
-  $chineseTranslitMode,
-  $japaneseReadingMode,
-  $pinyinPlacement,
-} from "../../uiState.ts";
+import { $chineseTranslitMode, $japaneseReadingMode, $pinyinPlacement } from "../../uiState.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
 import { resolveTranslationSidecars } from "../TranslationSidecar.ts";
 import {
@@ -42,8 +38,7 @@ export type ReadingRenderOptions = {
   showProviderTranslations?: boolean;
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
-  reserveFurigana?: boolean;
-  reserveAboveReading?: boolean;
+  reservedReadingRow?: Exclude<ReadingRowPresentation["kind"], "none">;
   aboveReadingSegments?: readonly AboveReadingSegment[];
   primaryScript?: "Japanese" | "Chinese";
   chineseDocument?: boolean;
@@ -53,6 +48,13 @@ export type ReadingRenderOptions = {
   /** Full-line segment identities drawn once by an enclosing timed furigana group. */
   suppressedFuriganaKeys?: readonly string[];
 };
+
+export type ReadingRowPresentation =
+  | { readonly kind: "none" }
+  | {
+      readonly kind: "furigana" | "pinyinAbove";
+      readonly state: "rendered" | "reserved" | "pending";
+    };
 
 type SyllableLike = JapaneseReadable & {
   IsPartOfWord?: boolean;
@@ -67,10 +69,12 @@ type RomajiAnimatorEntry = {
   EndTime?: number;
 };
 
-const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
-const plainTextSegmenter = typeof Intl.Segmenter === "function"
-  ? new Intl.Segmenter("ja", { granularity: "word" })
-  : undefined;
+const clamp = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value));
+const plainTextSegmenter =
+  typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter("ja", { granularity: "word" })
+    : undefined;
 const OpeningPunctuation = /^[([{（［｛「『【〈《〔]+$/u;
 const ClosingPunctuation = /^[)\]}）］｝」』】〉》〕、。！？!?…,:;，．：；]+$/u;
 const WrapPunctuation =
@@ -106,7 +110,9 @@ function plainTextWrapChunks(text: string): string[] {
   return chunks;
 }
 
-export function getJapaneseReading(entry: JapaneseReadable | undefined): JapaneseReading | undefined {
+export function getJapaneseReading(
+  entry: JapaneseReadable | undefined
+): JapaneseReading | undefined {
   return entry?.JapaneseReading;
 }
 
@@ -114,18 +120,29 @@ export function hasFurigana(entry: JapaneseReadable | undefined): boolean {
   return (getJapaneseReading(entry)?.furigana.length || 0) > 0;
 }
 
-export function isJapaneseEntry(entry: JapaneseReadable | undefined, isJapaneseLyrics?: boolean): boolean {
+export function isJapaneseEntry(
+  entry: JapaneseReadable | undefined,
+  isJapaneseLyrics?: boolean
+): boolean {
   if (!entry) return !!isJapaneseLyrics;
   if (entry.ReadingPrimaryScript === "Chinese") return false;
   if (entry.ReadingPrimaryScript === "Japanese") return true;
-  return !!isJapaneseLyrics || !!entry.JapaneseReading || JapaneseKanaTextTest.test(entry.Text || "");
+  return (
+    !!isJapaneseLyrics || !!entry.JapaneseReading || JapaneseKanaTextTest.test(entry.Text || "")
+  );
 }
 
-export function shouldRenderFurigana(entry: JapaneseReadable | undefined, options: ReadingRenderOptions): boolean {
+export function shouldRenderFurigana(
+  entry: JapaneseReadable | undefined,
+  options: ReadingRenderOptions
+): boolean {
   return options.useRomanized && $japaneseReadingMode.get() !== "romaji" && hasFurigana(entry);
 }
 
-export function shouldRenderRomanization(entry: JapaneseReadable | undefined, options: ReadingRenderOptions): boolean {
+export function shouldRenderRomanization(
+  entry: JapaneseReadable | undefined,
+  options: ReadingRenderOptions
+): boolean {
   if (!options.useRomanized) return false;
   if (shouldRenderAboveReadings(entry, options)) return false;
   if (shouldReservePendingAboveReading(options)) return false;
@@ -134,36 +151,98 @@ export function shouldRenderRomanization(entry: JapaneseReadable | undefined, op
 }
 
 export function shouldReservePendingAboveReading(options: ReadingRenderOptions): boolean {
-  return options.useRomanized
-    && options.romanizationPending === true
-    && options.chineseDocument === true
-    && $chineseTranslitMode.get() === "pinyin"
-    && $pinyinPlacement.get() === "above";
+  return (
+    options.useRomanized &&
+    options.romanizationPending === true &&
+    options.chineseDocument === true &&
+    $chineseTranslitMode.get() === "pinyin" &&
+    $pinyinPlacement.get() === "above"
+  );
 }
 
 export function shouldRenderAboveReadings(
   entry: JapaneseReadable | undefined,
-  options: ReadingRenderOptions,
+  options: ReadingRenderOptions
 ): boolean {
   if (!options.useRomanized || $chineseTranslitMode.get() !== "pinyin") return false;
   if ($pinyinPlacement.get() !== "above") return false;
-  const primaryScript = entry?.ReadingPrimaryScript
-    ?? entry?.ReadingRenderPlan?.primaryScript
-    ?? options.primaryScript;
+  const primaryScript =
+    entry?.ReadingPrimaryScript ?? entry?.ReadingRenderPlan?.primaryScript ?? options.primaryScript;
   if (primaryScript !== "Chinese") return false;
-  return (options.aboveReadingSegments?.length || entry?.ReadingRenderPlan?.aboveReadingSegments?.length || 0) > 0;
+  return (
+    (options.aboveReadingSegments?.length ||
+      entry?.ReadingRenderPlan?.aboveReadingSegments?.length ||
+      0) > 0
+  );
+}
+
+export function resolveReadingRowPresentation(
+  entry: JapaneseReadable | undefined,
+  options: ReadingRenderOptions
+): ReadingRowPresentation {
+  if (shouldRenderAboveReadings(entry, options)) {
+    return { kind: "pinyinAbove", state: "rendered" };
+  }
+  if (shouldRenderFurigana(entry, options)) {
+    return { kind: "furigana", state: "rendered" };
+  }
+  if (
+    options.useRomanized &&
+    options.reservedReadingRow === "pinyinAbove" &&
+    entry?.ReadingPrimaryScript === "Chinese"
+  ) {
+    return { kind: "pinyinAbove", state: "reserved" };
+  }
+  if (shouldReservePendingAboveReading(options)) {
+    return { kind: "pinyinAbove", state: "pending" };
+  }
+  if (
+    options.useRomanized &&
+    $japaneseReadingMode.get() !== "romaji" &&
+    options.reservedReadingRow === "furigana" &&
+    isJapaneseEntry(entry, options.isJapaneseLyrics)
+  ) {
+    return { kind: "furigana", state: "reserved" };
+  }
+  if (
+    options.useRomanized &&
+    $japaneseReadingMode.get() !== "romaji" &&
+    options.romanizationPending &&
+    isJapaneseEntry(entry, options.isJapaneseLyrics)
+  ) {
+    return { kind: "furigana", state: "pending" };
+  }
+  return { kind: "none" };
+}
+
+function markReadingRowHost(
+  element: HTMLElement,
+  presentation: Exclude<ReadingRowPresentation, { kind: "none" }>
+): void {
+  element.classList.add("has-reading-row", `reading-row-${presentation.state}`);
+  if (presentation.kind === "pinyinAbove") {
+    element.classList.add("has-above-reading");
+    if (presentation.state === "pending") element.classList.add("above-reading-pending");
+    return;
+  }
+  if (presentation.state === "rendered" || presentation.state === "reserved") {
+    element.classList.add("has-furigana");
+  }
+  if (presentation.state === "reserved") element.classList.add("furigana-row-reserved");
+  if (presentation.state === "pending") element.classList.add("furigana-pending");
 }
 
 export function aboveReadingSegmentsForSpan(
   plan: RenderPlan | undefined,
-  spanId: string,
+  spanId: string
 ): AboveReadingSegment[] {
   const mapping = plan?.sourceUnits.find((unit) => unit.spanId === spanId);
   if (!mapping || !plan?.aboveReadingSegments?.length) return [];
   return plan.aboveReadingSegments
-    .filter((segment) =>
-      segment.canonicalRange.startCp >= mapping.canonicalRange.startCp &&
-      segment.canonicalRange.endCp <= mapping.canonicalRange.endCp
+    .filter(
+      (segment) =>
+        segment.canonicalRange.startCp >= mapping.canonicalRange.startCp &&
+        segment.canonicalRange.endCp <= mapping.canonicalRange.endCp
     )
     .map((segment) => ({
       ...segment,
@@ -181,7 +260,7 @@ function appendPlainText(
   hanLanguageContext?: HanLanguageContext,
   layout: "inline" | "furiganaRow" | "aboveReadingRow" = "inline",
   splitBaseRunsForEmphasis = false,
-  syntheticGapCodePointOffsets?: ReadonlySet<number>,
+  syntheticGapCodePointOffsets?: ReadonlySet<number>
 ): void {
   if (!text) return;
 
@@ -193,21 +272,18 @@ function appendPlainText(
         : [languageRun.text];
       for (const displayText of displayRuns) {
         const run = document.createElement("span");
-        const usesFuriganaRow =
-          layout === "furiganaRow" &&
-          !WhitespaceOnlyText.test(displayText);
+        const usesFuriganaRow = layout === "furiganaRow" && !WhitespaceOnlyText.test(displayText);
         const usesAboveReadingRow =
-          layout === "aboveReadingRow" &&
-          !WhitespaceOnlyText.test(displayText);
+          layout === "aboveReadingRow" && !WhitespaceOnlyText.test(displayText);
         run.className = usesFuriganaRow
           ? "lyric-base-run furigana-plain-cluster"
           : usesAboveReadingRow
             ? "lyric-base-run furigana-plain-cluster above-reading-plain-cluster has-above-reading"
-          : layout === "furiganaRow"
-            ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
-            : layout === "aboveReadingRow"
+            : layout === "furiganaRow"
               ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
-            : "lyric-base-run lyric-base-plain";
+              : layout === "aboveReadingRow"
+                ? "lyric-base-run lyric-base-plain lyric-base-whitespace"
+                : "lyric-base-run lyric-base-plain";
         run.dataset.sourceStart = String(cursor);
         if (
           layout === "aboveReadingRow" &&
@@ -216,9 +292,8 @@ function appendPlainText(
         ) {
           run.classList.add("lyric-base-synthetic-gap");
         }
-        cursor += layout === "aboveReadingRow"
-          ? Array.from(displayText).length
-          : displayText.length;
+        cursor +=
+          layout === "aboveReadingRow" ? Array.from(displayText).length : displayText.length;
         run.dataset.sourceEnd = String(cursor);
         if (languageRun.language) run.lang = languageRun.language;
 
@@ -239,9 +314,7 @@ function appendPlainText(
 }
 
 const baseRunText = (run: HTMLElement): string =>
-  directClusterChild(run, "furigana-base")?.textContent
-  ?? run.textContent
-  ?? "";
+  directClusterChild(run, "furigana-base")?.textContent ?? run.textContent ?? "";
 
 function groupWrapPunctuationRuns(parent: HTMLElement): void {
   const runs = Array.from(parent.children) as HTMLElement[];
@@ -286,7 +359,7 @@ export function populateFuriganaReading(
   reading: string,
   sourceStart = 0,
   sourceEnd = 1,
-  sourceLength = 1,
+  sourceLength = 1
 ): void {
   const safeLength = Math.max(sourceLength, 1);
   const safeStart = clamp(sourceStart, 0, safeLength);
@@ -295,14 +368,8 @@ export function populateFuriganaReading(
 
   element.textContent = "";
   element.dataset.furigana = reading;
-  element.style.setProperty(
-    "--furigana-source-start",
-    `${(safeStart / safeLength) * 100}%`,
-  );
-  element.style.setProperty(
-    "--furigana-source-scale",
-    String(safeLength / sourceSpan),
-  );
+  element.style.setProperty("--furigana-source-start", `${(safeStart / safeLength) * 100}%`);
+  element.style.setProperty("--furigana-source-scale", String(safeLength / sourceSpan));
 
   const textLayer = document.createElement("span");
   textLayer.className = "furigana-reading-text";
@@ -314,7 +381,7 @@ export function appendFuriganaText(
   parent: HTMLElement,
   text: string,
   rawSegments: FuriganaSegment[],
-  hanLanguageContext?: HanLanguageContext,
+  hanLanguageContext?: HanLanguageContext
 ): void {
   parent.textContent = "";
 
@@ -336,7 +403,7 @@ export function appendFuriganaText(
       text.slice(cursor, segment.start),
       cursor,
       hanLanguageContext,
-      "furiganaRow",
+      "furiganaRow"
     );
 
     const cluster = document.createElement("span");
@@ -345,7 +412,7 @@ export function appendFuriganaText(
     cluster.dataset.sourceEnd = String(segment.end);
     const clusterLanguage = resolveHanLanguageTagForContext(
       text.slice(segment.start, segment.end),
-      hanLanguageContext,
+      hanLanguageContext
     );
     if (clusterLanguage) cluster.lang = clusterLanguage;
     if (segment.provenance === "providerExplicit") {
@@ -355,14 +422,9 @@ export function appendFuriganaText(
 
     const reading = document.createElement("span");
     reading.className = "furigana-reading";
-    if (segment.provenance === "providerExplicit") reading.classList.add("reading-origin-provider-explicit");
-    populateFuriganaReading(
-      reading,
-      segment.reading,
-      segment.start,
-      segment.end,
-      text.length,
-    );
+    if (segment.provenance === "providerExplicit")
+      reading.classList.add("reading-origin-provider-explicit");
+    populateFuriganaReading(reading, segment.reading, segment.start, segment.end, text.length);
 
     const base = document.createElement("span");
     base.className = "furigana-base";
@@ -379,7 +441,7 @@ export function appendFuriganaText(
 
 function projectAboveSegmentsForReadability(
   segments: readonly AboveReadingSegment[],
-  projection: MixedScriptReadabilityProjection,
+  projection: MixedScriptReadabilityProjection
 ): AboveReadingSegment[] {
   const beforeOrAt = (offset: number): number =>
     projection.insertedBeforeCodePoint.filter((position) => position <= offset).length;
@@ -400,16 +462,17 @@ export function appendAboveReadingText(
   rawSegments: readonly AboveReadingSegment[],
   hanLanguageContext?: HanLanguageContext,
   splitBaseRunsForEmphasis = false,
-  syntheticGapCodePointOffsets?: ReadonlySet<number>,
+  syntheticGapCodePointOffsets?: ReadonlySet<number>
 ): void {
   parent.textContent = "";
   const characters = Array.from(text);
   const segments = [...rawSegments]
-    .filter(({ canonicalRange, reading }) =>
-      !!reading &&
-      canonicalRange.startCp >= 0 &&
-      canonicalRange.endCp > canonicalRange.startCp &&
-      canonicalRange.endCp <= characters.length
+    .filter(
+      ({ canonicalRange, reading }) =>
+        !!reading &&
+        canonicalRange.startCp >= 0 &&
+        canonicalRange.endCp > canonicalRange.startCp &&
+        canonicalRange.endCp <= characters.length
     )
     .sort((a, b) => a.canonicalRange.startCp - b.canonicalRange.startCp);
   let cursorCp = 0;
@@ -424,7 +487,7 @@ export function appendAboveReadingText(
       hanLanguageContext,
       "aboveReadingRow",
       splitBaseRunsForEmphasis,
-      syntheticGapCodePointOffsets,
+      syntheticGapCodePointOffsets
     );
 
     const ruby = document.createElement("ruby");
@@ -455,22 +518,24 @@ export function appendAboveReadingText(
     hanLanguageContext,
     "aboveReadingRow",
     splitBaseRunsForEmphasis,
-    syntheticGapCodePointOffsets,
+    syntheticGapCodePointOffsets
   );
   groupWrapPunctuationRuns(parent);
   packAdjacentFuriganaClusters(
-    Array.from(parent.children)
-      .flatMap((child) => child.classList.contains("lyric-wrap-group")
-        ? Array.from(child.children)
-        : [child]) as HTMLElement[],
+    Array.from(parent.children).flatMap((child) =>
+      child.classList.contains("lyric-wrap-group") ? Array.from(child.children) : [child]
+    ) as HTMLElement[]
   );
 }
 
 const hasElementClass = (element: Element, className: string): boolean =>
-  element.classList.contains(className) || String(element.className).split(/\s+/u).includes(className);
+  element.classList.contains(className) ||
+  String(element.className).split(/\s+/u).includes(className);
 
 const directClusterChild = (cluster: HTMLElement, className: string): HTMLElement | undefined =>
-  Array.from(cluster.children).find((child) => hasElementClass(child, className)) as HTMLElement | undefined;
+  Array.from(cluster.children).find((child) => hasElementClass(child, className)) as
+    | HTMLElement
+    | undefined;
 
 /**
  * A timed provider can split adjacent kanji into separate DOM words even when
@@ -484,9 +549,7 @@ export function packAdjacentFuriganaClusters(runs: Iterable<HTMLElement>): void 
   for (const run of runs) {
     const base = directClusterChild(run, "furigana-base");
     const reading = directClusterChild(run, "furigana-reading");
-    const hasRuby =
-      hasElementClass(run, "furigana-cluster") &&
-      !!reading?.textContent;
+    const hasRuby = hasElementClass(run, "furigana-cluster") && !!reading?.textContent;
 
     if (hasRuby) {
       if (previousRuby) {
@@ -503,73 +566,77 @@ export function packAdjacentFuriganaClusters(runs: Iterable<HTMLElement>): void 
 export function renderBaseTextWithReadings(
   element: HTMLElement,
   entry: JapaneseReadable,
-  options: ReadingRenderOptions
+  options: ReadingRenderOptions,
+  resolvedPresentation?: ReadingRowPresentation
 ): boolean {
   const reading = getJapaneseReading(entry);
   const sourceDisplayText = reading?.displayText ?? entry.Text ?? "";
   const readabilityProjection = projectMixedScriptReadability(sourceDisplayText);
   const text = readabilityProjection.text;
   const syntheticGapCodePointOffsets = options.splitBaseRunsForEmphasis
-    ? new Set(
-        readabilityProjection.insertedBeforeCodePoint.map((offset, index) => offset + index),
-      )
+    ? new Set(readabilityProjection.insertedBeforeCodePoint.map((offset, index) => offset + index))
     : undefined;
   const hanLanguageContext = options.hanLanguageContext
     ? {
         ...options.hanLanguageContext,
-        primaryScript:
-          entry.ReadingPrimaryScript
-          ?? options.hanLanguageContext.primaryScript,
+        primaryScript: entry.ReadingPrimaryScript ?? options.hanLanguageContext.primaryScript,
       }
     : undefined;
 
-  const aboveReadingSegments = options.aboveReadingSegments
-    ?? entry.ReadingRenderPlan?.aboveReadingSegments;
-  if (shouldRenderAboveReadings(entry, { ...options, aboveReadingSegments }) && aboveReadingSegments) {
+  const aboveReadingSegments =
+    options.aboveReadingSegments ?? entry.ReadingRenderPlan?.aboveReadingSegments;
+  const presentation =
+    resolvedPresentation ??
+    resolveReadingRowPresentation(entry, { ...options, aboveReadingSegments });
+  if (
+    presentation.kind === "pinyinAbove" &&
+    presentation.state === "rendered" &&
+    aboveReadingSegments
+  ) {
     const segments = projectAboveSegmentsForReadability(
       aboveReadingSegments,
-      readabilityProjection,
+      readabilityProjection
     );
-    element.classList.add("has-above-reading");
+    markReadingRowHost(element, presentation);
     appendAboveReadingText(
       element,
       text,
       segments,
       hanLanguageContext,
       options.splitBaseRunsForEmphasis === true,
-      syntheticGapCodePointOffsets,
+      syntheticGapCodePointOffsets
     );
     return true;
   }
 
-  if (shouldRenderFurigana(entry, options) && reading) {
+  if (presentation.kind === "furigana" && presentation.state === "rendered" && reading) {
     const sourceSegments = options.suppressedFuriganaKeys?.length
-      ? reading.furigana.filter((segment) =>
-          segment.lineSegmentKey === undefined
-          || !options.suppressedFuriganaKeys!.includes(segment.lineSegmentKey)
+      ? reading.furigana.filter(
+          (segment) =>
+            segment.lineSegmentKey === undefined ||
+            !options.suppressedFuriganaKeys!.includes(segment.lineSegmentKey)
         )
       : reading.furigana;
-    const segments = projectFuriganaSegmentsForReadability(
-      sourceSegments,
-      readabilityProjection,
-    );
+    const segments = projectFuriganaSegmentsForReadability(sourceSegments, readabilityProjection);
     if (segments.length > 0) {
-      element.classList.add("has-furigana");
+      markReadingRowHost(element, presentation);
       appendFuriganaText(element, text, segments, hanLanguageContext);
       packAdjacentFuriganaClusters(
-        Array.from(element.children)
-          .filter((child) => hasElementClass(child, "lyric-base-run")) as HTMLElement[],
+        Array.from(element.children).filter((child) =>
+          hasElementClass(child, "lyric-base-run")
+        ) as HTMLElement[]
       );
+      return true;
+    }
+    if (options.reservedReadingRow === "furigana") {
+      markReadingRowHost(element, { kind: "furigana", state: "reserved" });
+      appendPlainText(element, text, 0, hanLanguageContext, "furiganaRow");
       return true;
     }
   }
 
-  if (
-    options.useRomanized &&
-    options.reserveAboveReading &&
-    entry.ReadingPrimaryScript === "Chinese"
-  ) {
-    element.classList.add("has-above-reading");
+  if (presentation.kind === "pinyinAbove" && presentation.state === "reserved") {
+    markReadingRowHost(element, presentation);
     appendPlainText(
       element,
       text,
@@ -577,13 +644,13 @@ export function renderBaseTextWithReadings(
       hanLanguageContext,
       "aboveReadingRow",
       options.splitBaseRunsForEmphasis === true,
-      syntheticGapCodePointOffsets,
+      syntheticGapCodePointOffsets
     );
     return true;
   }
 
-  if (shouldReservePendingAboveReading(options)) {
-    element.classList.add("has-above-reading", "above-reading-pending");
+  if (presentation.kind === "pinyinAbove" && presentation.state === "pending") {
+    markReadingRowHost(element, presentation);
     appendPlainText(
       element,
       text,
@@ -591,29 +658,19 @@ export function renderBaseTextWithReadings(
       hanLanguageContext,
       "aboveReadingRow",
       options.splitBaseRunsForEmphasis === true,
-      syntheticGapCodePointOffsets,
+      syntheticGapCodePointOffsets
     );
     return true;
   }
 
-  if (
-    options.useRomanized &&
-    $japaneseReadingMode.get() !== "romaji" &&
-    options.reserveFurigana &&
-    isJapaneseEntry(entry, options.isJapaneseLyrics)
-  ) {
-    element.classList.add("has-furigana", "furigana-row-reserved");
+  if (presentation.kind === "furigana" && presentation.state === "reserved") {
+    markReadingRowHost(element, presentation);
     appendPlainText(element, text, 0, hanLanguageContext, "furiganaRow");
     return true;
   }
 
-  if (
-    options.useRomanized &&
-    $japaneseReadingMode.get() !== "romaji" &&
-    options.romanizationPending &&
-    isJapaneseEntry(entry, options.isJapaneseLyrics)
-  ) {
-    element.classList.add("furigana-pending");
+  if (presentation.kind === "furigana" && presentation.state === "pending") {
+    markReadingRowHost(element, presentation);
   }
 
   element.textContent = "";
@@ -630,7 +687,7 @@ export function renderBaseTextWithReadings(
 export function renderFullLineBaseTextWithReadings(
   lineElem: HTMLElement,
   entry: JapaneseReadable,
-  options: ReadingRenderOptions,
+  options: ReadingRenderOptions
 ): boolean {
   const baseFlow = document.createElement("span");
   baseFlow.className = "lyric-base-flow";
@@ -650,13 +707,26 @@ export function forceStackedLine(lineElem: HTMLElement, oppositeAligned?: boolea
 
 export function getRomanizedText(entry: JapaneseReadable | undefined): string | undefined {
   if (!entry) return undefined;
-  return entry.ReadingRenderPlan?.joinedDisplayText || entry.RomanizedText || entry.TransliteratedText || entry.JapaneseReading?.romaji;
+  return (
+    entry.ReadingRenderPlan?.joinedDisplayText ||
+    entry.RomanizedText ||
+    entry.TransliteratedText ||
+    entry.JapaneseReading?.romaji
+  );
 }
 
-function appendRomanizedSegments(element: HTMLElement, reading: JapaneseReading | undefined, fallback: string): void {
+function appendRomanizedSegments(
+  element: HTMLElement,
+  reading: JapaneseReading | undefined,
+  fallback: string
+): void {
   const segments = reading?.romajiSegments;
   const normalizeWhitespace = (value: string): string => value.replace(/\s+/gu, " ").trim();
-  if (!segments?.length || normalizeWhitespace(segments.map((segment) => segment.text).join("")) !== normalizeWhitespace(fallback)) {
+  if (
+    !segments?.length ||
+    normalizeWhitespace(segments.map((segment) => segment.text).join("")) !==
+      normalizeWhitespace(fallback)
+  ) {
     element.textContent = fallback;
     return;
   }
@@ -679,17 +749,15 @@ export function appendRomanizedBelow(
   if (!shouldRenderRomanization(entry, options)) return false;
 
   const sourceText = entry.JapaneseReading?.displayText ?? entry.Text ?? "";
-  const romanizedText = formatMixedScriptReadingForDisplay(
-    sourceText,
-    getRomanizedText(entry),
-  );
+  const romanizedText = formatMixedScriptReadingForDisplay(sourceText, getRomanizedText(entry));
   const hasDistinctRomanization = isMeaningfullyDifferent(romanizedText, sourceText);
   if (!hasDistinctRomanization && !options.romanizationPending) return false;
 
   forceStackedLine(lineElem, options.oppositeAligned);
   const romanizedElem = document.createElement("div");
   romanizedElem.className = `romanized-below${options.romanizationPending && !hasDistinctRomanization ? " romanization-placeholder" : ""}`;
-  if (hasDistinctRomanization) appendRomanizedSegments(romanizedElem, getJapaneseReading(entry), romanizedText!);
+  if (hasDistinctRomanization)
+    appendRomanizedSegments(romanizedElem, getJapaneseReading(entry), romanizedText!);
   else romanizedElem.textContent = "";
   lineElem.appendChild(romanizedElem);
   return true;
@@ -722,19 +790,22 @@ export function appendLineExtras(
 ): boolean {
   let appended = appendRomanizedBelow(lineElem, entry, options);
   const translations = resolveTranslationSidecars(entry);
-  const providerTranslation = options.showProviderTranslations
-    ? translations.provider
-    : undefined;
-  const appendedProviderTranslation = appendTranslatedBelow(lineElem, entry.Text || "", providerTranslation, {
-    ...options,
-    translationLanguage: translations.providerLanguage,
-    translationPending: false,
-  });
+  const providerTranslation = options.showProviderTranslations ? translations.provider : undefined;
+  const appendedProviderTranslation = appendTranslatedBelow(
+    lineElem,
+    entry.Text || "",
+    providerTranslation,
+    {
+      ...options,
+      translationLanguage: translations.providerLanguage,
+      translationPending: false,
+    }
+  );
   const appendedGenericTranslation = appendTranslatedBelow(
     lineElem,
     entry.Text || "",
     translations.generic,
-    options,
+    options
   );
   appended ||= appendedProviderTranslation || appendedGenericTranslation;
   return appended;
@@ -763,52 +834,49 @@ export function appendSyllableRomanizedBelow(
 
   const readabilityGapSpanIds = new Set(
     syllables.flatMap((_, index) =>
-      needsMixedScriptReadabilityGapBefore(syllables, index)
-        ? [String(index)]
-        : []
-    ),
+      needsMixedScriptReadabilityGapBefore(syllables, index) ? [String(index)] : []
+    )
   );
 
   if (shouldRenderRomanization(groupEntry, options) && readingPlan?.timedReadingUnits.length) {
     forceStackedLine(lineElem, options.oppositeAligned);
     appended = true;
-    renderReadingPlan(lineElem, readingPlan, (spanId, element, unit) => {
-      const index = Number(spanId);
-      const owner = Number.isInteger(index) ? animatorEntries?.[index] : undefined;
-      if (!owner) return;
-      owner.RomajiElement = element;
-      delete owner.RomajiStartTime;
-      delete owner.RomajiEndTime;
+    renderReadingPlan(
+      lineElem,
+      readingPlan,
+      (spanId, element, unit) => {
+        const index = Number(spanId);
+        const owner = Number.isInteger(index) ? animatorEntries?.[index] : undefined;
+        if (!owner) return;
+        owner.RomajiElement = element;
+        delete owner.RomajiStartTime;
+        delete owner.RomajiEndTime;
 
-      const exactWindow = unit.animationRange
-        ? projectCanonicalRangeToTiming(
-            readingPlan,
-            unit.animationRange,
-            animatorEntries
-          )
-        : undefined;
-      if (exactWindow) {
-        owner.RomajiStartTime = exactWindow.startTime;
-        owner.RomajiEndTime = exactWindow.endTime;
-        return;
-      }
+        const exactWindow = unit.animationRange
+          ? projectCanonicalRangeToTiming(readingPlan, unit.animationRange, animatorEntries)
+          : undefined;
+        if (exactWindow) {
+          owner.RomajiStartTime = exactWindow.startTime;
+          owner.RomajiEndTime = exactWindow.endTime;
+          return;
+        }
 
-      const animationEntries = (unit.animationTimingRefs || [])
-        .map((ref) => animatorEntries?.[Number(ref)])
-        .filter((entry) =>
-          entry &&
-          Number.isFinite(entry.StartTime) &&
-          Number.isFinite(entry.EndTime)
-        );
-      if (animationEntries.length > 1) {
-        owner.RomajiStartTime = Math.min(...animationEntries.map((entry) => entry!.StartTime!));
-        owner.RomajiEndTime = Math.max(...animationEntries.map((entry) => entry!.EndTime!));
-      }
-    }, readabilityGapSpanIds);
+        const animationEntries = (unit.animationTimingRefs || [])
+          .map((ref) => animatorEntries?.[Number(ref)])
+          .filter(
+            (entry) => entry && Number.isFinite(entry.StartTime) && Number.isFinite(entry.EndTime)
+          );
+        if (animationEntries.length > 1) {
+          owner.RomajiStartTime = Math.min(...animationEntries.map((entry) => entry!.StartTime!));
+          owner.RomajiEndTime = Math.max(...animationEntries.map((entry) => entry!.EndTime!));
+        }
+      },
+      readabilityGapSpanIds
+    );
   } else if (shouldRenderRomanization(groupEntry, options)) {
     const readableGroupRomanizedText = formatMixedScriptReadingForDisplay(
       sourceText,
-      groupRomanizedText,
+      groupRomanizedText
     );
     const hasDistinctRomanization = isMeaningfullyDifferent(readableGroupRomanizedText, sourceText);
     if (hasDistinctRomanization || options.romanizationPending) {
@@ -827,13 +895,15 @@ export function appendSyllableRomanizedBelow(
           const romajiSpan = document.createElement("span");
           romajiSpan.textContent = romaji;
           romajiSpan.className = "romanized-syllable";
-          if (syl.JapaneseReading?.romajiSegments?.some((segment) => segment.provenance === "providerExplicit")) {
+          if (
+            syl.JapaneseReading?.romajiSegments?.some(
+              (segment) => segment.provenance === "providerExplicit"
+            )
+          ) {
             romajiSpan.classList.add("reading-origin-provider-explicit");
             romajiSpan.dataset.readingOrigin = "provider-explicit";
           }
-          if (
-            resolveSyllableBoundary(syllables, index).needsReadingSpace
-          ) {
+          if (resolveSyllableBoundary(syllables, index).needsReadingSpace) {
             romajiSpan.style.marginLeft = "0.25em";
           }
           romanizedDiv.appendChild(romajiSpan);
@@ -851,19 +921,22 @@ export function appendSyllableRomanizedBelow(
     ProviderTranslatedText: groupProviderTranslatedText,
     TranslatedText: groupTranslatedText,
   });
-  const providerTranslation = options.showProviderTranslations
-    ? translations.provider
-    : undefined;
-  const appendedProviderTranslation = appendTranslatedBelow(lineElem, sourceText, providerTranslation, {
-    ...options,
-    translationLanguage: translations.providerLanguage,
-    translationPending: false,
-  });
+  const providerTranslation = options.showProviderTranslations ? translations.provider : undefined;
+  const appendedProviderTranslation = appendTranslatedBelow(
+    lineElem,
+    sourceText,
+    providerTranslation,
+    {
+      ...options,
+      translationLanguage: translations.providerLanguage,
+      translationPending: false,
+    }
+  );
   const appendedGenericTranslation = appendTranslatedBelow(
     lineElem,
     sourceText,
     translations.generic,
-    options,
+    options
   );
   appended ||= appendedProviderTranslation || appendedGenericTranslation;
   return appended;
@@ -885,32 +958,19 @@ function projectCanonicalRangeToTiming(
     if (!mapping) return undefined;
 
     const entry = animatorEntries[Number(mapping.spanId)];
-    if (
-      !entry ||
-      !Number.isFinite(entry.StartTime) ||
-      !Number.isFinite(entry.EndTime)
-    ) {
+    if (!entry || !Number.isFinite(entry.StartTime) || !Number.isFinite(entry.EndTime)) {
       return undefined;
     }
 
-    const sourceLength =
-      mapping.canonicalRange.endCp - mapping.canonicalRange.startCp;
+    const sourceLength = mapping.canonicalRange.endCp - mapping.canonicalRange.startCp;
     if (sourceLength <= 0) return undefined;
-    const progress = clamp(
-      (offsetCp - mapping.canonicalRange.startCp) / sourceLength,
-      0,
-      1
-    );
+    const progress = clamp((offsetCp - mapping.canonicalRange.startCp) / sourceLength, 0, 1);
     return entry.StartTime! + (entry.EndTime! - entry.StartTime!) * progress;
   };
 
   const startTime = timeAt(range.startCp, "start");
   const endTime = timeAt(range.endCp, "end");
-  return (
-    startTime !== undefined &&
-    endTime !== undefined &&
-    endTime > startTime
-  )
+  return startTime !== undefined && endTime !== undefined && endTime > startTime
     ? { startTime, endTime }
     : undefined;
 }
