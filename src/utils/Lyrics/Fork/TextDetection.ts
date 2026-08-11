@@ -11,6 +11,7 @@ import {
   countHanCodePoints,
   hasChineseOnlyHanForms,
   hasJapaneseOnlyHanForms,
+  hasMandarinLexicalEvidence,
 } from "../Processing/CjkLanguageEvidence.ts";
 
 // Korean Hangul (syllables, jamo, compatibility jamo, extended)
@@ -266,7 +267,7 @@ export function resolveCjkLineRoute(
     if (!hasHan) return undefined;
     if (hasJapaneseOnlyHanForms(text)) return "Japanese";
     if (
-      hasChineseOnlyHanForms(text) &&
+      (hasChineseOnlyHanForms(text) || hasMandarinLexicalEvidence(text)) &&
       (docContext.cjkDominantBranch === "Chinese" || docContext.cjkBilingual)
     )
       return "Chinese";

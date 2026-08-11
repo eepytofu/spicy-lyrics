@@ -16,6 +16,12 @@ const japaneseOnlyHan = new Set([
   ..."働込峠畑辻匂凪雫枠榊麿躾塀笹咲栃搾腺",
 ]);
 
+// Keep lexical evidence phrase-level and corpus-backed. Single Han characters
+// and broad bigram lists overlap too readily with Japanese compounds. This
+// signal may resolve a line only after Chinese/bilingual document evidence has
+// already been established; it must never establish that context by itself.
+const mandarinOnlyPhrases = ["我知道"] as const;
+
 export function countHanCodePoints(text: string): number {
   let count = 0;
   for (const character of text) {
@@ -36,4 +42,8 @@ export function hasJapaneseOnlyHanForms(text: string): boolean {
     if (character === "々" || japaneseOnlyHan.has(character)) return true;
   }
   return false;
+}
+
+export function hasMandarinLexicalEvidence(text: string): boolean {
+  return mandarinOnlyPhrases.some((phrase) => text.includes(phrase));
 }

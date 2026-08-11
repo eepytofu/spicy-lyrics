@@ -47,10 +47,10 @@ test("balanced Japanese documents tolerate occasional kanji-only lines", () => {
 
 test("Japanese-dominant bilingual documents route long Chinese Han lines separately", () => {
   const lines = [
-    "僕らの居場所はどこなんだ",
-    "探せば答えが見つかるよ",
-    "世间无常所谓轮回",
-    "身外尽空虚",
+    "静かな庭で猫が眠っている",
+    "明日の朝までここで待とう",
+    "远山风雨终归寂静",
+    "长夜无声灯火微明",
   ];
   const document = resolveCjkDocumentContext(lines.join("\n"), "jpn", "ja");
   assert.deepEqual(document, { branch: "Japanese", bilingual: true });
@@ -69,10 +69,10 @@ test("Japanese-dominant bilingual documents route long Chinese Han lines separat
 
 test("Traditional Chinese form evidence can establish a bilingual document", () => {
   const lines = [
-    "僕らの居場所はどこなんだ",
-    "探せば答えが見つかるよ",
-    "離離虛無無所歸",
-    "無可奈何花落去",
+    "静かな庭で猫が眠っている",
+    "明日の朝までここで待とう",
+    "遠山風雨終歸寂靜",
+    "長夜無聲燈火微明",
   ];
   const document = resolveCjkDocumentContext(lines.join("\n"), "jpn", "ja");
   assert.deepEqual(document, { branch: "Japanese", bilingual: true });
@@ -88,12 +88,31 @@ test("Traditional Chinese form evidence can establish a bilingual document", () 
   assert.equal(resolveCjkLineRoute(lines[3], context), "Chinese");
 });
 
+test("bounded Mandarin phrases resolve short Han lines only in established CJK context", () => {
+  const bilingualContext = {
+    presentScripts: ["Japanese", "Chinese"] as const,
+    primaryLanguage: "jpn",
+    iso2Language: "ja",
+    cjkDominantBranch: "Japanese" as const,
+    cjkBilingual: true,
+  };
+  const japaneseContext = {
+    ...bilingualContext,
+    presentScripts: ["Japanese"] as const,
+    cjkBilingual: false,
+  };
+
+  // Constructed equivalent of the private corpus miss, not a lyric excerpt.
+  assert.equal(resolveCjkLineRoute("我知道呀", bilingualContext), "Chinese");
+  assert.equal(resolveCjkLineRoute("我知道呀", japaneseContext), "Japanese");
+});
+
 test("Japanese Han forms and repeated lines cannot invent bilingual evidence", () => {
   const kanjiHeavy = [
-    "僕らはどこへ向かうのか",
-    "答えを探して歩いている",
-    "磊々落々 反戦国家",
-    "少年少女戦国無双",
+    "静かな庭で猫が眠っている",
+    "明日の朝までここで待とう",
+    "人々往来 反戦記録",
+    "旧国街道 鉄橋横断",
   ].join("\n");
   assert.deepEqual(resolveCjkDocumentContext(kanjiHeavy, "jpn", "ja"), {
     branch: "Japanese",
@@ -101,11 +120,11 @@ test("Japanese Han forms and repeated lines cannot invent bilingual evidence", (
   });
 
   const repeated = [
-    "僕らはどこへ向かうのか",
-    "僕らはどこへ向かうのか",
-    "僕らはどこへ向かうのか",
-    "世间无常所谓轮回",
-    "身外尽空虚",
+    "静かな庭で猫が眠っている",
+    "静かな庭で猫が眠っている",
+    "静かな庭で猫が眠っている",
+    "远山风雨终归寂静",
+    "长夜无声灯火微明",
   ].join("\n");
   assert.deepEqual(resolveCjkDocumentContext(repeated, "jpn", "ja"), {
     branch: "Japanese",
@@ -118,8 +137,8 @@ test("Japanese Han forms and repeated lines cannot invent bilingual evidence", (
     cjkDominantBranch: "Japanese" as const,
     cjkBilingual: false,
   };
-  assert.equal(resolveCjkLineRoute("世间无常所谓轮回", repeatedContext), "Japanese");
-  assert.equal(resolveCjkLineRoute("磊々落々 反戦国家", repeatedContext), "Japanese");
+  assert.equal(resolveCjkLineRoute("远山风雨终归寂静", repeatedContext), "Japanese");
+  assert.equal(resolveCjkLineRoute("人々往来 反戦記録", repeatedContext), "Japanese");
 });
 
 test("Chinese-dominant mixed lines expose Chinese Han and Japanese kana branches", () => {
