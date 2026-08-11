@@ -32,13 +32,13 @@ test("Jyutping disables the Pinyin-only placement control", () => {
   );
 });
 
-test("Above readings reserve real row and side-bearing gaps", () => {
+test("Above readings share furigana geometry with a bounded optical lift", () => {
   assert.match(
     lyricsCss,
-    /\.above-reading-cluster,[\s\S]*?\.above-reading-plain-cluster[\s\S]*?grid-template-rows: var\(--furigana-rt-size\) 1em;[\s\S]*?row-gap: var\(--furigana-rt-gap\);/u,
+    /\.furigana-cluster,[\s\S]*?\.furigana-plain-cluster[\s\S]*?grid-template-rows: calc\(var\(--furigana-rt-size\) \+ var\(--furigana-rt-gap\)\) 1em;/u,
   );
   assert.match(
     lyricsCss,
-    /\.above-reading-text \{[\s\S]*?padding-inline: 0\.1em;/u,
+    /\.above-reading-text \{[\s\S]*?margin-block-end: 0\.06em;[\s\S]*?padding-inline: 0\.1em;/u,
   );
 });

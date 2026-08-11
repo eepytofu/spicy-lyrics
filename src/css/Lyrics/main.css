@@ -169,14 +169,11 @@ body:has(.Root:not(.global-nav)) #SpicyLyricsPage .LyricsContainer .LyricsConten
   text-indent: 0;
 }
 
-#SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-cluster,
-#SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-plain-cluster {
-  grid-template-rows: var(--furigana-rt-size) 1em;
-  row-gap: var(--furigana-rt-gap);
-}
-
 #SpicyLyricsPage .LyricsContainer .LyricsContent .above-reading-text {
   font-variant-east-asian: normal;
+  /* Keep Pinyin optically separated without turning the reserved ruby
+     leading into a full inter-row gap that disconnects it from the Hanzi. */
+  margin-block-end: 0.06em;
   padding-inline: 0.1em;
 }
 
