@@ -651,7 +651,15 @@ export function renderBaseTextWithReadings(
     }
     if (options.reservedReadingRow === "furigana") {
       markReadingRowHost(element, { kind: "furigana", state: "reserved" });
-      appendPlainText(element, text, 0, hanLanguageContext, "furiganaRow");
+      appendPlainText(
+        element,
+        text,
+        0,
+        hanLanguageContext,
+        "furiganaRow",
+        options.splitBaseRunsForEmphasis === true,
+        syntheticGapUtf16Offsets
+      );
       return true;
     }
   }
@@ -686,7 +694,15 @@ export function renderBaseTextWithReadings(
 
   if (presentation.kind === "furigana" && presentation.state === "reserved") {
     markReadingRowHost(element, presentation);
-    appendPlainText(element, text, 0, hanLanguageContext, "furiganaRow");
+    appendPlainText(
+      element,
+      text,
+      0,
+      hanLanguageContext,
+      "furiganaRow",
+      options.splitBaseRunsForEmphasis === true,
+      syntheticGapUtf16Offsets
+    );
     return true;
   }
 

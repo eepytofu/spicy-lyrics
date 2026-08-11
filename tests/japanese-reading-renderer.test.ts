@@ -737,6 +737,64 @@ test("plain text beside or between ruby shares the ruby base row without placeho
   assert.equal(reserved.textContent.includes("\u00a0"), false);
 });
 
+test("reserved Furigana syllable emphasis splits plain base glyphs", () => {
+  $japaneseReadingMode.set("furigana");
+  const baseTexts = (element: FakeElement) =>
+    element.children.map(
+      (run) =>
+        run.children.find((child) => child.className === "furigana-base")?.textContent ??
+        run.textContent
+    );
+
+  const staticReserved = new FakeElement();
+  renderBaseTextWithReadings(
+    staticReserved as unknown as HTMLElement,
+    { Text: "でき" },
+    {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+      reservedReadingRow: "furigana",
+    }
+  );
+  assert.deepEqual(baseTexts(staticReserved), ["でき"]);
+
+  const emphasizedReserved = new FakeElement();
+  renderBaseTextWithReadings(
+    emphasizedReserved as unknown as HTMLElement,
+    { Text: "でき" },
+    {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+      reservedReadingRow: "furigana",
+      splitBaseRunsForEmphasis: true,
+    }
+  );
+  assert.deepEqual(baseTexts(emphasizedReserved), ["で", "き"]);
+  assert.equal(emphasizedReserved.classList.values.has("furigana-row-reserved"), true);
+
+  const suppressedRuby = new FakeElement();
+  renderBaseTextWithReadings(
+    suppressedRuby as unknown as HTMLElement,
+    {
+      Text: "消え",
+      JapaneseReading: {
+        sourceText: "消え",
+        romaji: "kie",
+        furigana: [{ start: 0, end: 1, reading: "き", lineSegmentKey: "0:1\u0000き" }],
+      },
+    },
+    {
+      useRomanized: true,
+      isJapaneseLyrics: true,
+      reservedReadingRow: "furigana",
+      splitBaseRunsForEmphasis: true,
+      suppressedFuriganaKeys: ["0:1\u0000き"],
+    }
+  );
+  assert.deepEqual(baseTexts(suppressedRuby), ["消", "え"]);
+  assert.equal(suppressedRuby.classList.values.has("furigana-row-reserved"), true);
+});
+
 test("whitespace beside ruby remains an ordinary wrapping boundary", () => {
   $japaneseReadingMode.set("furigana");
 
