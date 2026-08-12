@@ -183,22 +183,3 @@ test("dual-run parity reports exact field drift without changing legacy evidence
   assert.deepEqual(parity.errors, ["line:0:text"]);
   assert.equal(evidence.lines[0].providerText, "exact");
 });
-
-test("source document keeps provider-info markers without removing source rows", () => {
-  const lyrics = {
-    Type: "Line",
-    source: "qq",
-    Content: [{
-      Text: "未经许可不得使用",
-      StartTime: 1,
-      EndTime: 2,
-      ProviderInfoKind: "rightsNotice",
-    }],
-  };
-
-  const { document, parity } = ensureSourceLyricDocument(lyrics);
-  assert.equal(parity.valid, true);
-  assert.equal(document?.lines.length, 1);
-  assert.equal(document?.lines[0].providerInfoKind, "rightsNotice");
-  assert.equal(document?.lines[0].exactText, "未经许可不得使用");
-});

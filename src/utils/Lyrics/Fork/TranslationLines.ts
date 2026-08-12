@@ -1,5 +1,3 @@
-import { isProviderInfoEntry } from "../ProviderInfo.ts";
-
 export type TranslationLineRef = {
   obj: any;
   sourceText: string;
@@ -29,12 +27,10 @@ export function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
 
   if (lyrics?.Type === "Static") {
     for (const line of lyrics.Lines || []) {
-      if (isProviderInfoEntry(line)) continue;
       refs.push({ obj: line, sourceText: line?.Text || "", field: "TranslatedText" });
     }
   } else if (lyrics?.Type === "Line") {
     for (const group of lyrics.Content || []) {
-      if (isProviderInfoEntry(group)) continue;
       if (group?.Text) {
         refs.push({ obj: group, sourceText: group.Text, field: "TranslatedText" });
       }
@@ -42,7 +38,6 @@ export function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
   } else if (lyrics?.Type === "Syllable") {
     for (const group of lyrics.Content || []) {
       if (!isVocalGroup(group) || !group?.Lead) continue;
-      if (isProviderInfoEntry(group.Lead)) continue;
       refs.push({
         obj: group.Lead,
         sourceText: joinSyllableText(group.Lead.Syllables),

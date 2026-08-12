@@ -6,7 +6,6 @@ import {
   $simpleLyricsModeRenderingType,
 } from "../../../utils/stores.ts";
 import {
-  $hideEmbeddedProviderInfo,
   $lyricsCopyFormat,
   $showBuiltInTranslationButton,
   $showChineseTranslitButton,
@@ -32,7 +31,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
   const minimalMode = useStore($minimalLyricsMode);
   const lineHoverBackground = useStore($lineHoverBackground);
   const copyFormat = useStore($lyricsCopyFormat);
-  const hideEmbeddedProviderInfo = useStore($hideEmbeddedProviderInfo);
   const showTranslationButton = useStore($showBuiltInTranslationButton);
   const showChineseButton = useStore($showChineseTranslitButton);
 
@@ -54,11 +52,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
       query,
       "Line Hover Background",
       "Show a highlight behind a lyrics line while hovering."
-    ),
-    providerInfo: matches(
-      query,
-      "Hide Embedded Provider Info",
-      "Hide provider-supplied credit and rights lines from lyrics and copied text."
     ),
   };
   const controlRows = {
@@ -121,17 +114,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
           <Toggle
             checked={lineHoverBackground}
             onChange={(value) => $lineHoverBackground.set(value)}
-          />
-        </Row>
-      )}
-      {displayRows.providerInfo && (
-        <Row
-          label="Hide Embedded Provider Info"
-          description="Hide provider-supplied credit and rights lines from lyrics and copied text."
-        >
-          <Toggle
-            checked={hideEmbeddedProviderInfo}
-            onChange={(value) => $hideEmbeddedProviderInfo.set(value)}
           />
         </Row>
       )}

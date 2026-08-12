@@ -4,9 +4,8 @@ import {
   projectMixedScriptReadability,
 } from "./Processing/MixedScriptReadability.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
-import { providerInfoKind, type ProviderInfoKind } from "./ProviderInfo.ts";
 
-export const SPICY_LYRICS_INTEROP_VERSION = 2;
+export const SPICY_LYRICS_INTEROP_VERSION = 1;
 
 export type SpicyLyricsInteropWord = {
   text: string;
@@ -24,7 +23,6 @@ export type SpicyLyricsInteropLine = {
   providerText: string;
   displayText: string;
   readingText?: string;
-  providerInfoKind?: ProviderInfoKind;
   startTime: number;
   endTime: number;
   words?: SpicyLyricsInteropWord[];
@@ -155,9 +153,6 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         providerText,
         displayText: readableDisplay(line?.JapaneseReading?.displayText ?? line?.Text),
         readingText: readingText(line),
-        ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(line)
-          ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(line) }
-          : {}),
         startTime: 0,
         endTime: 0,
       });
@@ -175,9 +170,6 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         providerText,
         displayText: readableDisplay(entry?.JapaneseReading?.displayText ?? entry?.Text),
         readingText: readingText(entry),
-        ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(entry)
-          ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(entry) }
-          : {}),
         startTime: Number(line?.StartTime ?? line?.Lead?.StartTime ?? 0),
         endTime: Number(line?.EndTime ?? line?.Lead?.EndTime ?? 0),
       });
@@ -208,9 +200,6 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
           ? readableDisplay(lead.JapaneseReading.displayText)
           : joinSyllableDisplayText(syllables),
         readingText: syllableReading(lead, syllables),
-        ...(evidence?.providerInfoKind || providerInfoKind(lead)
-          ? { providerInfoKind: evidence?.providerInfoKind ?? providerInfoKind(lead) }
-          : {}),
         startTime: Number(lead?.StartTime ?? group?.StartTime ?? 0),
         endTime: Number(lead?.EndTime ?? group?.EndTime ?? 0),
         words: syllables.map((syllable: any, wordIndex: number) => {

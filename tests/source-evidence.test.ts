@@ -136,22 +136,3 @@ test("invalid nested or mismatched persisted evidence is recaptured", () => {
   assert.equal(evidence.lines[0].providerText, "authoritative source");
   assert.equal(evidence.lines[0].timingOwners[0].startTime, 1);
 });
-
-test("source evidence preserves embedded provider-info classification", () => {
-  const lyrics = {
-    Type: "Syllable",
-    source: "netease",
-    Content: [{
-      Lead: {
-        StartTime: 0,
-        EndTime: 1,
-        ProviderInfoKind: "credit",
-        Syllables: [{ Text: "作词：作者", StartTime: 0, EndTime: 1 }],
-      },
-    }],
-  };
-
-  const evidence = ensureSourceEvidence(lyrics)!;
-  assert.equal(evidence.lines[0].providerInfoKind, "credit");
-  assert.equal(evidence.lines[0].providerText, "作词：作者");
-});

@@ -3,9 +3,8 @@ import {
   type SourceEvidenceLine,
   type SourceLyricsEvidence,
 } from "./SourceEvidence.ts";
-import type { ProviderInfoKind } from "../ProviderInfo.ts";
 
-export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 2;
+export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 1;
 
 export type SourceDocumentTimingOwner = {
   readonly id: string;
@@ -19,7 +18,6 @@ export type SourceDocumentLine = {
   readonly id: string;
   readonly exactText: string;
   readonly providerTranslation?: string;
-  readonly providerInfoKind?: ProviderInfoKind;
   readonly role: "lead" | "background";
   readonly startMs: number;
   readonly endMs: number;
@@ -51,7 +49,6 @@ function documentLine(line: SourceEvidenceLine): SourceDocumentLine {
     ...(line.providerTranslation !== undefined
       ? { providerTranslation: line.providerTranslation }
       : {}),
-    ...(line.providerInfoKind ? { providerInfoKind: line.providerInfoKind } : {}),
     role: line.role,
     startMs: line.startTime,
     endMs: line.endTime,
@@ -121,9 +118,6 @@ export function compareSourceDocumentToEvidence(
     if (actual.exactText !== expected.providerText) errors.push(`${prefix}:text`);
     if (actual.providerTranslation !== expected.providerTranslation) {
       errors.push(`${prefix}:translation`);
-    }
-    if (actual.providerInfoKind !== expected.providerInfoKind) {
-      errors.push(`${prefix}:provider-info-kind`);
     }
     if (actual.role !== expected.role) errors.push(`${prefix}:role`);
     if (actual.startMs !== expected.startTime) errors.push(`${prefix}:start`);

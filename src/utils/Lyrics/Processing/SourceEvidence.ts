@@ -1,6 +1,4 @@
-import { providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
-
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 2;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 1;
 
 export type SourceTimingOwner = {
   readonly id: string;
@@ -14,7 +12,6 @@ export type SourceEvidenceLine = {
   readonly id: string;
   readonly providerText: string;
   readonly providerTranslation?: string;
-  readonly providerInfoKind?: ProviderInfoKind;
   readonly startTime: number;
   readonly endTime: number;
   readonly role: "lead" | "background";
@@ -75,7 +72,6 @@ function staticEvidence(lines: any[]): SourceEvidenceLine[] {
       ...(providerTranslation(line) !== undefined
         ? { providerTranslation: providerTranslation(line) }
         : {}),
-      ...(providerInfoKind(line) ? { providerInfoKind: providerInfoKind(line) } : {}),
       startTime: 0,
       endTime: 0,
       role: "lead",
@@ -100,7 +96,6 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
       ...(providerTranslation(lead) !== undefined
         ? { providerTranslation: providerTranslation(lead) }
         : {}),
-      ...(providerInfoKind(lead) ? { providerInfoKind: providerInfoKind(lead) } : {}),
       startTime: owner.startTime,
       endTime: owner.endTime,
       role: "lead" as const,
@@ -129,7 +124,6 @@ function syllableGroupEvidence(
     ...(providerTranslation(group) !== undefined
       ? { providerTranslation: providerTranslation(group) }
       : {}),
-    ...(providerInfoKind(group) ? { providerInfoKind: providerInfoKind(group) } : {}),
     startTime: numberOrZero(group?.StartTime),
     endTime: numberOrZero(group?.EndTime),
     role,
@@ -184,10 +178,6 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
     return typeof candidate.id === "string" && candidate.id.length > 0
       && typeof candidate.providerText === "string"
       && optionalString(candidate.providerTranslation)
-      && (candidate.providerInfoKind === undefined
-        || candidate.providerInfoKind === "credit"
-        || candidate.providerInfoKind === "rightsNotice"
-        || candidate.providerInfoKind === "trackHeader")
       && finiteNumber(candidate.startTime)
       && finiteNumber(candidate.endTime)
       && (candidate.role === "lead" || candidate.role === "background")

@@ -43,7 +43,6 @@ test("structural display settings share the cached refresh queue", () => {
     "$minimalLyricsMode",
     "$fixHanGlyphVariants",
     "$providerTranslationsEnabled",
-    "$hideEmbeddedProviderInfo",
     "$japaneseReadingMode",
   ]) {
     const start = source.indexOf(`${setting}.listen`);

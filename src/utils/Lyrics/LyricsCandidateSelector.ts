@@ -1,5 +1,4 @@
 import { convertChineseText } from "./ChineseCharacterConversion.ts";
-import { isProviderInfoEvidence } from "./ProviderInfo.ts";
 
 export type LyricsSelectionMode = "smart" | "syncType" | "strict";
 
@@ -60,6 +59,8 @@ type LineSnapshot = { text: string; normalized: string; start?: number; end?: nu
 
 const PLAIN_LYRICS_PENALTY = 15;
 
+const CREDIT_LINE = /^(?:作\s*[词詞曲]|编\s*曲|編\s*曲|词\s*曲|詞\s*曲|制作人|製作人|监\s*制|監\s*製|lyric(?:s|ist)?|composer|arranger|producer)\s*[:：]/iu;
+
 function finite(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
@@ -86,13 +87,13 @@ export function lyricsLineSnapshots(lyrics: any): LineSnapshot[] {
   if (lyrics?.Type === "Static") {
     return (lyrics.Lines ?? []).flatMap((line: any): LineSnapshot[] => {
       const text = String(line?.Text ?? "").trim();
-      return text && !isProviderInfoEvidence(line, text) ? [{ text, normalized: normalizeLyricsComparisonText(text) }] : [];
+      return text && !CREDIT_LINE.test(text) ? [{ text, normalized: normalizeLyricsComparisonText(text) }] : [];
     });
   }
   if (lyrics?.Type === "Line") {
     return (lyrics.Content ?? []).flatMap((line: any): LineSnapshot[] => {
       const text = String(line?.Text ?? "").trim();
-      if (!text || isProviderInfoEvidence(line, text)) return [];
+      if (!text || CREDIT_LINE.test(text)) return [];
       return [{ text, normalized: normalizeLyricsComparisonText(text), start: finite(line?.StartTime), end: finite(line?.EndTime) }];
     });
   }
@@ -100,7 +101,7 @@ export function lyricsLineSnapshots(lyrics: any): LineSnapshot[] {
     return (lyrics.Content ?? []).flatMap((vocal: any): LineSnapshot[] => {
       const lead = vocal?.Lead;
       const text = syllableText(Array.isArray(lead?.Syllables) ? lead.Syllables : []).trim();
-      if (!text || isProviderInfoEvidence(lead, text)) return [];
+      if (!text || CREDIT_LINE.test(text)) return [];
       return [{ text, normalized: normalizeLyricsComparisonText(text), start: finite(lead?.StartTime), end: finite(lead?.EndTime) }];
     });
   }

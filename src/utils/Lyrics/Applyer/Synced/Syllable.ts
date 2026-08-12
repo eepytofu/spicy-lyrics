@@ -45,11 +45,6 @@ import {
 import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
-import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
-import {
-  indexedVisibleLyricsEntries,
-  isProviderInfoEntry,
-} from "../../ProviderInfo.ts";
 
 // Define the data structure for syllable lyrics
 type SyllableData = TimedSyllableEntry;
@@ -382,42 +377,30 @@ export function ApplySyllableLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
-  const visibleLines = indexedVisibleLyricsEntries(
-    data.Content,
-    (line) => line.Lead,
-    $hideEmbeddedProviderInfo.get(),
-  );
-  const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
-  const hasRtlLines = visibleLines.some(
-    ({ entry }) =>
-      entry.Lead.Syllables.some((syllable) => isRtl(syllable.Text)) ||
-      entry.Background?.some((bg) => bg.Syllables.some((syllable) => isRtl(syllable.Text))) === true
+  const hasOppositeAligned = data.Content.some((item) => item.OppositeAligned === true);
+  const hasRtlLines = data.Content.some(
+    (line) =>
+      line.Lead.Syllables.some((syllable) => isRtl(syllable.Text)) ||
+      line.Background?.some((bg) => bg.Syllables.some((syllable) => isRtl(syllable.Text))) === true
   );
   const applyContext = beginLyricsApply("Syllable", hasOppositeAligned, hasRtlLines);
   if (!applyContext) return;
   const { lineElements } = applyContext;
 
-  const firstVisibleLine = visibleLines[0]?.entry;
-  if (firstVisibleLine && firstVisibleLine.Lead.StartTime >= getLyricsBetweenShow()) {
-    appendInterludeLine(
-      lineElements,
-      0,
-      firstVisibleLine.Lead.StartTime,
-      firstVisibleLine.OppositeAligned === true,
-    );
+  if (data.StartTime >= getLyricsBetweenShow()) {
+    appendInterludeLine(lineElements, 0, data.StartTime, data.Content[0].OppositeAligned === true);
   }
   const translationPending = (data as any).TranslationPending === true;
   const romanizationPending = (data as any).RomanizationPending === true;
   const fixHanGlyphVariants = $fixHanGlyphVariants.get();
   const isJapaneseLyrics =
     (data as any).Language === "jpn" ||
-    visibleLines.some(
-      ({ entry }) =>
-        entry.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
-        entry.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
+    data.Content.some(
+      (line) =>
+        line.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
+        line.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
     );
-  visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
-    const providerInfo = isProviderInfoEntry(line.Lead);
+  data.Content.forEach((line, index, arr) => {
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
     const lineWindow = {
@@ -426,7 +409,7 @@ export function ApplySyllableLyrics(
     };
     const leadSourceText =
       line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
-    lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
+    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
     lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
     const hanLanguageContext = createHanLanguageContext(
       data,
@@ -435,17 +418,17 @@ export function ApplySyllableLyrics(
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
     const lineRenderOptions = {
-      useRomanized: providerInfo ? false : UseRomanized,
-      romanizationPending: providerInfo ? false : romanizationPending,
+      useRomanized: UseRomanized,
+      romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: providerInfo ? false : translationPending,
-      showProviderTranslations: providerInfo ? false : ShowProviderTranslations,
+      translationPending,
+      showProviderTranslations: ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,
     };
 
-    const nextLineStartTime = arr[index + 1]?.entry.Lead.StartTime ?? 0;
+    const nextLineStartTime = arr[index + 1] ? arr[index + 1].Lead.StartTime : 0;
 
     const lineEndTimeAndNextLineStartTimeDistance =
       nextLineStartTime !== 0 ? nextLineStartTime - lineWindow.endTime : 0;
@@ -755,16 +738,10 @@ export function ApplySyllableLyrics(
         lineElements,
         interludeStartTime,
         nextLineStartTime,
-        arr[index + 1].entry.OppositeAligned === true
+        arr[index + 1].OppositeAligned === true
       );
     }
   });
 
-  finishLyricsApply(
-    applyContext,
-    data,
-    visibleLines.map(({ entry }) => entry),
-    UseRomanized,
-    true,
-  );
+  finishLyricsApply(applyContext, data, data.Content, UseRomanized, true);
 }
