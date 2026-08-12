@@ -195,6 +195,19 @@ body:has(.Root:not(.global-nav))
   padding-inline: 0.1em;
 }
 
+/* The shared trailing padding is breathing room under the last stacked row.
+   An Above reading sits in the line's leading row instead, so a line that
+   stacks nothing under its base text has no row left for that padding to
+   serve. Halving it to match the leading padding keeps a symmetric line box:
+   the hover plate is a uniform inset around that box, so it stays optically
+   centred without a compensating offset of its own. Lines that still stack a
+   romaji or translation sidecar keep the full padding, which is the only
+   trailing space those rows have. */
+#SpicyLyricsPage .LyricsContainer .LyricsContent
+  .line:has(.has-above-reading):not(:has(> .romanized-below)):not(:has(> .translated-below)) {
+  padding-bottom: 0.08em;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.furigana-pending::before {
   content: "";
   display: block;
