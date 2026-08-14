@@ -14,6 +14,7 @@ import {
   $flatViewControls,
   $forceCompactMode,
   $forceDarkBackground,
+  $hideEmbeddedProviderInfo,
   $japaneseReadingMode,
   $joinMandarinWords,
   $koreanDisplayMode,
@@ -1110,6 +1111,9 @@ $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
 $translationEnabled.listen(queueProcessingSettingsRefresh);
 $providerTranslationsEnabled.listen(() => {
+  queueDisplaySettingsRefresh();
+});
+$hideEmbeddedProviderInfo.listen(() => {
   queueDisplaySettingsRefresh();
 });
 $translationTargetLang.listen(() => {

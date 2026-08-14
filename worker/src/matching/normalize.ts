@@ -43,6 +43,10 @@ export function versionTags(value: string): Set<string> {
   return new Set(versionPatterns.filter(([, pattern]) => pattern.test(simplified)).map(([tag]) => tag));
 }
 
+export function hasInstrumentalVersionConflict(wanted: string, candidate: string): boolean {
+  return !versionTags(wanted).has("instrumental") && versionTags(candidate).has("instrumental");
+}
+
 const softTitleTag = /\b(?:feat(?:uring)?\.?|ft\.?|with|explicit|deluxe(?:\s+edition)?|special\s+edition|bonus\s+track)\b/iu;
 
 export function stripSoftTitleSuffix(value: string): string {

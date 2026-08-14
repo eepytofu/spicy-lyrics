@@ -26,6 +26,7 @@ function canonicalSourceEvidence(evidence: SourceLyricsEvidence): string {
       id: line.id,
       providerText: line.providerText,
       providerTranslation: line.providerTranslation ?? null,
+      providerInfoKind: line.providerInfoKind ?? null,
       startTime: line.startTime,
       endTime: line.endTime,
       role: line.role,

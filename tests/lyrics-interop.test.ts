@@ -145,3 +145,26 @@ test("interop preserves Chinese word grouping and full-line contextual pinyin", 
   assert.equal(snapshot?.lines[0]?.originalText, "音乐");
   assert.equal(snapshot?.lines[0]?.readingText, "yīn yuè");
 });
+
+test("interop v4 retains provider-info rows and classification", () => {
+  const snapshot = buildLyricsInteropSnapshot({
+    Type: "Static",
+    uri: "spotify:track:provider-info",
+    id: "provider-info",
+    Lines: [
+      { Text: "作词：作者", ProviderInfoKind: "credit" },
+      { Text: "酷狗国潮音乐企划", ProviderInfoKind: "providerNotice" },
+      { Text: "普通歌词" },
+    ],
+  });
+
+  assert.equal(snapshot?.version, 4);
+  assert.deepEqual(snapshot?.lines.map(({ originalText, providerInfoKind }) => ({
+    originalText,
+    providerInfoKind,
+  })), [
+    { originalText: "作词：作者", providerInfoKind: "credit" },
+    { originalText: "酷狗国潮音乐企划", providerInfoKind: "providerNotice" },
+    { originalText: "普通歌词", providerInfoKind: undefined },
+  ]);
+});

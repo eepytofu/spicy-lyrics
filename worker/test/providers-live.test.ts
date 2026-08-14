@@ -8,6 +8,12 @@ import { sodaProvider } from "../src/providers/soda";
 
 const live = process.env.LIVE_PROVIDER_TESTS === "1" ? it : it.skip;
 
+function markerKinds(result: any): Array<string | undefined> {
+  if (result?.Type === "Line") return result.Content.map((line: any) => line.ProviderInfoKind);
+  if (result?.Type === "Syllable") return result.Content.map((line: any) => line.Lead.ProviderInfoKind);
+  return result?.Lines?.map((line: any) => line.ProviderInfoKind) ?? [];
+}
+
 describe("live upstream providers", () => {
   live("AMLL DB returns the personal TTML fixture with background vocals", async () => {
     const ttml = await amllDbProvider({ id: "7aSXHJ8djFxfqKLuOs039d", title: "乐鸣东方", artists: ["洛天依"], album: "乐鸣东方", durationMs: 240_000 });
@@ -28,6 +34,44 @@ describe("live upstream providers", () => {
     expect(result?.Type).toBe("Syllable");
     expect(Array.isArray(result?.Content) ? result.Content.length : 0).toBeGreaterThan(20);
     expect(result?.SourceMatch?.evidence?.versionConflict).toBe(false);
+    expect(markerKinds(result).slice(0, 26)).toEqual([
+      "trackHeader",
+      ...Array(24).fill("credit"),
+      undefined,
+    ]);
+  }, 30000);
+
+  live("KuGou keeps the shorter 乐鸣东方 provider-info boundary", async () => {
+    const result = await kugouProvider({
+      id: "7aSXHJ8djFxfqKLuOs039d",
+      title: "乐鸣东方",
+      artists: ["洛天依"],
+      album: "乐鸣东方",
+      durationMs: 240_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(markerKinds(result).slice(0, 4)).toEqual([
+      "trackHeader", "credit", "credit", undefined,
+    ]);
+  }, 30000);
+
+  live("KuGou accepts an extra provider-header artist for 归家", async () => {
+    const result = await kugouProvider({
+      id: "4Be8UHXmXCaKBWTi4OwpU6",
+      title: "归家",
+      artists: ["KBShinya", "哦漏"],
+      album: "归家",
+      durationMs: 280_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(markerKinds(result).slice(0, 15)).toEqual([
+      "trackHeader",
+      ...Array(12).fill("credit"),
+      undefined,
+      undefined,
+    ]);
   }, 30000);
 
   live("QQ retrieves the exact DJ fixture end to end", async () => {
@@ -54,6 +98,16 @@ describe("live upstream providers", () => {
   live("NetEase Cloud Music returns native lyrics", async () => {
     const result = await neteaseProvider({ id: "personal-fixture", title: "乐鸣东方", artists: ["洛天依"], album: "", durationMs: 240_000 });
     expect(["Syllable", "Line"]).toContain(result?.Type);
+    const kinds = markerKinds(result);
+    const firstVisible = kinds.findIndex((kind) => kind === undefined);
+    if (firstVisible > 0) {
+      expect(firstVisible).toBe(25);
+      expect(kinds.slice(0, firstVisible)).toEqual(Array(25).fill("credit"));
+      expect(kinds[11]).toBe("credit");
+    } else {
+      expect(firstVisible).toBe(0);
+      expect(kinds.every((kind) => kind === undefined)).toBe(true);
+    }
   }, 30000);
 
   live("NetEase Cloud Music preserves distinct synced-lyrics and translation contributors", async () => {
@@ -222,6 +276,20 @@ describe("live upstream providers", () => {
       method: "luna-pc-krc",
       evidence: { versionConflict: false },
     });
+  }, 30000);
+
+  live("Soda Music retrieves 乐鸣东方 through the unsigned routes", async () => {
+    const result = await sodaProvider({
+      id: "7aSXHJ8djFxfqKLuOs039d",
+      title: "乐鸣东方",
+      artists: ["洛天依"],
+      album: "乐鸣东方",
+      durationMs: 240_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(Array.isArray(result?.Content) ? result.Content.length : 0).toBeGreaterThan(20);
+    expect(result?.SourceMatch?.evidence?.versionConflict).toBe(false);
   }, 30000);
 
   live("Soda Music retrieves the exact DJ fixture as native KRC", async () => {

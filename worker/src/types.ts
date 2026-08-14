@@ -1,4 +1,17 @@
 export type ProviderId = "qq" | "kugou" | "netease" | "soda";
+export type ProviderInfoKind = "trackHeader" | "credit" | "rightsHolder" | "rightsNotice" | "providerNotice";
+
+const PROVIDER_INFO_KINDS = new Set<ProviderInfoKind>([
+  "trackHeader",
+  "credit",
+  "rightsHolder",
+  "rightsNotice",
+  "providerNotice",
+]);
+
+export function isProviderInfoKind(value: unknown): value is ProviderInfoKind {
+  return PROVIDER_INFO_KINDS.has(value as ProviderInfoKind);
+}
 
 export type ProviderCreditRole = "syncedLyrics" | "lyrics" | "translation" | "romanization" | "credit";
 export type ProviderCredit = {
@@ -23,6 +36,7 @@ export type TimedLine = {
   words: TimedWord[];
   translation?: string;
   romanization?: string;
+  providerInfoKind?: ProviderInfoKind;
 };
 
 export type NativeLyrics = Record<string, unknown> & {

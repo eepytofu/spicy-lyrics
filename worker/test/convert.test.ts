@@ -1,10 +1,10 @@
 import { deflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { attachSidecars, attachTimedSidecars, parseLrc, toLineLyrics, toSyllableLyrics } from "../src/convert";
+import { attachSidecars, attachTimedSidecars, parseLrc, toLineLyrics, toLineLyricsFromRows, toStaticLyrics, toSyllableLyrics } from "../src/convert";
 import { dedupeProviderCredits, extractByCredit, isAutomatedByCredit } from "../src/credits";
 import { decryptKrc, parseKrc } from "../src/providers/kugou";
 import { parseQrc, qrcContent } from "../src/providers/qq";
-import { neteaseProviderCredits, parseYrc } from "../src/providers/netease";
+import { neteaseProviderCredits, parseNeteaseLrc, parseNeteaseYrc, parseYrc } from "../src/providers/netease";
 
 describe("native syllable-sync conversion", () => {
   it("parses QRC absolute word timings", () => {
@@ -236,6 +236,13 @@ describe("native syllable-sync conversion", () => {
     ]);
   });
 
+  it("parses colon-separated LRC centiseconds without changing decimal timestamps", () => {
+    expect(parseLrc("[00:23:71]colon fraction\n[00:24.125]decimal fraction")).toEqual([
+      { startMs: 23_710, text: "colon fraction" },
+      { startMs: 24_125, text: "decimal fraction" },
+    ]);
+  });
+
   it("validates the KRC header and strips only an actual UTF-8 BOM", () => {
     const key = Uint8Array.from([0x40, 0x47, 0x61, 0x77, 0x5e, 0x32, 0x74, 0x47, 0x51, 0x36, 0x31, 0x2d, 0xce, 0xd2, 0x6e, 0x69]);
     const compressed = deflateSync(Buffer.from("\uFEFF[1000,1000]<0,1000,0>whole", "utf8"));
@@ -366,6 +373,13 @@ describe("native syllable-sync conversion", () => {
     }], "netease")).toBeUndefined();
   });
 
+  it("does not return a document whose typed rows contain no ordinary lyrics", () => {
+    expect(toLineLyricsFromRows([
+      { startMs: 0, text: "作曲: M2U", providerInfoKind: "credit" },
+      { startMs: 1000, text: "人声: Vocalist", providerInfoKind: "credit" },
+    ], 180_000, "netease")).toBeUndefined();
+  });
+
   it("does not discard a real NetEase lyric document containing the sentinel text", () => {
     const lyrics = toLineLyrics(
       "[00:00.00]纯音乐，请欣赏\n[00:02.00]actual lyric",
@@ -438,6 +452,7 @@ describe("native syllable-sync conversion", () => {
 
   it("drops known automated by-tags without guessing ordinary contributor names", () => {
     expect(extractByCredit("[by:krc转trans工具]", "translation", "qq")).toBeUndefined();
+    expect(extractByCredit("[by:krc转qrc工具]", "lyrics", "qq")).toBeUndefined();
     expect(extractByCredit("[by: 天琴实验室ＡＩ生成ｖ１．０ ]", "lyrics", "kugou")).toBeUndefined();
     expect(isAutomatedByCredit("天琴实验室AI生成v2.1")).toBe(true);
     expect(isAutomatedByCredit("天琴实验室")).toBe(false);
@@ -455,5 +470,173 @@ describe("native syllable-sync conversion", () => {
     ], "[00:01.05]translation");
 
     expect(lines.map((line) => line.translation).filter(Boolean)).toEqual(["translation"]);
+  });
+});
+
+describe("provider-info conversion contract", () => {
+  const context = {
+    reference: {
+      id: "track",
+      title: "Title",
+      artists: ["Artist"],
+      album: "Album",
+      durationMs: 5_000,
+    },
+    selected: { title: "Title", artists: ["Artist"] },
+  };
+
+  it("carries markers through QRC, KRC, YRC, LRC, and static conversion", () => {
+    const structured = [
+      parseQrc("[0,1000]Title - Artist(0,1000)\n[1000,1000]Lyrics:(1000,200) Alice(1200,800)\n[2000,1000]Composer:(2000,200) Bob(2200,800)\n[3000,1000]first lyric(3000,1000)"),
+      parseKrc("[0,1000]<0,1000,0>Title - Artist\n[1000,1000]<0,200,0>Lyrics:<200,800,0> Alice\n[2000,1000]<0,200,0>Composer:<200,800,0> Bob\n[3000,1000]<0,1000,0>first lyric"),
+      parseYrc("[0,1000](0,1000,0)Title - Artist\n[1000,1000](1000,200,0)Lyrics:(1200,800,0) Alice\n[2000,1000](2000,200,0)Composer:(2200,800,0) Bob\n[3000,1000](3000,1000,0)first lyric"),
+    ];
+    for (const lines of structured) {
+      const lyrics = toSyllableLyrics(lines, "qq", context) as any;
+      expect(lyrics.Content.map((line: any) => line.Lead.ProviderInfoKind))
+        .toEqual(["trackHeader", "credit", "credit", undefined]);
+      expect(lyrics.Content.map((line: any) => line.Lead.Syllables.map((word: any) => word.Text).join("")))
+        .toEqual(["Title - Artist", "Lyrics: Alice", "Composer: Bob", "first lyric"]);
+    }
+
+    const lrc = toLineLyrics(
+      "[00:00.00]Lyrics: Alice\n[00:01.00]Composer: Bob\n[00:02.00]first lyric",
+      3_000,
+      "netease",
+      undefined,
+      undefined,
+      context,
+    ) as any;
+    expect(lrc.Content.map((line: any) => line.ProviderInfoKind))
+      .toEqual(["credit", "credit", undefined]);
+
+    const plain = toStaticLyrics("Lyrics: Alice\nComposer: Bob\nfirst lyric", "soda", context) as any;
+    expect(plain.Lines.map((line: any) => line.ProviderInfoKind))
+      .toEqual(["credit", "credit", undefined]);
+  });
+
+  it("preserves leading and trailing NetEase YRC JSON credits and exact writer segments", () => {
+    const parsed = parseNeteaseYrc([
+      JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Brent Kutzle" }, { tx: "/" }, { tx: "Ryan Tedder" }] }),
+      "[1000,1000](1000,1000,0)first lyric",
+      JSON.stringify({ t: 3000, c: [{ tx: "编曲: " }, { tx: "Producer" }] }),
+    ].join("\n"));
+    const lyrics = toSyllableLyrics(parsed.lines, "netease") as any;
+
+    expect(parsed.songWriters).toEqual(["Brent Kutzle", "Ryan Tedder"]);
+    expect(lyrics.Content.map((line: any) => ({
+      text: line.Lead.Syllables.map((word: any) => word.Text).join(""),
+      kind: line.Lead.ProviderInfoKind,
+      start: line.Lead.StartTime,
+      end: line.Lead.EndTime,
+    }))).toEqual([
+      { text: "作词: Brent Kutzle/Ryan Tedder", kind: "credit", start: 0, end: 0 },
+      { text: "first lyric", kind: undefined, start: 1, end: 2 },
+      { text: "编曲: Producer", kind: "credit", start: 3, end: 3 },
+    ]);
+  });
+
+  it("preserves NetEase JSON credits embedded in hybrid LRC without marking the following preface", () => {
+    const parsed = parseNeteaseLrc([
+      JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "释子" }, { tx: "/" }, { tx: "公子无琊" }] }),
+      JSON.stringify({ t: 1000, c: [{ tx: "作曲: " }, { tx: "王韩一淋" }] }),
+      "[00:08.705]编曲：向往",
+      "[00:10.195]文案故事：康玉婷（网易云音乐用户@糖果超级咸）",
+      "[00:11.763]/题记/",
+      "[00:13.000]飞雁终渡万重山，远行的儿郎卸甲归家。",
+      "[00:16.000]【哦漏】",
+      "[00:17.000]first lyric",
+    ].join("\n"));
+
+    expect(parsed.songWriters).toEqual(["释子", "公子无琊"]);
+    expect(parsed.lines.map((line) => ({ text: line.text, startMs: line.startMs }))).toEqual([
+      { text: "作词: 释子/公子无琊", startMs: 0 },
+      { text: "作曲: 王韩一淋", startMs: 1000 },
+      { text: "编曲：向往", startMs: 8705 },
+      { text: "文案故事：康玉婷（网易云音乐用户@糖果超级咸）", startMs: 10195 },
+      { text: "/题记/", startMs: 11763 },
+      { text: "飞雁终渡万重山，远行的儿郎卸甲归家。", startMs: 13000 },
+      { text: "【哦漏】", startMs: 16000 },
+      { text: "first lyric", startMs: 17000 },
+    ]);
+  });
+
+  it("classifies a provider header and anchored block after authoritative hybrid-LRC credits", () => {
+    const parsed = parseNeteaseLrc([
+      JSON.stringify({ t: -1000, c: [{ tx: "作词: " }, { tx: "盏月陆离" }] }),
+      JSON.stringify({ t: -500, c: [{ tx: "作曲: " }, { tx: "盏月陆离" }] }),
+      "[00:00.00] 卦象怎判-洛天依/乐正绫",
+      "[00:05.47] 编曲：李兀",
+      "[00:07.32] 歌姬：洛天依/乐正绫",
+      "[00:09.18] 调教：盏月陆离",
+      "[00:11.04] 混音：神曦",
+      "[00:11.90] 监制：谢墨",
+      "[00:12.91] 制作人：祭酒",
+      "[00:13.81] 策划：盏月陆离",
+      "[00:16.12] 龟甲在烈火里 烧出了裂纹",
+    ].join("\n"));
+    const lyrics = toLineLyricsFromRows(parsed.lines, 162_000, "netease", undefined, undefined, {
+      reference: {
+        id: "netease:3348520852",
+        title: "卦象怎判",
+        artists: ["洛天依Official", "乐正绫"],
+        album: "卦象怎判",
+        durationMs: 162_000,
+      },
+      selected: {
+        title: "卦象怎判",
+        artists: ["洛天依Official", "乐正绫"],
+      },
+    }) as any;
+
+    expect(lyrics.Content.map((line: any) => line.Text)).toEqual([
+      "作词: 盏月陆离",
+      "作曲: 盏月陆离",
+      "卦象怎判-洛天依/乐正绫",
+      "编曲：李兀",
+      "歌姬：洛天依/乐正绫",
+      "调教：盏月陆离",
+      "混音：神曦",
+      "监制：谢墨",
+      "制作人：祭酒",
+      "策划：盏月陆离",
+      "龟甲在烈火里 烧出了裂纹",
+    ]);
+    expect(lyrics.Content.map((line: any) => line.ProviderInfoKind)).toEqual([
+      "credit",
+      "credit",
+      "trackHeader",
+      ...Array(7).fill("credit"),
+      undefined,
+    ]);
+  });
+
+  it("marks structured NetEase LRC credits authoritatively at both document edges", () => {
+    const parsed = parseNeteaseLrc([
+      JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Alice" }] }),
+      "[00:01.000]first lyric",
+      JSON.stringify({ t: 3000, c: [{ tx: "人声: " }, { tx: "Bob" }] }),
+    ].join("\n"));
+
+    expect(parsed.lines).toEqual([
+      { startMs: 0, text: "作词: Alice", providerInfoKind: "credit" },
+      { startMs: 1000, text: "first lyric" },
+      { startMs: 3000, text: "人声: Bob", providerInfoKind: "credit" },
+    ]);
+  });
+
+  it("preserves untimed NetEase lyric bodies as an ordered static fallback", () => {
+    const parsed = parseNeteaseLrc([
+      JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Ahmad Dhani" }] }),
+      "Ku akui tubuhku melunglai",
+      "Semakin lama semakin lemah",
+    ].join("\n"));
+
+    expect(parsed.lines).toEqual([]);
+    expect(parsed.staticLines).toEqual([
+      { text: "作词: Ahmad Dhani", providerInfoKind: "credit" },
+      { text: "Ku akui tubuhku melunglai" },
+      { text: "Semakin lama semakin lemah" },
+    ]);
   });
 });

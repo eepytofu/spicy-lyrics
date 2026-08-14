@@ -2,8 +2,9 @@ import { inflateSync } from "node:zlib";
 import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
+import { providerInfoContext } from "../provider-info";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
+import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
 export function decryptQrc(hex: string): string | undefined {
@@ -239,7 +240,7 @@ function decodeQqLyricField(value: unknown): string | undefined {
   const decrypted = qrcContent(decryptQrc(encoded));
   if (decrypted?.trim()) return decrypted;
   const plain = decodeEntities(encoded);
-  return /(?:^|\n)\[(?:\d+:\d+(?:\.\d+)?|\d+,\d+)\]/u.test(plain) ? plain : undefined;
+  return /(?:^|\n)\[(?:\d+:\d+(?:[.:]\d+)?|\d+,\d+)\]/u.test(plain) ? plain : undefined;
 }
 
 function extractLegacyQqField(value: string, name: "content" | "contentts" | "contentroma"): string | undefined {
@@ -291,6 +292,7 @@ function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong,
   const result = toSyllableLyrics(
     attachQqSidecars(parseQrc(bundle.primary), bundle.translation, bundle.romanization),
     "qq",
+    providerInfoContext(track, song, bundle.primary),
   );
   const ProviderCredits = dedupeProviderCredits([
     extractByCredit(bundle.primary, "lyrics", "qq"),
@@ -315,7 +317,7 @@ export const qqProvider: LyricsProvider = async (track, context = {}) => {
   let canUseLegacyFallback = true;
   for (const { candidate: song, assessment } of await searchQqAssessed(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(assessment)) continue;
+    if (!isAcceptableCandidate(assessment) || hasInstrumentalVersionConflict(track.title, song.title)) continue;
     const current = convertQqBundle(track, song, bundleFromPlayPayload(await fetchQqLyric(song, track, context.signal)), "search");
     if (current) return current;
     if (canUseLegacyFallback) {

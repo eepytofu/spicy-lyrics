@@ -3,6 +3,7 @@ import {
   assessAndRankCandidates,
   assessCandidate,
   candidateScore,
+  hasInstrumentalVersionConflict,
   isAcceptableCandidate,
   isStrongCandidate,
   matchMetadata,
@@ -68,6 +69,12 @@ describe("provider candidate matching", () => {
     });
     expect(assessment.evidence.versionConflict).toBe(true);
     expect(isAcceptableCandidate(assessment)).toBe(true);
+  });
+
+  it("rejects only an explicit instrumental candidate for a requested vocal version", () => {
+    expect(hasInstrumentalVersionConflict("唐人戀曲（DJ偉然 咚鼓版）", "唐人戀曲（伴奏）")).toBe(true);
+    expect(hasInstrumentalVersionConflict("BATTLE NO.1 (Instrumental)", "BATTLE NO.1 (Instrumental)")).toBe(false);
+    expect(hasInstrumentalVersionConflict("Example (DJ Remix)", "Example")).toBe(false);
   });
 
   it("allows a close-duration artist match when title scripts differ", () => {

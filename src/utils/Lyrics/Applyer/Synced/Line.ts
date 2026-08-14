@@ -13,6 +13,8 @@ import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
+import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
+import { indexedVisibleLyricsEntries, isProviderInfoEntry } from "../../ProviderInfo.ts";
 
 // Define the data structure for lyrics
 type LyricsLineData = TimedTextEntry;
@@ -55,18 +57,24 @@ export function ApplyLineLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
-  const hasOppositeAligned = data.Content.some(item => item.OppositeAligned === true);
-  const hasRtlLines = data.Content.some(line => isRtl(line.Text));
+  const visibleLines = indexedVisibleLyricsEntries(
+    data.Content,
+    (line) => line,
+    $hideEmbeddedProviderInfo.get(),
+  );
+  const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
+  const hasRtlLines = visibleLines.some(({ entry }) => isRtl(entry.Text));
   const applyContext = beginLyricsApply("Line", hasOppositeAligned, hasRtlLines);
   if (!applyContext) return;
   const { lineElements } = applyContext;
 
-  if (data.StartTime >= getLyricsBetweenShow()) {
+  const firstVisibleLine = visibleLines[0]?.entry;
+  if (firstVisibleLine && firstVisibleLine.StartTime >= getLyricsBetweenShow()) {
     appendInterludeLine(
       lineElements,
       0,
-      data.StartTime,
-      data.Content[0].OppositeAligned === true,
+      firstVisibleLine.StartTime,
+      firstVisibleLine.OppositeAligned === true,
     );
   }
 
@@ -74,11 +82,13 @@ export function ApplyLineLyrics(
   const romanizationPending = (data as any).RomanizationPending === true;
   const fixHanGlyphVariants = $fixHanGlyphVariants.get();
 
-  const isJapaneseLyrics = (data as any).Language === "jpn" || data.Content.some((line) => isJapaneseEntry(line));
+  const isJapaneseLyrics = (data as any).Language === "jpn"
+    || visibleLines.some(({ entry }) => isJapaneseEntry(entry));
 
-  data.Content.forEach((line, index, arr) => {
+  visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
+    const providerInfo = isProviderInfoEntry(line);
     const lineElem = document.createElement("div");
-    lineElem.dataset.spicyLyricsLineId = `lead:${index}`;
+    lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
     const hanLanguageContext = createHanLanguageContext(
       data,
@@ -88,11 +98,11 @@ export function ApplyLineLyrics(
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
     const renderOptions = {
-      useRomanized: UseRomanized,
-      romanizationPending,
+      useRomanized: providerInfo ? false : UseRomanized,
+      romanizationPending: providerInfo ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending,
-      showProviderTranslations: ShowProviderTranslations,
+      translationPending: providerInfo ? false : translationPending,
+      showProviderTranslations: providerInfo ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,
@@ -110,7 +120,7 @@ export function ApplyLineLyrics(
       lineElem.classList.add("rtl");
     }
 
-    const nextLineStartTime = arr[index + 1]?.StartTime ?? 0;
+    const nextLineStartTime = arr[index + 1]?.entry.StartTime ?? 0;
 
     const lineEndTimeAndNextLineStartTimeDistance =
       nextLineStartTime !== 0 ? nextLineStartTime - line.EndTime : 0;
@@ -137,15 +147,21 @@ export function ApplyLineLyrics(
     }
 
     lineElements.push(lineElem);
-    if (arr[index + 1] && arr[index + 1].StartTime - line.EndTime >= getLyricsBetweenShow()) {
+    if (arr[index + 1] && arr[index + 1].entry.StartTime - line.EndTime >= getLyricsBetweenShow()) {
       appendInterludeLine(
         lineElements,
         line.EndTime,
-        arr[index + 1].StartTime,
-        arr[index + 1].OppositeAligned === true,
+        arr[index + 1].entry.StartTime,
+        arr[index + 1].entry.OppositeAligned === true,
       );
     }
   });
 
-  finishLyricsApply(applyContext, data, data.Content, UseRomanized, true);
+  finishLyricsApply(
+    applyContext,
+    data,
+    visibleLines.map(({ entry }) => entry),
+    UseRomanized,
+    true,
+  );
 }

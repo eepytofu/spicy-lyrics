@@ -8,7 +8,7 @@ export {
   type CandidateAssessment,
   type TrackCandidate,
 } from "../matching/score";
-export { normalize, simplify, versionTags } from "../matching/normalize";
+export { hasInstrumentalVersionConflict, normalize, simplify, versionTags } from "../matching/normalize";
 export { searchQueries } from "../matching/queries";
 export {
   fetchWithTimeout,

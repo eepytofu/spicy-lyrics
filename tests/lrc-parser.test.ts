@@ -30,3 +30,12 @@ test("LRC parsing applies offsets, clamps negative times, and sorts output", () 
   ]);
   assert.deepEqual(parsed.plain, []);
 });
+
+test("LRC parsing accepts provider colon-separated centiseconds", () => {
+  const parsed = parseLrcDocument("[00:23:71]colon fraction\n[00:24.125]decimal fraction");
+
+  assert.deepEqual(parsed.synced, [
+    { text: "colon fraction", startTimeMs: 23_710 },
+    { text: "decimal fraction", startTimeMs: 24_125 },
+  ]);
+});

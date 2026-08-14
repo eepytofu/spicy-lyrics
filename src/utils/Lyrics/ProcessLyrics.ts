@@ -87,11 +87,12 @@ import {
 } from "./Processing/ReadingPrecedence.ts";
 import type { AboveReadingSegment, ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
+import { isProviderInfoEntry } from "./ProviderInfo.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v66: infer ambiguous bilingual Han lines only from agreeing sequence evidence.
-export const LYRICS_PROCESSING_VERSION = 66;
+// v69: keep promotional provider notices out of every derived lyric lane.
+export const LYRICS_PROCESSING_VERSION = 69;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -246,12 +247,14 @@ const gatherText = (
 
   if (lyrics.Type === "Static") {
     for (const line of lyrics.Lines) {
+      if (isProviderInfoEntry(line)) continue;
       const lineText = normalizeLyricsText(line);
       entries.push({ target: line, line, lineText });
       textLines.push(lineText);
     }
   } else if (lyrics.Type === "Line") {
     for (const vocalGroup of lyrics.Content) {
+      if (isProviderInfoEntry(vocalGroup)) continue;
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
         const lineText = normalizeLyricsText(vocalGroup);
         entries.push({ target: vocalGroup, line: vocalGroup, lineText });
@@ -261,6 +264,7 @@ const gatherText = (
   } else if (lyrics.Type === "Syllable") {
     for (const vocalGroup of lyrics.Content) {
       if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
+      if (isProviderInfoEntry(vocalGroup.Lead)) continue;
 
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
@@ -332,9 +336,11 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Lines?.some(
         (line: any) =>
-          hasTransliteration(line) ||
-          typeof line.RomanizedText === "string" ||
-          line.ReadingRenderPlan != null
+          !isProviderInfoEntry(line) && (
+            hasTransliteration(line) ||
+            typeof line.RomanizedText === "string" ||
+            line.ReadingRenderPlan != null
+          )
       ) === true
     );
   }
@@ -342,9 +348,11 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Content?.some(
         (line: any) =>
-          hasTransliteration(line) ||
-          typeof line.RomanizedText === "string" ||
-          line.ReadingRenderPlan != null
+          !isProviderInfoEntry(line) && (
+            hasTransliteration(line) ||
+            typeof line.RomanizedText === "string" ||
+            line.ReadingRenderPlan != null
+          )
       ) === true
     );
   }
@@ -352,21 +360,23 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Content?.some(
         (group: any) =>
-          hasTransliteration(group.Lead) ||
-          typeof group.Lead?.RomanizedText === "string" ||
-          group.Lead?.Syllables?.some(
-            (s: any) => hasTransliteration(s) || typeof s.RomanizedText === "string"
-          ) === true ||
-          group.Lead?.ReadingRenderPlan != null ||
-          group.Background?.some(
-            (bg: any) =>
-              hasTransliteration(bg) ||
-              typeof bg.RomanizedText === "string" ||
-              bg.Syllables?.some(
-                (s: any) => hasTransliteration(s) || typeof s.RomanizedText === "string"
-              ) === true ||
-              bg.ReadingRenderPlan != null
-          ) === true
+          !isProviderInfoEntry(group.Lead) && (
+            hasTransliteration(group.Lead) ||
+            typeof group.Lead?.RomanizedText === "string" ||
+            group.Lead?.Syllables?.some(
+              (s: any) => hasTransliteration(s) || typeof s.RomanizedText === "string"
+            ) === true ||
+            group.Lead?.ReadingRenderPlan != null ||
+            group.Background?.some(
+              (bg: any) =>
+                hasTransliteration(bg) ||
+                typeof bg.RomanizedText === "string" ||
+                bg.Syllables?.some(
+                  (s: any) => hasTransliteration(s) || typeof s.RomanizedText === "string"
+                ) === true ||
+                bg.ReadingRenderPlan != null
+            ) === true
+          )
       ) === true
     );
   }
@@ -419,6 +429,7 @@ const postProcessSyllableRomanization = async (
 
   for (const vocalGroup of lyrics.Content || []) {
     if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
+    if (isProviderInfoEntry(vocalGroup.Lead)) continue;
 
     const processGroup = async (group: any) => {
       const syllables = group?.Syllables;

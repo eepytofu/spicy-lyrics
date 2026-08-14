@@ -1,8 +1,9 @@
 import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
+import { providerInfoContext } from "../provider-info";
 import type { LyricsProvider, TimedLine } from "../types";
-import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags, type CandidateAssessment } from "./shared";
+import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags, type CandidateAssessment } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
 const KEY = Uint8Array.from([0x40,0x47,0x61,0x77,0x5e,0x32,0x74,0x47,0x51,0x36,0x31,0x2d,0xce,0xd2,0x6e,0x69]);
@@ -106,6 +107,7 @@ function isKugouCandidateAssessmentCompatible(
   catalogAssessment: CandidateAssessment,
 ): boolean {
   if (!isAcceptableCandidate(candidateAssessment)) return false;
+  if (hasInstrumentalVersionConflict(track.title, candidate.song || song.title)) return false;
   if (!candidateAssessment.evidence.versionConflict) return true;
 
   // KuGou's hash-bound lyric search often shortens a catalog title such as
@@ -258,12 +260,12 @@ export async function fetchKugouKrc(candidate: KugouCandidate, signal?: AbortSig
 export const kugouProvider: LyricsProvider = async (track, context = {}) => {
   for (const { candidate: song, assessment: catalogAssessment } of await searchKugouSongsAssessed(track, context.signal)) {
     throwIfAborted(context.signal);
-    if (!isAcceptableCandidate(catalogAssessment)) continue;
+    if (!isAcceptableCandidate(catalogAssessment) || hasInstrumentalVersionConflict(track.title, song.title)) continue;
     for (const { candidate, assessment } of await searchKugouCandidatesAssessed(track, song, context.signal)) {
       throwIfAborted(context.signal);
       if (!isKugouCandidateAssessmentCompatible(track, song, candidate, assessment, catalogAssessment)) continue;
       const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
-      const result = toSyllableLyrics(parseKrc(raw), "kugou");
+      const result = toSyllableLyrics(parseKrc(raw), "kugou", providerInfoContext(track, song, raw));
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
       if (result) return {
         ...result,

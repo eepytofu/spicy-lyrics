@@ -8,7 +8,7 @@ export type ParsedLrc = {
   plain: string[];
 };
 
-const METADATA_TAG = /^\s*\[(?:ar|al|ti|by|offset|language|re|ve|length)\s*:/iu;
+const METADATA_TAG = /^\s*\[(?:ar|al|ti|by|offset|manualoffset|language|re|ve|length|id|hash|sign|qq|total)\s*:/iu;
 
 export function parseLrcDocument(text: string): ParsedLrc {
   const synced: ParsedLrcLine[] = [];
@@ -20,11 +20,11 @@ export function parseLrcDocument(text: string): ParsedLrc {
     let cursor = 0;
 
     while (cursor < row.length) {
-      const timestamp = /^\s*\[(\d+):(\d+(?:\.\d+)?)\]/u.exec(row.slice(cursor));
+      const timestamp = /^\s*\[(\d+):(\d+)(?:([.:])(\d+))?\]/u.exec(row.slice(cursor));
       if (!timestamp) break;
       timestamps.push({
         minutes: Number(timestamp[1]),
-        seconds: Number(timestamp[2]),
+        seconds: Number(timestamp[2]) + (timestamp[4] ? Number(`0.${timestamp[4]}`) : 0),
       });
       cursor += timestamp[0].length;
     }

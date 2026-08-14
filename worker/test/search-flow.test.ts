@@ -368,6 +368,154 @@ describe("provider search flow", () => {
     });
   });
 
+  it("classifies a complete NetEase credit block when JSON credit rows are embedded in LRC", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [{
+          baseInfo: { simpleSongData: {
+            id: 1_937_718_268,
+            name: "归家",
+            ar: [{ name: "KBShinya" }, { name: "哦漏" }],
+            al: { name: "归家" },
+            dt: 280_000,
+          } },
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        lrc: { lyric: [
+          JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "释子" }, { tx: "/" }, { tx: "公子无琊" }] }),
+          JSON.stringify({ t: 1000, c: [{ tx: "作曲: " }, { tx: "王韩一淋" }] }),
+          "[00:08.705]编曲：向往",
+          "[00:10.195]文案故事：康玉婷（网易云音乐用户@糖果超级咸）",
+          "[00:11.763]/题记/",
+          "[00:13.000]飞雁终渡万重山，远行的儿郎卸甲归家。",
+        ].join("\n") },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const result = await neteaseProvider({
+      id: "4Be8UHXmXCaKBWTi4OwpU6",
+      title: "归家",
+      artists: ["KBShinya", "哦漏"],
+      album: "归家",
+      durationMs: 280_000,
+    }) as any;
+
+    expect(result.SongWriters).toEqual(["释子", "公子无琊"]);
+    expect(result.Content.map((line: any) => line.ProviderInfoKind)).toEqual([
+      "credit", "credit", "credit", "credit", undefined, undefined,
+    ]);
+    expect(result.Content.map((line: any) => line.Text)).toEqual([
+      "作词: 释子/公子无琊",
+      "作曲: 王韩一淋",
+      "编曲：向往",
+      "文案故事：康玉婷（网易云音乐用户@糖果超级咸）",
+      "/题记/",
+      "飞雁终渡万重山，远行的儿郎卸甲归家。",
+    ]);
+  });
+
+  it("continues past a pureMusic candidate instead of rendering its metadata as lyrics", async () => {
+    let lyricCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [1, 2].map((id) => ({
+          baseInfo: { simpleSongData: {
+            id,
+            name: "Lune",
+            ar: [{ name: "M2U" }],
+            al: { name: "Lune" },
+            dt: 180_000,
+          } },
+        })) } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      lyricCalls += 1;
+      return new Response(JSON.stringify(lyricCalls === 1 ? {
+        pureMusic: true,
+        lrc: { lyric: `${JSON.stringify({ t: 0, c: [{ tx: "作曲: " }, { tx: "M2U" }] })}\n[00:00:00]纯音乐，请欣赏` },
+      } : {
+        lrc: { lyric: "[00:01.000]ordinary lyric" },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const result = await neteaseProvider({
+      id: "spotify-lune",
+      title: "Lune",
+      artists: ["M2U"],
+      album: "Lune",
+      durationMs: 180_000,
+    }) as any;
+
+    expect(lyricCalls).toBe(2);
+    expect(result.Content.map((line: any) => line.Text)).toEqual(["ordinary lyric"]);
+  });
+
+  it("returns untimed NetEase lyrics as Static while keeping typed edge credits", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [{
+          baseInfo: { simpleSongData: {
+            id: 3,
+            name: "Dumes",
+            ar: [{ name: "Denny Caknan" }],
+            al: { name: "Dumes" },
+            dt: 240_000,
+          } },
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        lrc: { lyric: [
+          JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Andry Priyanta" }] }),
+          "Sepine ro aku",
+          "Senengmu karo liyane",
+        ].join("\n") },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    const result = await neteaseProvider({
+      id: "spotify-dumes",
+      title: "Dumes",
+      artists: ["Denny Caknan"],
+      album: "Dumes",
+      durationMs: 240_000,
+    }) as any;
+
+    expect(result.Type).toBe("Static");
+    expect(result.Lines).toEqual([
+      { Text: "作词: Andry Priyanta", ProviderInfoKind: "credit" },
+      { Text: "Sepine ro aku" },
+      { Text: "Senengmu karo liyane" },
+    ]);
+  });
+
+  it("rejects a NetEase document containing only structured credits", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/eapi/batch")) {
+        return new Response(JSON.stringify({ data: { resources: [{
+          baseInfo: { simpleSongData: {
+            id: 4,
+            name: "Roman Picisan",
+            ar: [{ name: "Dewa 19" }],
+            al: { name: "Bintang Lima" },
+            dt: 240_000,
+          } },
+        }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return new Response(JSON.stringify({
+        lrc: { lyric: JSON.stringify({ t: 0, c: [{ tx: "作曲: " }, { tx: "Ahmad Dhani" }] }) },
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }));
+
+    await expect(neteaseProvider({
+      id: "spotify-roman-picisan",
+      title: "Roman Picisan",
+      artists: ["Dewa 19"],
+      album: "Bintang Lima",
+      durationMs: 240_000,
+    })).resolves.toBeUndefined();
+  });
+
   it("uses NetEase transNames as localized artist aliases", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       if (String(input).includes("/eapi/batch")) {

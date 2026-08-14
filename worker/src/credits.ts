@@ -2,7 +2,7 @@ import type { ProviderCredit, ProviderCreditRole, ProviderId } from "./types";
 
 const MAX_CREDIT_NAME_LENGTH = 120;
 const AUTOMATED_BY_CREDIT_PATTERNS = [
-  /^krc转trans工具$/u,
+  /^krc转(?:trans|qrc)工具$/u,
   /^天琴实验室ai生成v\d+(?:\.\d+)*$/u,
 ];
 
