@@ -60,7 +60,7 @@ Custom-server support is still experimental and hasn't been fully tested end to 
 <configured-base-url>/<spotifyTrackId>?title=...&artist=...&artist_name=...&album=...&duration=...
 ```
 
-The response can be native Spicy Lyrics JSON, TTML, LRC, or plain text. Native JSON can preserve word timing, translations, duet roles, and background vocals. HTTPS is required except for localhost development.
+The response can be native Spicy Lyrics JSON, TTML, LRC, or plain text. Native JSON can preserve syllable timing, translations, duet roles, and background vocals. HTTPS is required except for localhost development.
 
 </details>
 

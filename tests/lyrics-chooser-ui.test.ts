@@ -88,6 +88,14 @@ test("chooser summarizes selector-owned confidence and gates diagnostics to deve
   assert.doesNotMatch(css, /\.sl-chooser-actions|\.sl-chooser-signals|\.sl-chooser-signal/u);
 });
 
+test("timing labels name the canonical Syllable, Line, and Static tiers", () => {
+  assert.match(chooser, /type === "Syllable"\) return "Syllable synced"/);
+  assert.match(chooser, /type === "Line"\) return "Line synced"/);
+  assert.match(chooser, /type === "Static"\) return "Static"/);
+  assert.doesNotMatch(chooser, /"Word synced"|"Plain"/u);
+  assert.doesNotMatch(sources, /Word Sync|word timing/u);
+});
+
 test("manual candidates use revision storage without replacing the automatic track cache", () => {
   assert.match(fetchLyrics, /LyricsRevisionStore\.SetItem\(revision\.id, lyrics\)/);
   assert.match(fetchLyrics, /if \(options\.persistTrack !== false\) await LyricsStore\.SetItem/);

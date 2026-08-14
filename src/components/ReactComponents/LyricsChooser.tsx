@@ -59,9 +59,9 @@ function sourceLabel(lyrics: CurrentLyrics | LyricsCandidateRecord["result"]["ly
 }
 
 function formatLabel(type: string | undefined): string {
-  if (type === "Syllable") return "Word synced";
+  if (type === "Syllable") return "Syllable synced";
   if (type === "Line") return "Line synced";
-  if (type === "Static") return "Plain";
+  if (type === "Static") return "Static";
   return "Unknown timing";
 }
 

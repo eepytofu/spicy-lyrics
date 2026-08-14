@@ -118,7 +118,7 @@ test("candidate confidence summarizes the existing selection score", () => {
   assert.equal(low.rejected, true);
 });
 
-test("smart mode allows a healthy line candidate to beat malformed word timing", () => {
+test("smart mode allows a healthy line candidate to beat malformed syllable timing", () => {
   const malformed = wordLyrics(correctRows);
   malformed.Content[2].Lead.Syllables[0].StartTime = 400;
   malformed.Content[2].Lead.Syllables[0].EndTime = 399;
@@ -129,7 +129,7 @@ test("smart mode allows a healthy line candidate to beat malformed word timing",
   assert.equal(result.candidate?.provider, "apple");
 });
 
-test("smart mode accepts instantaneous textual tokens as valid word timing", () => {
+test("smart mode accepts instantaneous textual tokens as valid syllable timing", () => {
   const baseline = wordLyrics(correctRows);
   const withInstantPunctuation = structuredClone(baseline);
   const firstLine = withInstantPunctuation.Content[0].Lead.Syllables;
@@ -155,17 +155,17 @@ test("smart mode accepts instantaneous textual tokens as valid word timing", () 
 });
 
 
-test("smart mode uses word timing as a bonus when candidates are otherwise equal", () => {
+test("smart mode uses syllable timing as a bonus when candidates are otherwise equal", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, lineLyrics(correctRows), 1),
     candidate("amlldb", 1, wordLyrics(correctRows), 1),
   ], 240_000, "smart");
   assert.equal(result.candidate?.provider, "amlldb");
-  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "amlldb")?.reasons.includes("word-synced timing"));
+  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "amlldb")?.reasons.includes("syllable-synced timing"));
   assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.reasons.includes("line-synced timing"));
 });
 
-test("smart mode prefers credible word timing with slightly lower track confidence", () => {
+test("smart mode prefers credible syllable timing with slightly lower track confidence", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, lineLyrics(correctRows), 1),
     candidate("qq", 4, wordLyrics(correctRows), 0.9),

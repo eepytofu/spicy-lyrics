@@ -32,15 +32,15 @@ export const DEFAULT_DISABLED_LYRICS_SOURCES: LyricsSourceProviderId[] = [
 
 export const LYRICS_SOURCE_PROVIDER_DEFINITIONS: Record<BuiltInLyricsSourceId, LyricsSourceDefinition> = {
   spicy: { label: "Spicy Lyrics", description: "Community lyrics from the Spicy Lyrics service." },
-  musixmatch: { label: "Musixmatch", description: "Synced, word-synced, or plain Musixmatch lyrics." },
+  musixmatch: { label: "Musixmatch", description: "Line-synced, syllable-synced, or static Musixmatch lyrics." },
   apple: { label: "Apple Music", description: "Apple Music lyrics through the Spicy Lyrics backend." },
   spotify: { label: "Spotify", description: "Lyrics returned by Spotify's native lyrics endpoint." },
-  lrclib: { label: "LRCLIB", description: "Open community synced and plain lyrics." },
-  amlldb: { label: "AMLL TTML DB", description: "Community TTML with word timing, duet, and background-vocal metadata." },
-  qq: { label: "QQ Music", description: "Word-synced QRC lyrics." },
-  kugou: { label: "KuGou", description: "Word-synced KRC lyrics." },
-  netease: { label: "NetEase Cloud Music", description: "Word-synced YRC or line-synced LRC lyrics." },
-  soda: { label: "Soda Music", description: "Soda Music KRC, QRC, YRC, LRC, or plain lyrics." },
+  lrclib: { label: "LRCLIB", description: "Open community synced and static lyrics." },
+  amlldb: { label: "AMLL TTML DB", description: "Community TTML with syllable timing, duet, and background-vocal metadata." },
+  qq: { label: "QQ Music", description: "Syllable-synced QRC lyrics." },
+  kugou: { label: "KuGou", description: "Syllable-synced KRC lyrics." },
+  netease: { label: "NetEase Cloud Music", description: "Syllable-synced YRC or line-synced LRC lyrics." },
+  soda: { label: "Soda Music", description: "Soda Music KRC, QRC, YRC, LRC, or static lyrics." },
 };
 
 function parseStringArray(value: unknown): string[] {

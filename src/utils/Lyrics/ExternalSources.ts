@@ -5,7 +5,7 @@ import { SLObjPack } from "../objpack.ts";
 import {
   $customLyricsServers,
   $externalLyricsWorkerUrl,
-  $ignoreMusixmatchWordSync,
+  $ignoreMusixmatchSyllableSync,
   $lyricsSelectionMode,
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
@@ -261,7 +261,7 @@ function mxmPlain(calls: any): string[] | null {
 async function fetchMusixmatch(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
   const calls = await mxmMacro(info); if (!calls) return null;
   const match = mxmMatch(calls);
-  if (!$ignoreMusixmatchWordSync.get()) {
+  if (!$ignoreMusixmatchSyllableSync.get()) {
     const rich = await mxmRichSync(calls); if (rich) { const result = stamp(buildSyllable(richSyncLines(rich), "musixmatch", "Musixmatch"), "musixmatch", undefined, match); if (result) return result; }
   }
   const synced = mxmSynced(calls); if (synced) return stamp(buildLine(synced, info.durationMs, "musixmatch", "Musixmatch"), "musixmatch", undefined, match);

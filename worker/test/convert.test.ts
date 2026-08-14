@@ -6,7 +6,7 @@ import { decryptKrc, parseKrc } from "../src/providers/kugou";
 import { parseQrc, qrcContent } from "../src/providers/qq";
 import { neteaseProviderCredits, parseYrc } from "../src/providers/netease";
 
-describe("native word-sync conversion", () => {
+describe("native syllable-sync conversion", () => {
   it("parses QRC absolute word timings", () => {
     const lines = parseQrc("[1000,1000]你(1000,400)好(1400,600)");
     expect(lines[0].words.map((word) => word.text)).toEqual(["你", "好"]);
@@ -246,7 +246,7 @@ describe("native word-sync conversion", () => {
     expect(decryptKrc(Buffer.concat([Buffer.from("bad!", "ascii"), encrypted]).toString("base64"))).toBeUndefined();
   });
 
-  it("applies provider offsets without discarding native word timing", () => {
+  it("applies provider offsets without discarding native syllable timing", () => {
     expect(parseQrc("[offset:250]\n[1000,1000]word(1000,1000)")[0]).toMatchObject({
       startMs: 1250,
       words: [{ text: "word", startMs: 1250, durationMs: 1000 }],

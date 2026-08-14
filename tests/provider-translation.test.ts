@@ -34,7 +34,7 @@ test("current provider translations remain in their independent lane", () => {
   assert.equal((lyrics as any).IncludesTranslation, true);
 });
 
-test("word-synced provider translations use the same independent display lane", () => {
+test("syllable-synced provider translations use the same independent display lane", () => {
   const lyrics = {
     Type: "Syllable",
     source: "netease",
@@ -58,7 +58,7 @@ test("word-synced provider translations use the same independent display lane", 
   assert.equal((lyrics as any).IncludesTranslation, true);
 });
 
-test("word-synced native groups without an explicit Type keep translations", () => {
+test("syllable-synced native groups without an explicit Type keep translations", () => {
   const lyrics = {
     Type: "Syllable",
     Content: [{

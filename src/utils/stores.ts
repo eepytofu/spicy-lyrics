@@ -78,7 +78,7 @@ export const $disabledLyricsSources = persistAtom<string>(
   "disabledLyricsSources",
   JSON.stringify(["lrclib", "amlldb", "qq", "kugou", "netease", "soda"])
 );
-export const $ignoreMusixmatchWordSync = persistAtom<boolean>("ignoreMusixmatchWordSync", true);
+export const $ignoreMusixmatchSyllableSync = persistAtom<boolean>("ignoreMusixmatchSyllableSync", true);
 export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppleMusicQuality", false);
 export const $lyricsSelectionMode = persistAtom<LyricsSelectionMode>(
   "lyricsSelectionMode",

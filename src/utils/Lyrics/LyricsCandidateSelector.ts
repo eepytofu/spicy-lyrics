@@ -292,7 +292,7 @@ function reasonList(
           ? "suspicious timing"
           : "usable timing",
   );
-  if (format === "Syllable") reasons.push("word-synced timing");
+  if (format === "Syllable") reasons.push("syllable-synced timing");
   else if (format === "Line") reasons.push("line-synced timing");
   if (signals.lyricAgreement === "agreeing") reasons.push("lyrics agree with other sources");
   else if (signals.lyricAgreement === "low") reasons.push("low text agreement");

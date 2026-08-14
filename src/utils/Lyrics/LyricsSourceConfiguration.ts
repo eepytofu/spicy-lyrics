@@ -2,7 +2,7 @@ import {
   $customLyricsServers,
   $disabledLyricsSources,
   $externalLyricsWorkerUrl,
-  $ignoreMusixmatchWordSync,
+  $ignoreMusixmatchSyllableSync,
   $lyricsSelectionMode,
   $lyricsSourceOrder,
   $prioritizeAppleMusicQuality,
@@ -30,7 +30,7 @@ export function lyricsSourceCacheSignature(): string {
     order: getActiveLyricsSourceOrder(),
     worker: $externalLyricsWorkerUrl.get().trim().replace(/\/+$/, ""),
     custom: parseCustomLyricsServers($customLyricsServers.get()),
-    ignoreMusixmatchWordSync: $ignoreMusixmatchWordSync.get(),
+    ignoreMusixmatchSyllableSync: $ignoreMusixmatchSyllableSync.get(),
     prioritizeAppleMusicQuality: $prioritizeAppleMusicQuality.get(),
     lyricsSelectionMode: $lyricsSelectionMode.get(),
   });

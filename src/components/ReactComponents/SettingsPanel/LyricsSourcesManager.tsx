@@ -18,7 +18,7 @@ import {
   $customLyricsServers,
   $disabledLyricsSources,
   $externalLyricsWorkerUrl,
-  $ignoreMusixmatchWordSync,
+  $ignoreMusixmatchSyllableSync,
   $lyricsSelectionMode,
   $lyricsSourceOrder,
   $musixmatchToken,
@@ -33,7 +33,7 @@ export default function LyricsSourcesManager() {
   const storedDisabled = useStore($disabledLyricsSources);
   const workerUrl = useStore($externalLyricsWorkerUrl);
   const customJson = useStore($customLyricsServers);
-  const ignoreMusixmatchWordSync = useStore($ignoreMusixmatchWordSync);
+  const ignoreMusixmatchSyllableSync = useStore($ignoreMusixmatchSyllableSync);
   const prioritizeAppleMusicQuality = useStore($prioritizeAppleMusicQuality);
   const lyricsSelectionMode = useStore($lyricsSelectionMode);
   const musixmatchToken = useStore($musixmatchToken);
@@ -293,18 +293,18 @@ export default function LyricsSourcesManager() {
                     </div>
                     <div className="sl-sp-source-option-row">
                       <div className="sl-sp-source-copy">
-                        <span className="sl-sp-source-label">Ignore Musixmatch Word Sync</span>
+                        <span className="sl-sp-source-label">Ignore Musixmatch Syllable Sync</span>
                         <span className="sl-sp-source-description">
-                          Prefer Musixmatch line timing over word timing.
+                          Prefer Musixmatch line timing over syllable timing.
                         </span>
                       </div>
                       <Toggle
-                        checked={ignoreMusixmatchWordSync}
+                        checked={ignoreMusixmatchSyllableSync}
                         onChange={(value) => {
-                          $ignoreMusixmatchWordSync.set(value);
+                          $ignoreMusixmatchSyllableSync.set(value);
                           commitSourceSettingsChange();
                         }}
-                        aria-label="Ignore Musixmatch word sync"
+                        aria-label="Ignore Musixmatch syllable sync"
                       />
                     </div>
                   </div>
