@@ -13,6 +13,7 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 - Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music, giving you more coverage and more chances to find syllable-synced or line-synced lyrics. [Set up the Worker](worker/README.md).
 - A source manager for enabling, disabling, and ordering providers.
+- Lyrics from QQ, KuGou, NetEase, and Soda sometimes embed track headers, credit rows, and rights notices. These are detected and can be hidden with **Hide Embedded Provider Info**; promotional notices are always hidden. Provider text, timing, and order are never rewritten.
 - When Spotify metadata is romanized, localized, or wrong, you can search again with the original title and artist. The chooser searches again with that metadata, lets you pick the right match, and remembers what you chose for that track.
 
 <p align="center">
