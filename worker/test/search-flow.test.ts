@@ -684,7 +684,7 @@ describe("provider search flow", () => {
 
     expect(urls).toHaveLength(2);
     expect(urls[0]).toContain("/search/track");
-    expect(urls[1]).toContain("/track_v2");
+    expect(urls[1]).toContain("/luna/track?");
     expect(result?.Type).toBe("Syllable");
     expect(result?.SourceMatch).toMatchObject({
       title: "大东北我的家乡(DJ何鹏版)",
@@ -782,7 +782,7 @@ describe("provider search flow", () => {
 
   it("continues to a later Soda candidate after a malformed detail payload", async () => {
     const detailIds: string[] = [];
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       if (String(input).includes("/search/track")) {
         return new Response(JSON.stringify({
           result_groups: [{
@@ -798,7 +798,7 @@ describe("provider search flow", () => {
           }],
         }), { status: 200 });
       }
-      const id = (init?.body as URLSearchParams).get("track_id") ?? "";
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
       detailIds.push(id);
       if (id === "broken") return new Response("not json", { status: 200 });
       return new Response(JSON.stringify({

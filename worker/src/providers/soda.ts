@@ -146,7 +146,7 @@ async function searchSodaAssessed(
   let assessed = assessAndRankCandidates(found.values(), (song) => assessSodaSong(track, song));
   for (const query of searchQueries(track)) {
     throwIfAborted(signal);
-    const url = new URL("https://api.qishui.com/luna/pc/search/track");
+    const url = new URL("https://api.qishui.com/luna/search/track");
     url.search = new URLSearchParams({
       ...clientParams,
       region: "",
@@ -203,38 +203,36 @@ export async function searchSoda(
   return (await searchSodaAssessed(track, clientParams, signal)).map(({ candidate }) => candidate);
 }
 
+// Unsigned detail requests draw a probabilistic risk rejection; only that outcome is retried.
+const SODA_DETAIL_ATTEMPTS = 4;
+
 async function fetchSodaDetail(
   song: SodaSong,
   clientParams = sodaClientParams(),
   signal?: AbortSignal,
 ): Promise<SodaPayloadAttempt<any> | undefined> {
-  const url = new URL("https://api.qishui.com/luna/pc/track_v2");
-  url.search = new URLSearchParams(clientParams).toString();
-  try {
-    const response = await fetchWithTimeout(url.toString(), {
-      method: "POST",
-      headers: {
-        ...sodaHeaders,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        track_id: song.id,
-        media_type: "track",
-        queue_type: "",
-      }),
-      signal,
-    });
-    if (!response.ok) return undefined;
-    const attempt = await readSodaPayload<any>(response, signal);
-    if (attempt.kind === "invalid-payload") return attempt;
-    if (!successfulSodaBody(attempt.body) || String(attempt.body?.track?.id ?? "") !== song.id) {
-      return { kind: "valid", body: undefined };
+  for (let attempt = 0; attempt < SODA_DETAIL_ATTEMPTS; attempt += 1) {
+    throwIfAborted(signal);
+    const url = new URL("https://api.qishui.com/luna/track");
+    url.search = new URLSearchParams({
+      ...(attempt === 0 ? clientParams : sodaClientParams()),
+      track_id: song.id,
+      media_type: "track",
+    }).toString();
+    try {
+      const response = await fetchWithTimeout(url.toString(), { headers: sodaHeaders, signal });
+      if (!response.ok) return undefined;
+      const payload = await readSodaPayload<any>(response, signal);
+      if (payload.kind === "invalid-payload") return payload;
+      if (!successfulSodaBody(payload.body)) continue;
+      if (String(payload.body?.track?.id ?? "") !== song.id) return { kind: "valid", body: undefined };
+      return payload;
+    } catch (error) {
+      throwIfProviderRequestFailed(error, signal);
+      return undefined;
     }
-    return attempt;
-  } catch (error) {
-    throwIfProviderRequestFailed(error, signal);
-    return undefined;
   }
+  return { kind: "valid", body: undefined };
 }
 
 function structuredSodaLyrics(type: string, content: string): TimedLine[] {
