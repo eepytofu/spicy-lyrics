@@ -10,7 +10,7 @@ import {
   $musixmatchToken,
   $prioritizeAppleMusicQuality,
 } from "../stores.ts";
-import { ParseTTML } from "./manager/parseTTML.ts";
+import { parseTtmlDocument } from "./TtmlDocument.ts";
 import {
   getLyricsSourceDefinition,
   normalizeLyricsServerUrl,
@@ -26,7 +26,6 @@ import {
 } from "./LyricsCandidateSelector.ts";
 import { externalSourceRequestUrl } from "./ExternalSourceRequest.ts";
 import { parseLrcDocument } from "./LrcParser.ts";
-import { normalizedDisplayText } from "./TextCompare.ts";
 import {
   acquireProviderOutcomes,
   runProviderAcquisition,
@@ -86,43 +85,6 @@ function trackInfo(
 
 function clean(value: unknown): string {
   return String(value ?? "").replace(/\r/g, "").replace(/[♪♫♬♩]+/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function parsedTranslationEntries(lyrics: any): any[] {
-  if (lyrics?.Type === "Static") return lyrics.Lines ?? [];
-  if (lyrics?.Type === "Line") return lyrics.Content ?? [];
-  if (lyrics?.Type !== "Syllable") return [];
-  return (lyrics.Content ?? []).flatMap((group: any) => [
-    ...(group?.Lead ? [group.Lead] : []),
-    ...(group?.Background ?? []),
-  ]);
-}
-
-/** Preserve TTML's authoritative translation language after the remote parser. */
-function annotateTtmlTranslationLanguages(ttml: string, lyrics: any): void {
-  const document = new DOMParser().parseFromString(ttml, "text/xml");
-  if (document.querySelector("parsererror")) return;
-
-  const languagesByText = new Map<string, string[]>();
-  for (const span of Array.from(document.getElementsByTagNameNS("*", "span"))) {
-    const role = span.getAttribute("ttm:role") ?? span.getAttribute("role");
-    if (role !== "x-translation") continue;
-    const key = normalizedDisplayText(span.textContent);
-    const language = span.getAttributeNS("http://www.w3.org/XML/1998/namespace", "lang")
-      ?? span.getAttribute("xml:lang")
-      ?? span.getAttribute("lang");
-    if (!key || !language) continue;
-    const values = languagesByText.get(key) ?? [];
-    values.push(language);
-    languagesByText.set(key, values);
-  }
-
-  for (const entry of parsedTranslationEntries(lyrics)) {
-    const key = normalizedDisplayText(entry?.TranslatedText);
-    const languages = key ? languagesByText.get(key) : undefined;
-    const language = languages?.shift();
-    if (language) entry.TranslatedTextLanguage = language;
-  }
 }
 
 function buildStatic(lines: string[], source: string, label: string): any | null {
@@ -324,10 +286,7 @@ async function parseServerResponse(response: Response, info: TrackLyricsInfo, pr
     try { const body = JSON.parse(text); return stamp(body?.lyrics ?? body, provider, label, body?.match ?? body?.SourceMatch ?? body?.lyrics?.SourceMatch ?? match); } catch { return null; }
   }
   if (/^\s*(?:<\?xml[^>]*>\s*)?<tt[\s>]/i.test(text)) {
-    const parsed = await ParseTTML(text);
-    const lyrics = parsed?.Result ?? parsed;
-    annotateTtmlTranslationLanguages(text, lyrics);
-    return stamp(lyrics, provider, label, match);
+    return stamp(parseTtmlDocument(text), provider, label, match);
   }
   const parsed = parseLrcDocument(text);
   return parsed.synced.length ? stamp(buildLine(parsed.synced, info.durationMs, provider, label), provider, label, match) : stamp(buildStatic(parsed.plain, provider, label), provider, label, match);

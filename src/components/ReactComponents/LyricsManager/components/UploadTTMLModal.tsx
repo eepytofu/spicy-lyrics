@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { SpotifyPlayer } from "../../../../components/Global/SpotifyPlayer";
 import fetchLyrics from "../../../../utils/Lyrics/fetchLyrics";
 import ApplyLyrics from "../../../../utils/Lyrics/Global/Applyer";
-import { ParseTTML } from "../../../../utils/Lyrics/manager/parseTTML";
+import { parseTtmlDocument } from "../../../../utils/Lyrics/TtmlDocument";
 import { ProcessLyrics } from "../../../../utils/Lyrics/ProcessLyrics";
 import { $currentLyricsData } from "../../../../utils/stores";
 import { LocalLyricsManager } from "../../../../utils/Lyrics/manager";
@@ -61,14 +61,14 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
           onDone("persistent");
         } else {
           toast("Found TTML, Parsing...", { duration: 3000 });
-          const result = await ParseTTML(ttml);
+          const result = parseTtmlDocument(ttml);
           if (!result) {
             toast.error("Failed to parse TTML.", { duration: 5000 });
             setUploading(false);
             return;
           }
           const dataToSave = {
-            ...result?.Result,
+            ...result,
             uri,
           };
           await ProcessLyrics(dataToSave);
@@ -136,8 +136,8 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
       </div>
 
       <p className="sl-ldb-upload-parser-note">
-        TTML is parsed by the Spicy Lyrics service. Persistent files stay in your local DB, but
-        their contents are sent for parsing when loaded.
+        TTML is parsed on your device. Persistent files stay in your local DB and load without
+        sending their contents anywhere.
       </p>
 
       <div className="sl-ldb-upload-actions">

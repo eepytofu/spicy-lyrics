@@ -1,6 +1,6 @@
 import { dbPromise, ObjectStores } from "../../db";
 import Logger from "../../Logger";
-import { ParseTTML } from "./parseTTML";
+import { parseTtmlDocument } from "../TtmlDocument";
 
 const logger = new Logger("Local Lyrics Manager");
 
@@ -30,15 +30,8 @@ async function get(uri: string): Promise<any | null> {
       return null;
     }
 
-    const parsed = await ParseTTML(data);
-    if (parsed == null || typeof parsed !== "object") {
-      return null;
-    }
-
-    const result = "Result" in parsed ? (parsed as Record<string, unknown>).Result : undefined;
-    return (result && typeof result === "object" && result !== null)
-      ? Object.assign({}, result as object, { source: "ldb" })
-      : null;
+    const parsed = typeof data === "string" ? parseTtmlDocument(data) : null;
+    return parsed ? Object.assign({}, parsed, { source: "ldb" }) : null;
   } catch (error) {
     logCaught("get", error, { uri });
     return null;
