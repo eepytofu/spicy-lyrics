@@ -970,6 +970,348 @@ describe("provider search flow", () => {
     expect(detailIds).toEqual(["broken", "recovered"]);
   });
 
+  it("returns no match instead of falling from lyricless exact Soda identity to another artist", async () => {
+    const detailIds: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: [
+              {
+                meta: { item_type: "track" },
+                entity: { track: {
+                  id: "denny-caknan",
+                  name: "Sekti",
+                  artists: [{ name: "Denny Caknan" }],
+                  album: { name: "Sekti" },
+                  duration: 256_000,
+                } },
+              },
+              {
+                meta: { item_type: "track" },
+                entity: { track: {
+                  id: "adi-fajar",
+                  name: "Sekti",
+                  artists: [{ name: "Adi fajar" }],
+                  album: { name: "Sekti" },
+                  duration: 308_307,
+                } },
+              },
+            ],
+          }],
+        }), { status: 200 });
+      }
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
+      detailIds.push(id);
+      const exact = id === "denny-caknan";
+      return new Response(JSON.stringify({
+        track: {
+          id,
+          name: "Sekti",
+          artists: [{ name: exact ? "Denny Caknan" : "Adi fajar" }],
+          album: { name: "Sekti" },
+          duration: exact ? 256_000 : 308_307,
+        },
+        lyric: exact
+          ? { type: "lrc", content: "" }
+          : { type: "krc", content: "[1000,1000]<0,1000,0>Sekti" },
+      }), { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-sekti",
+      title: "Sekti",
+      artists: ["Denny Caknan"],
+      album: "Sekti",
+      durationMs: 256_000,
+    })).resolves.toBeUndefined();
+    expect(detailIds).toEqual(["denny-caknan", "adi-fajar"]);
+  });
+
+  it("rejects a lyric-bearing Soda title lookalike after corroborated lyricless variants", async () => {
+    const candidates = [
+      {
+        id: "bighead-album",
+        name: "Sharing the World (feat. Hatsune Miku) [Album ver.]",
+        artists: [{ name: "BIGHEAD" }],
+        album: { name: "ONLY 1 (feat. Hatsune Miku)" },
+        duration: 246_087,
+      },
+      {
+        id: "bighead-japanese",
+        name: "Sharing the World (feat. Hatsune Miku)[JAPANESE ver.]",
+        artists: [{ name: "BIGHEAD" }],
+        album: { name: "ONLY 1 (feat. Hatsune Miku)" },
+        duration: 246_155,
+      },
+      {
+        id: "unrelated",
+        name: "We Share The World",
+        artists: [{ name: "邹妙琦" }, { name: "大卫" }, { name: "曾嘉婧" }],
+        album: { name: "We Share The World" },
+        duration: 246_318,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: candidates.map((track) => ({
+              meta: { item_type: "track" },
+              entity: { track },
+            })),
+          }],
+        }), { status: 200 });
+      }
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
+      const track = candidates.find((candidate) => candidate.id === id)!;
+      return new Response(JSON.stringify({
+        track,
+        lyric: id === "unrelated"
+          ? { type: "krc", content: "[1000,1000]<0,1000,0>world" }
+          : { type: "lrc", content: "" },
+      }), { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-sharing-the-world",
+      title: "Sharing The World",
+      artists: ["BIGHEAD"],
+      album: "Sharing The World",
+      durationMs: 246_000,
+    })).resolves.toBeUndefined();
+  });
+
+  it("preserves a localized-title Soda fallback with corroborated artist identity", async () => {
+    const candidates = [
+      {
+        id: "zero-latin",
+        name: "Zero Talking",
+        artists: [{ name: "はるまきごはん" }],
+        album: { name: "Zero Talking" },
+        duration: 221_053,
+      },
+      {
+        id: "zero-localized",
+        name: "ゼロトーキング",
+        artists: [{ name: "はるまきごはん" }],
+        album: { name: "ゼロトーキング" },
+        duration: 221_053,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: candidates.map((track) => ({
+              meta: { item_type: "track" },
+              entity: { track },
+            })),
+          }],
+        }), { status: 200 });
+      }
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
+      const track = candidates.find((candidate) => candidate.id === id)!;
+      return new Response(JSON.stringify({
+        track,
+        lyric: id === "zero-latin"
+          ? { type: "lrc", content: "" }
+          : { type: "krc", content: "[1000,1000]<0,500,0>ゼロ<500,500,0>トーキング" },
+      }), { status: 200 });
+    }));
+
+    const result = await sodaProvider({
+      id: "netease-zero-talking",
+      title: "Zero Talking",
+      artists: ["はるまきごはん", "初音ミク"],
+      album: "ゼロトーキング",
+      durationMs: 221_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(result?.SourceMatch).toMatchObject({
+      title: "ゼロトーキング",
+      artists: ["はるまきごはん"],
+      evidence: { artists: 0.88, duration: 0.95, versionConflict: false },
+    });
+  });
+
+  it("rejects a lyric-bearing Soda candidate without recording identity", async () => {
+    const candidates = [
+      {
+        id: "weak-empty",
+        name: "Sekti",
+        artists: [{ name: "Tugu Music" }],
+        album: { name: "Sekti" },
+        duration: 357_750,
+      },
+      {
+        id: "weak-lyrics",
+        name: "Sekti",
+        artists: [{ name: "Adi fajar" }],
+        album: { name: "Sekti" },
+        duration: 308_307,
+      },
+    ];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: candidates.map((track) => ({
+              meta: { item_type: "track" },
+              entity: { track },
+            })),
+          }],
+        }), { status: 200 });
+      }
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
+      const track = candidates.find((candidate) => candidate.id === id)!;
+      return new Response(JSON.stringify({
+        track,
+        lyric: id === "weak-empty"
+          ? { type: "lrc", content: "" }
+          : { type: "krc", content: "[1000,1000]<0,1000,0>Sekti" },
+      }), { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-sekti",
+      title: "Sekti",
+      artists: ["Denny Caknan"],
+      album: "Sekti",
+      durationMs: 256_000,
+    })).resolves.toBeUndefined();
+  });
+
+  it("preserves a fully corroborated Soda recording when artist spelling differs", async () => {
+    const track = {
+      id: "tuyu",
+      name: "泥の分際で私だけの大切を奪おうだなんて",
+      artists: [{ name: "TUYU" }],
+      album: { name: "泥の分際で私だけの大切を奪おうだなんて" },
+      duration: 192_267,
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: [{ meta: { item_type: "track" }, entity: { track } }],
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        track,
+        lyric: { type: "krc", content: "[1000,1000]<0,1000,0>泥の分際で" },
+      }), { status: 200 });
+    }));
+
+    const result = await sodaProvider({
+      id: "netease-tuyu",
+      title: "泥の分際で私だけの大切を奪おうだなんて",
+      artists: ["ツユ"],
+      album: "泥の分際で私だけの大切を奪おうだなんて",
+      durationMs: 192_000,
+    });
+
+    expect(result?.Type).toBe("Syllable");
+    expect(result?.SourceMatch).toMatchObject({
+      artists: ["TUYU"],
+      evidence: { title: 1, artists: 0, album: 1, duration: 0.95 },
+    });
+  });
+
+  it("uses Soda detail identity and continues to a later partial-artist match", async () => {
+    const searchTracks = [
+      {
+        id: "misleading-detail",
+        name: "Shared Song",
+        artists: [{ name: "Lead" }, { name: "Guest" }, { name: "Vocal" }],
+        album: { name: "Shared Song" },
+        duration: 200_000,
+      },
+      {
+        id: "partial-artists",
+        name: "Shared Song",
+        artists: [{ name: "Lead" }],
+        duration: 206_000,
+      },
+    ];
+    const detailIds: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: searchTracks.map((track) => ({
+              meta: { item_type: "track" },
+              entity: { track },
+            })),
+          }],
+        }), { status: 200 });
+      }
+      const id = new URL(String(input)).searchParams.get("track_id") ?? "";
+      detailIds.push(id);
+      if (id === "misleading-detail") {
+        return new Response(JSON.stringify({
+          track: {
+            ...searchTracks[0],
+            artists: [{ name: "Other" }],
+            duration: 260_000,
+          },
+          lyric: { type: "krc", content: "[1000,1000]<0,1000,0>wrong" },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        track: { ...searchTracks[1], duration: 201_000 },
+        lyric: { type: "krc", content: "[1000,1000]<0,1000,0>right" },
+      }), { status: 200 });
+    }));
+
+    const result = await sodaProvider({
+      id: "spotify-shared-song",
+      title: "Shared Song",
+      artists: ["Lead", "Guest", "Vocal"],
+      album: "Shared Song",
+      durationMs: 200_000,
+    });
+
+    expect(detailIds).toEqual(["misleading-detail", "partial-artists"]);
+    expect(result?.SourceMatch).toMatchObject({
+      artists: ["Lead"],
+      evidence: { artists: 0.4, duration: 0.8, versionConflict: false },
+    });
+  });
+
+  it("keeps rejecting a Soda version conflict introduced by detail metadata", async () => {
+    const searchTrack = {
+      id: "detail-live-version",
+      name: "Original Song",
+      artists: [{ name: "Artist" }],
+      album: { name: "Original Song" },
+      duration: 180_000,
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) {
+        return new Response(JSON.stringify({
+          result_groups: [{
+            data: [{ meta: { item_type: "track" }, entity: { track: searchTrack } }],
+          }],
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({
+        track: { ...searchTrack, name: "Original Song (Live)" },
+        lyric: { type: "krc", content: "[1000,1000]<0,1000,0>live" },
+      }), { status: 200 });
+    }));
+
+    await expect(sodaProvider({
+      id: "spotify-original-song",
+      title: "Original Song",
+      artists: ["Artist"],
+      album: "Original Song",
+      durationMs: 180_000,
+    })).resolves.toBeUndefined();
+  });
+
   it("surfaces malformed Soda detail payloads when no candidate detail recovers", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
       if (String(input).includes("/search/track")) {

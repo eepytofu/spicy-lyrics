@@ -23,6 +23,7 @@ import {
   searchQueries,
   throwIfAborted,
   throwIfProviderRequestFailed,
+  type CandidateAssessment,
 } from "./shared";
 
 const SODA_USER_AGENT = "LunaPC/2.1.0(12292405)";
@@ -107,6 +108,13 @@ function assessSodaSong(track: Parameters<LyricsProvider>[0], song: SodaSong) {
     album: song.album,
     durationMs: song.durationMs,
   });
+}
+
+function hasSodaRecordingIdentity(assessment: CandidateAssessment): boolean {
+  if ((assessment.evidence.artists ?? 0) > 0) return true;
+  return assessment.evidence.title >= 0.9
+    && (assessment.evidence.album ?? 0) >= 0.85
+    && (assessment.evidence.duration ?? 0) >= 0.8;
 }
 
 function sodaSong(value: any): SodaSong | undefined {
@@ -309,6 +317,7 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
     if (!detail) continue;
     const detailAssessment = assessSodaSong(track, detail);
     if (!isAcceptableCandidate(detailAssessment) || detailAssessment.evidence.versionConflict) continue;
+    if (!hasSodaRecordingIdentity(detailAssessment)) continue;
     const result = convertSodaLyrics(
       body,
       detail.durationMs ?? song.durationMs ?? track.durationMs,
