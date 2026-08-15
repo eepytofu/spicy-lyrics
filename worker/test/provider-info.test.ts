@@ -201,6 +201,96 @@ describe("embedded provider-info classification", () => {
     expect(kinds(standalone)).toEqual([undefined, undefined]);
   });
 
+  it.each([
+    [
+      "reported 狐ギツネの乱 credited-vocalist shape",
+      "qq",
+      "狐ギツネの乱",
+      ["まらしぃ", "鏡音リン"],
+      "狐ギツネの乱 - 鏡音鈴（鏡音リン）",
+      ["詞：まらしぃ", "曲：まらしぃ"],
+      "今日もまた孤独にて",
+    ],
+    [
+      "reported 关山酒 original-vocalist shape",
+      "kugou",
+      "关山酒",
+      ["小魂"],
+      "关山酒 - 等什么君(邓寓君)",
+      ["词：Yoki", "曲：乐金震", "词改编：苏珂", "曲改编：吕宏斌"],
+      "first lyric",
+    ],
+    [
+      "reported アマツキツネ credited-vocalist shape",
+      "netease",
+      "アマツキツネ",
+      ["まらしぃ", "鏡音リン"],
+      "アマツキツネ - 鏡音鈴（鏡音リン）",
+      ["詞：まらしぃ", "曲：まらしぃ"],
+      "first lyric",
+    ],
+  ] as const)("anchors %s by its exact leading title side", (
+    _name,
+    source,
+    title,
+    artists,
+    header,
+    credits,
+    firstLyric,
+  ) => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: title,
+        title,
+        artists: [...artists],
+        album: title,
+        durationMs: 220_000,
+      },
+      selected: {
+        title,
+        artists: [...artists],
+      },
+    };
+    const result = markEmbeddedProviderInfo(syllableLyrics([
+      header,
+      ...credits,
+      firstLyric,
+    ], source), source, context);
+
+    expect(kinds(result)).toEqual([
+      "trackHeader",
+      ...Array<ProviderInfoKind>(credits.length).fill("credit"),
+      undefined,
+    ]);
+  });
+
+  it.each([
+    ["reversed mismatched artist", "等什么君 - 关山酒"],
+    ["non-exact conflicting version", "关山酒 (Remix) - 等什么君"],
+  ])("does not grant exact-title trust to a %s", (_name, header) => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "关山酒",
+        title: "关山酒",
+        artists: ["小魂"],
+        album: "关山酒",
+        durationMs: 220_000,
+      },
+      selected: {
+        title: "关山酒",
+        artists: ["小魂"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      header,
+      "词：Yoki",
+      "曲：乐金震",
+      "first lyric",
+    ], "kugou"), "kugou", context);
+
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
+  });
+
   it("decomposes bilingual role labels without enumerating combined labels", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "词 Lyrics：Alice",
@@ -330,7 +420,7 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it("recovers strict credits without treating a partial selected artist set as a header", () => {
+  it("treats an exact leading title as the header when its credited artist set is partial", () => {
     const context: ProviderInfoContext = {
       reference: {
         id: "4Be8UHXmXCaKBWTi4OwpU6",
@@ -351,7 +441,7 @@ describe("embedded provider-info classification", () => {
       "第一句歌词",
     ], "kugou"), "kugou", context);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
   });
 
   it("recovers 食语人间 through one bounded provider-title annotation", () => {
@@ -475,7 +565,7 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it("marks a strict credit block after an unknown leading row without granting header identity", () => {
+  it("treats an exact leading title as the header when the credited singer differs", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "乐鸣东方 - another singer",
       "作词：Alice",
@@ -484,7 +574,7 @@ describe("embedded provider-info classification", () => {
       "first lyric",
     ]), "netease", LUO_TIAN_YI);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", undefined]);
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
   });
 
   it("does not give bounded headers the exact header's relaxed single-credit trust", () => {

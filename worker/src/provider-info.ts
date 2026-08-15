@@ -295,13 +295,15 @@ function matchesHeaderSides(
 
 function matchesTrackHeader(text: string, context: ProviderInfoContext): boolean {
   const titles = headerTitles(context);
+  const normalized = compact(text);
+  if (titles.some((title) => normalized === compact(title))) return true;
+  const structured = TRACK_HEADER_ROW.exec(text);
+  if (structured && titles.some((title) => compact(structured[1]) === compact(title))) return true;
+
   const artistGroups = headerArtistGroups(context);
   if (context.selected?.artists.length === 1) {
     artistGroups.push(...(context.selected.artistAliases ?? []).map((alias) => [alias]));
   }
-
-  const normalized = compact(text);
-  if (titles.some((title) => normalized === compact(title))) return true;
   if (titles.some((title) => artistGroups.some((artists) =>
     normalized === compact(title) + compact(artists.join(""))))) return true;
 
