@@ -64,8 +64,8 @@ function sourceLabel(lyrics: CurrentLyrics | LyricsCandidateRecord["result"]["ly
 }
 
 function formatLabel(type: string | undefined): string {
-  if (type === "Syllable") return "Syllable synced";
-  if (type === "Line") return "Line synced";
+  if (type === "Syllable") return "Syllable";
+  if (type === "Line") return "Line";
   if (type === "Static") return "Static";
   return "Unknown timing";
 }
@@ -128,7 +128,7 @@ function qualitySignals(record: LyricsCandidateRecord): QualitySignal[] {
   const timingDiverges = signals.timingConsistency === "divergent";
   const timingLabel =
     signals.timingHealth === "unavailable"
-      ? "No synced timing"
+      ? "Static timing"
       : signals.timingHealth === "healthy"
         ? "Healthy timing"
         : signals.timingHealth === "suspicious"

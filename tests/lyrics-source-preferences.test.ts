@@ -41,3 +41,14 @@ test("external provider labels use canonical service names", () => {
   assert.equal(resolveLyricsSourceLabel("kugou", "Kugou", "kugou"), "KuGou");
   assert.equal(resolveLyricsSourceLabel("soda", "Qishui", "soda"), "Soda Music");
 });
+
+test("provider descriptions use canonical timing tier names", () => {
+  const providers = ["musixmatch", "lrclib", "amlldb", "qq", "kugou", "netease", "soda"] as const;
+  const descriptions = providers.map(
+    (provider) => getLyricsSourceDefinition(provider, []).description
+  );
+  assert.ok(descriptions.every((description) => !/(?:word|syllable|line)-synced|plain lyrics/iu.test(description)));
+  assert.match(descriptions.join(" "), /Syllable/);
+  assert.match(descriptions.join(" "), /Line/);
+  assert.match(descriptions.join(" "), /Static/);
+});

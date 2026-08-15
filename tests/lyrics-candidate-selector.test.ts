@@ -61,7 +61,7 @@ test("comparison treats Traditional and Simplified Chinese lyrics as equivalent"
   assert.ok(lyricsTextSimilarity(traditional, simplified) > 0.95);
 });
 
-test("smart mode prefers an agreeing line candidate over a mismatched word candidate", () => {
+test("smart mode prefers an agreeing Line candidate over a mismatched Syllable candidate", () => {
   const candidates = [
     candidate("amlldb", 0, wordLyrics(correctRows), 1),
     candidate("apple", 1, lineLyrics(correctRows), 1),
@@ -98,7 +98,7 @@ test("candidate assessments expose structured UI signals without changing reason
   assert.equal(soda?.signals.confidence, "low");
   assert.equal(soda?.signals.lyricAgreement, "low");
   assert.equal(lrclib?.signals.timingHealth, "unavailable");
-  assert.equal(lrclib?.reasons.includes("no synced timing"), true);
+  assert.equal(lrclib?.reasons.includes("Static timing"), true);
 });
 
 test("candidate confidence summarizes the existing selection score", () => {
@@ -118,7 +118,7 @@ test("candidate confidence summarizes the existing selection score", () => {
   assert.equal(low.rejected, true);
 });
 
-test("smart mode allows a healthy line candidate to beat malformed syllable timing", () => {
+test("smart mode allows a healthy Line candidate to beat malformed Syllable timing", () => {
   const malformed = wordLyrics(correctRows);
   malformed.Content[2].Lead.Syllables[0].StartTime = 400;
   malformed.Content[2].Lead.Syllables[0].EndTime = 399;
@@ -129,7 +129,7 @@ test("smart mode allows a healthy line candidate to beat malformed syllable timi
   assert.equal(result.candidate?.provider, "apple");
 });
 
-test("smart mode accepts instantaneous textual tokens as valid syllable timing", () => {
+test("smart mode accepts instantaneous textual tokens as valid Syllable timing", () => {
   const baseline = wordLyrics(correctRows);
   const withInstantPunctuation = structuredClone(baseline);
   const firstLine = withInstantPunctuation.Content[0].Lead.Syllables;
@@ -155,17 +155,17 @@ test("smart mode accepts instantaneous textual tokens as valid syllable timing",
 });
 
 
-test("smart mode uses syllable timing as a bonus when candidates are otherwise equal", () => {
+test("smart mode uses Syllable timing as a bonus when candidates are otherwise equal", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, lineLyrics(correctRows), 1),
     candidate("amlldb", 1, wordLyrics(correctRows), 1),
   ], 240_000, "smart");
   assert.equal(result.candidate?.provider, "amlldb");
-  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "amlldb")?.reasons.includes("syllable-synced timing"));
-  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.reasons.includes("line-synced timing"));
+  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "amlldb")?.reasons.includes("Syllable timing"));
+  assert.ok(result.diagnostics.candidates.find((entry) => entry.provider === "apple")?.reasons.includes("Line timing"));
 });
 
-test("smart mode prefers credible syllable timing with slightly lower track confidence", () => {
+test("smart mode prefers credible Syllable timing with slightly lower track confidence", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, lineLyrics(correctRows), 1),
     candidate("qq", 4, wordLyrics(correctRows), 0.9),
@@ -182,7 +182,7 @@ test("smart mode prefers credible syllable timing with slightly lower track conf
   );
 });
 
-test("smart mode prefers the verified strong word-timed profile over an exact line match", () => {
+test("smart mode prefers the verified strong Syllable profile over an exact Line match", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 3, lineLyrics(correctRows), 1),
     candidate("kugou", 5, wordLyrics(correctRows), 0.865),
@@ -217,8 +217,8 @@ test("smart mode uses the best agreeing timing peer instead of averaging in an o
   const apple = result.diagnostics.candidates.find((entry) => entry.provider === "apple");
   assert.equal(qq?.timingAgreementScore, 100);
   assert.equal(apple?.timingAgreementScore, 30);
-  assert.equal(qq?.reasons.includes("line timing differs from agreeing sources"), false);
-  assert.equal(apple?.reasons.includes("line timing differs from agreeing sources"), true);
+  assert.equal(qq?.reasons.includes("Line timing differs from agreeing sources"), false);
+  assert.equal(apple?.reasons.includes("Line timing differs from agreeing sources"), true);
 });
 
 test("smart scores stay stable when an unrelated provider appears", () => {
@@ -269,17 +269,17 @@ test("source order breaks a true same-quality tie without changing scores", () =
   assert.notEqual(later?.priorityScore, earlier?.priorityScore);
 });
 
-test("smart mode strongly penalizes plain lyrics when a credible synced candidate agrees", () => {
+test("smart mode strongly penalizes Static lyrics when a credible timed candidate agrees", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, staticLyrics(correctRows), 1),
     candidate("netease", 1, lineLyrics(correctRows), 0.68),
   ], 240_000, "smart");
   assert.equal(result.candidate?.provider, "netease");
   const apple = result.diagnostics.candidates.find((entry) => entry.provider === "apple");
-  assert.ok(apple?.reasons.includes("no synced timing"));
+  assert.ok(apple?.reasons.includes("Static timing"));
 });
 
-test("smart mode keeps plain lyrics as fallback when the synced candidate is rejected", () => {
+test("smart mode keeps Static lyrics as fallback when the timed candidate is rejected", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, staticLyrics(correctRows), 1),
     candidate("netease", 1, lineLyrics(correctRows), 0.29),
@@ -287,7 +287,7 @@ test("smart mode keeps plain lyrics as fallback when the synced candidate is rej
   assert.equal(result.candidate?.provider, "apple");
 });
 
-test("smart mode penalizes a globally shifted word candidate when agreeing sources align", () => {
+test("smart mode penalizes a globally shifted Syllable candidate when agreeing sources align", () => {
   const shiftedRows = correctRows.map(([text, start]) => [text, start + 6] as [string, number]);
   const result = selectLyricsCandidate([
     candidate("amlldb", 0, lineLyrics(correctRows), 1),
@@ -296,10 +296,10 @@ test("smart mode penalizes a globally shifted word candidate when agreeing sourc
   ], 240_000, "smart");
   assert.notEqual(result.candidate?.provider, "qq");
   const qq = result.diagnostics.candidates.find((entry) => entry.provider === "qq");
-  assert.ok(qq?.reasons.includes("line timing differs from agreeing sources"));
+  assert.ok(qq?.reasons.includes("Line timing differs from agreeing sources"));
 });
 
-test("sync type mode preserves word-first behavior", () => {
+test("sync type mode preserves Syllable-first behavior", () => {
   const result = selectLyricsCandidate([
     candidate("apple", 0, lineLyrics(correctRows), 1),
     candidate("qq", 1, wordLyrics(wrongRows), 0.6),

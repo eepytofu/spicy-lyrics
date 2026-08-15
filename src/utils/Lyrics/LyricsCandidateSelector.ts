@@ -78,7 +78,7 @@ export type LyricsSelectionResult = {
 
 type LineSnapshot = { text: string; normalized: string; start?: number; end?: number };
 
-const PLAIN_LYRICS_PENALTY = 15;
+const STATIC_LYRICS_PENALTY = 15;
 const NATIVE_TITLE_RANKING_MATCH_CAP = 90;
 
 function finite(value: unknown): number | undefined {
@@ -330,19 +330,19 @@ function reasonList(
   );
   reasons.push(
     signals.timingHealth === "unavailable"
-      ? "no synced timing"
+      ? "Static timing"
       : signals.timingHealth === "healthy"
         ? "healthy timing"
         : signals.timingHealth === "suspicious"
           ? "suspicious timing"
           : "usable timing",
   );
-  if (format === "Syllable") reasons.push("syllable-synced timing");
-  else if (format === "Line") reasons.push("line-synced timing");
+  if (format === "Syllable") reasons.push("Syllable timing");
+  else if (format === "Line") reasons.push("Line timing");
   if (signals.lyricAgreement === "agreeing") reasons.push("lyrics agree with other sources");
   else if (signals.lyricAgreement === "low") reasons.push("low text agreement");
   if (format !== "Static" && signals.timingConsistency === "divergent") {
-    reasons.push("line timing differs from agreeing sources");
+    reasons.push("Line timing differs from agreeing sources");
   }
   return reasons;
 }
@@ -359,11 +359,11 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
     const format: LyricsCandidateAssessment["format"] = ["Syllable", "Line", "Static"].includes(candidate.lyrics?.Type) ? candidate.lyrics.Type : "Unknown";
     const priority = clamp(100 - Math.max(0, candidate.orderIndex) * 10);
     const rejected = track < 30 || structural < 25 || detail === 0;
-    const plainPenalty = format === "Static" ? PLAIN_LYRICS_PENALTY : 0;
+    const staticPenalty = format === "Static" ? STATIC_LYRICS_PENALTY : 0;
     // Source order is a deterministic tie-breaker, not quality evidence. Keep
     // it out of the total so a provider appearing or disappearing cannot
     // silently change every remaining candidate's score.
-    const total = rejected ? 0 : clamp(track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.1 - plainPenalty);
+    const total = rejected ? 0 : clamp(track * 0.4 + timing * 0.3 + agreement * 0.2 + detail * 0.1 - staticPenalty);
     const credibleWordTiming = format === "Syllable"
       && track >= 60
       && structural >= 85

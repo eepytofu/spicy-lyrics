@@ -156,10 +156,10 @@ test("chooser summarizes selector-owned confidence and gates diagnostics to deve
 });
 
 test("timing labels name the canonical Syllable, Line, and Static tiers", () => {
-  assert.match(chooser, /type === "Syllable"\) return "Syllable synced"/);
-  assert.match(chooser, /type === "Line"\) return "Line synced"/);
+  assert.match(chooser, /type === "Syllable"\) return "Syllable"/);
+  assert.match(chooser, /type === "Line"\) return "Line"/);
   assert.match(chooser, /type === "Static"\) return "Static"/);
-  assert.doesNotMatch(chooser, /"Word synced"|"Plain"/u);
+  assert.doesNotMatch(chooser, /"(?:Word|Syllable|Line) synced"|"Plain"/u);
   assert.doesNotMatch(sources, /Word Sync|word timing/u);
 });
 
