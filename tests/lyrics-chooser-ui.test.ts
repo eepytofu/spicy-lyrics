@@ -116,7 +116,8 @@ test("chooser summarizes selector-owned confidence and gates diagnostics to deve
   assert.match(chooser, /Agrees with other sources/);
   assert.doesNotMatch(chooser, /function SignalIcon|sl-chooser-current/);
   assert.doesNotMatch(chooser, /sl-chooser-actions/);
-  assert.match(chooser, /<span>Return to Automatic<\/span>/);
+  assert.match(chooser, /automaticOption \? "Return to Automatic" : "Select"/);
+  assert.doesNotMatch(chooser, /<span>Return to Automatic<\/span>/);
   assert.match(chooser, /<span className="sl-chooser-auto-badge">Automatic<\/span>/);
   assert.match(chooser, /if \(automaticOption\) void handleReturnToAuto\(\)/);
   assert.match(chooser, /chooserCandidateRecords\(records, current, resolvedAutomaticRecord\)/);

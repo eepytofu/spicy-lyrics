@@ -524,8 +524,6 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                         <span className="sl-chooser-spinner" />
                         <span>Applying</span>
                       </>
-                    ) : automaticOption ? (
-                      <span>Return to Automatic</span>
                     ) : (
                       <svg viewBox="0 0 16 16">
                         <path d="m6 3 5 5-5 5" />
