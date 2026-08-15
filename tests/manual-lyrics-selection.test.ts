@@ -107,19 +107,24 @@ test("manual lyric selection ignores unsupported and mismatched track identities
   }
 });
 
-test("fetch pipeline restores the manual revision before automatic acquisition", () => {
+test("fetch pipeline migrates the manual revision before local and automatic acquisition", () => {
   const source = readFileSync(
     new URL("../src/utils/Lyrics/fetchLyrics.ts", import.meta.url),
     "utf8",
   );
-  const restoreIndex = source.indexOf("restoreManualLyricsSelectionForSession(trackId, uri, session)");
-  const localIndex = source.indexOf("LocalLyricsManager.get(uri)", restoreIndex);
-  assert.ok(restoreIndex >= 0 && localIndex > restoreIndex);
-  assert.match(source, /rememberManualLyricsSelection\(\{[\s\S]*revisionId: record\.revision\.id/);
-  assert.match(source, /searchOverrides[\s\S]*rememberManualLyricsSelection\(\{/);
-  assert.match(source, /await clearManualLyricsSelection\(uri\);[\s\S]*return fetchLyrics\(uri\)/);
-  assert.doesNotMatch(
-    source,
-    /restoreManualLyricsSelectionForSession[\s\S]*!isSourceCacheCompatible\(cached\)[\s\S]*async function activateLyricsCandidateForSession/,
+  const preferences = readFileSync(
+    new URL("../src/utils/Lyrics/LyricsOverridePreference.ts", import.meta.url),
+    "utf8",
   );
+  const restoreIndex = source.indexOf("const override = await restoreLyricsOverrideForSession(");
+  const automaticIndex = source.indexOf('if (uri.startsWith("spotify:local:"))', restoreIndex);
+  const manualIndex = preferences.indexOf("getManualLyricsSelection(trackUri)");
+  const localIndex = preferences.indexOf("LocalLyricsManager.getRaw(trackUri)", manualIndex);
+
+  assert.ok(restoreIndex >= 0 && automaticIndex > restoreIndex);
+  assert.ok(manualIndex >= 0 && localIndex > manualIndex);
+  assert.match(preferences, /snapshot: structuredClone\(cached\)/);
+  assert.match(preferences, /await clearManualLyricsSelection\(trackUri\)/);
+  assert.match(source, /preference\.snapshot = structuredClone\(result\[0\]/);
+  assert.match(source, /setLyricsOverridePreference\(automaticLyricsOverride\(uri\)\)/);
 });

@@ -52,30 +52,31 @@ import {
 import { publishLyricsInteropSnapshot } from "./Interop.ts";
 import { isLyricsSourceCacheCompatible } from "./LyricsSourceCache.ts";
 import { ensureSourceEvidence } from "./Processing/SourceEvidence.ts";
-import {
-  LyricsRequestCoordinator,
-  type LyricsRequestSession,
-} from "./LyricsRequestSession.ts";
-import {
-  ArabicTextTest,
-  RomanizableScriptTextTest,
-} from "./Fork/TextDetection.ts";
+import { LyricsRequestCoordinator, type LyricsRequestSession } from "./LyricsRequestSession.ts";
+import { ArabicTextTest, RomanizableScriptTextTest } from "./Fork/TextDetection.ts";
 import { isChineseDocumentPendingReading } from "./Processing/PendingReadingPresentation.ts";
 import {
   getActiveLyricsSourceOrder,
   lyricsSourceCacheSignature,
 } from "./LyricsSourceConfiguration.ts";
 import { ensureLyricRevision } from "./LyricRevision.ts";
-import {
-  isLyricsRevisionCacheCompatible,
-  LyricsRevisionStore,
-} from "./LyricsRevisionCache.ts";
-import {
-  clearManualLyricsSelection,
-  getManualLyricsSelection,
-  rememberManualLyricsSelection,
-} from "./ManualLyricsSelection.ts";
+import { isLyricsRevisionCacheCompatible, LyricsRevisionStore } from "./LyricsRevisionCache.ts";
 import type { CompleteLyricsSearchOverrides } from "./ManualLyricsSearch.ts";
+import {
+  automaticLyricsOverride,
+  candidateLyricsOverride,
+  clearLyricsOverrideSessionIfCurrent,
+  getLyricsOverridePreference,
+  isCurrentLyricsOverridePreference,
+  localLyricsOverride,
+  lyricsMatchOverridePreference,
+  markLyricsOverridePreference,
+  setLyricsOverridePreference,
+  setLyricsOverrideSessionPreference,
+  type CandidateLyricsOverride,
+  type LyricsOverrideLifetime,
+  type LyricsOverridePreference,
+} from "./LyricsOverridePreference.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -90,10 +91,15 @@ export function invalidateLyricsPipeline(): void {
 }
 
 // recently updated key structure - changed name
-export const LyricsStore = GetExpireStore<any>("SpicyLyrics_LyricsStore_g1", 2, {
-  Unit: "Days",
-  Duration: 3,
-}, isDev as true);
+export const LyricsStore = GetExpireStore<any>(
+  "SpicyLyrics_LyricsStore_g1",
+  2,
+  {
+    Unit: "Days",
+    Duration: 3,
+  },
+  isDev as true
+);
 
 const lyricsPacker = new SLObjPack();
 
@@ -124,7 +130,7 @@ async function setProcessedLyricsStoreItem(
   trackId: string,
   lyrics: any,
   session?: LyricsRequestSession,
-  options: { persistTrack?: boolean } = {},
+  options: { persistTrack?: boolean } = {}
 ): Promise<void> {
   if (session && !session.isCurrent()) return;
   ensureSourceEvidence(lyrics);
@@ -152,7 +158,7 @@ function setRomanizationClass(hasTransliterations: boolean | undefined): void {
 function dispatchProcessingReady(
   trackId: string,
   lyrics: any,
-  session: LyricsRequestSession,
+  session: LyricsRequestSession
 ): void {
   if (!session.isCurrent() || SpotifyPlayer.GetId() !== trackId) return;
   ensureSourceEvidence(lyrics);
@@ -170,7 +176,7 @@ async function finishTranslationInBackground(
   trackId: string,
   lyrics: any,
   session: LyricsRequestSession,
-  persistTrack = true,
+  persistTrack = true
 ): Promise<void> {
   try {
     await translateLyrics(lyrics, { signal: session.signal });
@@ -188,7 +194,7 @@ async function finishProcessingInBackground(
   trackId: string,
   lyrics: any,
   session: LyricsRequestSession,
-  persistTrack = true,
+  persistTrack = true
 ): Promise<void> {
   const shouldTranslate = lyrics.TranslationPending === true;
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
@@ -248,8 +254,10 @@ function hasRomanizationWorkQuick(lyrics: any): boolean {
 }
 
 function hasRemoteRomanizationWorkQuick(lyrics: any): boolean {
-  return ArabicTextTest.test(collectLyricsText(lyrics).join(""))
-    && lyrics?.RemoteRomanizationAttemptVersion !== ARABIC_ROMANIZATION_ATTEMPT_VERSION;
+  return (
+    ArabicTextTest.test(collectLyricsText(lyrics).join("")) &&
+    lyrics?.RemoteRomanizationAttemptVersion !== ARABIC_ROMANIZATION_ATTEMPT_VERSION
+  );
 }
 
 function hasTranslationWorkQuick(lyrics: any): boolean {
@@ -259,7 +267,10 @@ function hasTranslationWorkQuick(lyrics: any): boolean {
 
   if (translationTargetLang === "en") {
     if (RomanizableScriptTextTest.test(text) || NonAsciiLatinQuickTest.test(text)) return true;
-    const compact = text.replace(/[^\p{L}\s']/gu, " ").replace(/\s+/g, " ").trim();
+    const compact = text
+      .replace(/[^\p{L}\s']/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     if (compact.length < 24) return false;
     const detected = franc(compact);
     if (detected === "und") return false;
@@ -284,10 +295,7 @@ function markProcessedWithoutBackground(lyrics: any): void {
 function presentLyrics(lyricsData: any, session: LyricsRequestSession): void {
   if (!session.isCurrent()) return;
   ensureSourceEvidence(lyricsData);
-  setActiveLyricsCandidateRevision(
-    lyricsData.uri,
-    lyricsData?.LyricRevision?.id ?? null,
-  );
+  setActiveLyricsCandidateRevision(lyricsData.uri, lyricsData?.LyricRevision?.id ?? null);
   $currentLyricsData.set(JSON.stringify(lyricsData));
   publishLyricsInteropSnapshot(lyricsData);
   $lyricsSelectionDiagnostics.set(lyricsData?.SelectionDiagnostics ?? null);
@@ -295,7 +303,10 @@ function presentLyrics(lyricsData: any, session: LyricsRequestSession): void {
   LyricsQueueRetry.NotifyResolved(lyricsData?.uri);
   setRomanizationClass(lyricsData?.HasTransliterations || lyricsData?.RomanizationPending);
   PageContainer?.classList.toggle("Lyrics_ChineseDetected", lyricsData?.DetectedChinese === true);
-  PageContainer?.classList.toggle("Lyrics_TranslationAvailable", lyricsData?.IncludesTranslation === true || lyricsData?.TranslationPending === true);
+  PageContainer?.classList.toggle(
+    "Lyrics_TranslationAvailable",
+    lyricsData?.IncludesTranslation === true || lyricsData?.TranslationPending === true
+  );
   HideLoaderContainer();
   $currentLyricsType.set(lyricsData.Type);
   PageContainer?.querySelector<HTMLElement>(".ContentBox")?.classList.remove("LyricsHidden");
@@ -313,7 +324,7 @@ async function ensureProcessingVersion(
   uri: string,
   lyrics: any,
   session: LyricsRequestSession,
-  persistTrack = true,
+  persistTrack = true
 ): Promise<ProcessingVersionResult> {
   if (lyrics) {
     lyrics.uri = uri;
@@ -326,18 +337,17 @@ async function ensureProcessingVersion(
   if (!lyrics) return { lyrics, translationPending: false };
 
   const processingContextKey = currentProcessingContextKey();
-  const needsRemoteRomanization =
-    $romanization.get() && hasRemoteRomanizationWorkQuick(lyrics);
+  const needsRemoteRomanization = $romanization.get() && hasRemoteRomanizationWorkQuick(lyrics);
 
   // ProcessingPending === true means a previous session cached raw lyrics and
   // died before its background processing finished — treat as stale and
   // reprocess below instead of serving unprocessed lyrics forever.
   if (
-    lyrics.ProcessingPending !== true
-    && lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION
-    && lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION
-    && lyrics.ProcessingContextKey === processingContextKey
-    && !needsRemoteRomanization
+    lyrics.ProcessingPending !== true &&
+    lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION &&
+    lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION &&
+    lyrics.ProcessingContextKey === processingContextKey &&
+    !needsRemoteRomanization
   ) {
     return {
       lyrics,
@@ -373,10 +383,7 @@ async function ensureProcessingVersion(
   return { lyrics, translationPending };
 }
 
-function candidateDiagnostics(
-  uri: string,
-  selectedProvider: string,
-): any {
+function candidateDiagnostics(uri: string, selectedProvider: string): any {
   const candidateSession = getLyricsCandidateSession(uri);
   if (!candidateSession) return null;
   return {
@@ -396,10 +403,12 @@ async function processFreshLyrics(
     manualSelection?: boolean;
     automaticRevisionId?: string | null;
     searchOverrides?: CompleteLyricsSearchOverrides | null;
-  } = {},
+    overridePreference?: LyricsOverridePreference | null;
+  } = {}
 ): Promise<FetchLyricsResult> {
   lyrics.uri = uri;
   lyrics.id = trackId;
+  markLyricsOverridePreference(lyrics, options.overridePreference ?? null);
   lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
   const revision = await ensureLyricRevision(uri, lyrics);
   lyrics.ManualLyricsSelection = options.manualSelection === true;
@@ -431,34 +440,53 @@ async function processFreshLyrics(
   return [{ ...lyrics, fromCache: false }, 200];
 }
 
-type ManualSelectionRestore =
-  | { handled: false }
+type OverrideRestore =
+  | { handled: false; preference: LyricsOverridePreference | null }
   | { handled: true; result: FetchLyricsResult };
 
-async function restoreManualLyricsSelectionForSession(
+async function restoreLyricsOverrideForSession(
   trackId: string,
   uri: string,
   session: LyricsRequestSession,
-): Promise<ManualSelectionRestore> {
-  const selection = await getManualLyricsSelection(uri);
-  if (!session.isCurrent()) return { handled: true, result: null };
-  if (!selection) return { handled: false };
+  preference: LyricsOverridePreference | null
+): Promise<OverrideRestore> {
+  if (!preference || preference.kind === "automatic") {
+    return { handled: false, preference };
+  }
+  if (preference.kind === "local") {
+    const rawSource = preference.rawSource ?? (await LocalLyricsManager.getRaw(uri));
+    if (!session.isCurrent()) return { handled: true, result: null };
+    const localLyrics = LocalLyricsManager.parseRaw(rawSource);
+    if (!localLyrics) {
+      const automatic = automaticLyricsOverride(uri);
+      await setLyricsOverridePreference(automatic);
+      return { handled: false, preference: automatic };
+    }
+    return {
+      handled: true,
+      result: await processFreshLyrics(trackId, uri, localLyrics, session, {
+        persistTrack: false,
+        overridePreference: preference,
+      }),
+    };
+  }
 
-  const cached = await LyricsRevisionStore.GetItem(selection.revisionId);
+  const cached = isLyricsRevisionCacheCompatible(preference.snapshot, preference.revisionId)
+    ? preference.snapshot
+    : await LyricsRevisionStore.GetItem(preference.revisionId);
   if (!session.isCurrent()) return { handled: true, result: null };
-  if (
-    !isLyricsRevisionCacheCompatible(cached, selection.revisionId)
-    || cached?.uri !== uri
-  ) {
-    await clearManualLyricsSelection(uri);
-    return { handled: false };
+  if (!isLyricsRevisionCacheCompatible(cached, preference.revisionId) || cached?.uri !== uri) {
+    const automatic = automaticLyricsOverride(uri);
+    await setLyricsOverridePreference(automatic);
+    return { handled: false, preference: automatic };
   }
 
   const lyrics = structuredClone(cached);
   lyrics.ManualLyricsSelection = true;
-  lyrics.AutomaticLyricRevisionId = selection.automaticRevisionId;
-  if (selection.searchOverrides) {
-    lyrics.ManualLyricsSearchOverrides = selection.searchOverrides;
+  lyrics.AutomaticLyricRevisionId = preference.automaticRevisionId;
+  markLyricsOverridePreference(lyrics, preference);
+  if (preference.searchOverrides) {
+    lyrics.ManualLyricsSearchOverrides = preference.searchOverrides;
   } else {
     delete lyrics.ManualLyricsSearchOverrides;
   }
@@ -475,12 +503,12 @@ async function activateLyricsCandidateForSession(
   record: LyricsCandidateRecord,
   session: LyricsRequestSession,
   searchOverrides: CompleteLyricsSearchOverrides | null,
+  preference: CandidateLyricsOverride
 ): Promise<FetchLyricsResult> {
   const uri = record.revision.trackUri;
   const trackId = uri.split(":")[2];
   if (!trackId || SpotifyPlayer.GetUri() !== uri) return null;
-  const candidateSession = getLyricsCandidateSession(uri);
-  const automaticRevisionId = candidateSession?.automaticRevisionId ?? record.revision.id;
+  const automaticRevisionId = preference.automaticRevisionId;
   const diagnostics = candidateDiagnostics(uri, record.provider);
 
   const cached = await LyricsRevisionStore.GetItem(record.revision.id);
@@ -488,18 +516,13 @@ async function activateLyricsCandidateForSession(
   let result: FetchLyricsResult;
   if (isLyricsRevisionCacheCompatible(cached, record.revision.id)) {
     const lyrics = structuredClone(cached);
+    markLyricsOverridePreference(lyrics, preference);
     lyrics.ManualLyricsSelection = true;
     lyrics.AutomaticLyricRevisionId = automaticRevisionId;
     if (searchOverrides) lyrics.ManualLyricsSearchOverrides = searchOverrides;
     else delete lyrics.ManualLyricsSearchOverrides;
     if (diagnostics) lyrics.SelectionDiagnostics = diagnostics;
-    const processed = await ensureProcessingVersion(
-      trackId,
-      uri,
-      lyrics,
-      session,
-      false,
-    );
+    const processed = await ensureProcessingVersion(trackId, uri, lyrics, session, false);
     if (!session.isCurrent()) return null;
     presentLyrics(processed.lyrics, session);
     if (processed.translationPending) {
@@ -514,27 +537,32 @@ async function activateLyricsCandidateForSession(
       manualSelection: true,
       automaticRevisionId,
       searchOverrides,
+      overridePreference: preference,
     });
   }
 
   if (!result || !session.isCurrent()) return result;
-  await rememberManualLyricsSelection({
-    trackUri: uri,
-    revisionId: record.revision.id,
-    automaticRevisionId,
-    ...(searchOverrides ? { searchOverrides } : {}),
-  });
+  preference.snapshot = structuredClone(result[0] as Record<string, unknown>);
+  await setLyricsOverridePreference(preference);
   return result;
 }
 
 export function useLyricsCandidate(
   record: LyricsCandidateRecord,
   searchOverrides: CompleteLyricsSearchOverrides | null = null,
+  lifetime: LyricsOverrideLifetime = "persistent"
 ): Promise<FetchLyricsResult> {
   return foregroundLyricsRequests.run(record.revision.trackUri, async (session) => {
     $currentlyFetching.set(true);
     try {
-      return await activateLyricsCandidateForSession(record, session, searchOverrides);
+      const candidateSession = getLyricsCandidateSession(record.revision.trackUri);
+      const preference = candidateLyricsOverride(record.revision.trackUri, lifetime, {
+        revisionId: record.revision.id,
+        automaticRevisionId: candidateSession?.automaticRevisionId ?? record.revision.id,
+        ...(searchOverrides ? { searchOverrides } : {}),
+        snapshot: structuredClone(record.result.lyrics),
+      });
+      return await activateLyricsCandidateForSession(record, session, searchOverrides, preference);
     } finally {
       if (session.isCurrent()) $currentlyFetching.set(false);
     }
@@ -542,33 +570,86 @@ export function useLyricsCandidate(
 }
 
 export async function returnToAutomaticLyrics(
-  uri = SpotifyPlayer.GetUri(),
+  uri = SpotifyPlayer.GetUri()
 ): Promise<FetchLyricsResult> {
   if (!uri) return null;
-  await clearManualLyricsSelection(uri);
+  await setLyricsOverridePreference(automaticLyricsOverride(uri));
   invalidateLyricsPipeline();
   setActiveLyricsCandidateRevision(uri, null);
   $currentLyricsData.set("");
   return fetchLyrics(uri);
 }
 
+export async function useLocalLyricsOverride(
+  uri: string,
+  rawSource: unknown,
+  lifetime: LyricsOverrideLifetime = "persistent",
+  options: { previousPreference?: LyricsOverridePreference | null } = {}
+): Promise<FetchLyricsResult> {
+  if (SpotifyPlayer.GetUri() !== uri || !LocalLyricsManager.parseRaw(rawSource)) return null;
+  const previous =
+    "previousPreference" in options
+      ? (options.previousPreference ?? null)
+      : await getLyricsOverridePreference(uri);
+  if (SpotifyPlayer.GetUri() !== uri) return null;
+  const preference = localLyricsOverride(uri, lifetime, rawSource);
+  setLyricsOverrideSessionPreference(preference);
+  invalidateLyricsPipeline();
+  setActiveLyricsCandidateRevision(uri, null);
+  $currentLyricsData.set("");
+  const result = await fetchLyrics(uri);
+  if (
+    result &&
+    SpotifyPlayer.GetUri() === uri &&
+    isCurrentLyricsOverridePreference(uri, preference.preferenceId)
+  ) {
+    if (lifetime === "persistent") {
+      try {
+        await setLyricsOverridePreference(preference);
+      } catch (error) {
+        if (isCurrentLyricsOverridePreference(uri, preference.preferenceId)) {
+          if (previous) await setLyricsOverridePreference(previous);
+          else clearLyricsOverrideSessionIfCurrent(uri, preference.preferenceId);
+        }
+        throw error;
+      }
+    }
+    return result;
+  }
+  if (isCurrentLyricsOverridePreference(uri, preference.preferenceId)) {
+    if (previous) await setLyricsOverridePreference(previous);
+    else clearLyricsOverrideSessionIfCurrent(uri, preference.preferenceId);
+  }
+  return null;
+}
+
 export async function PrefetchLyrics(uri: string): Promise<void> {
   const trackId = uri?.split(":")?.[2];
   if (!trackId || uri.startsWith("spotify:local:")) return;
   if (prefetchInFlight.has(trackId)) return;
+  const preference = await getLyricsOverridePreference(uri);
+  if (preference?.kind === "candidate") return;
 
   try {
+    if (preference?.kind === "local") {
+      const rawSource = preference.rawSource ?? (await LocalLyricsManager.getRaw(uri));
+      const localLyrics = LocalLyricsManager.parseRaw(rawSource);
+      if (!localLyrics) return;
+      const lyrics = { ...localLyrics, id: trackId, uri };
+      markLyricsOverridePreference(lyrics, preference);
+      captureSourceTranslations(lyrics);
+      if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
+        await ProcessLyrics(lyrics, { allowRemoteRomanization: $romanization.get() });
+      } else {
+        markProcessedWithoutBackground(lyrics);
+      }
+      await setProcessedLyricsStoreItem(trackId, lyrics, undefined, { persistTrack: false });
+      return;
+    }
     const cached = await LyricsStore.GetItem(trackId);
-    if (cached && !isSourceCacheCompatible(cached)) {
+    if (cached && (!isSourceCacheCompatible(cached) || cached?.source === "ldb")) {
       await LyricsStore.RemoveItem(trackId);
-    } else if (cached) {
-      return;
-    }
-    const localLyric = await LocalLyricsManager.get(uri);
-    if (localLyric) {
-      await setProcessedLyricsStoreItem(trackId, { ...localLyric, id: trackId, uri });
-      return;
-    }
+    } else if (cached) return;
   } catch (error) {
     lyricsPrefetchLogger.debug("Prefetch cache probe failed", error);
   }
@@ -634,7 +715,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
 
 async function fetchLyricsForSession(
   uri: string,
-  session: LyricsRequestSession,
+  session: LyricsRequestSession
 ): Promise<FetchLyricsResult> {
   lyricsLogger.debug("Fetch requested", uri);
   clearLyricsCandidateSessionForTrackChange(uri);
@@ -654,10 +735,7 @@ async function fetchLyricsForSession(
 
   const mediaType = SpotifyPlayer.GetMediaType();
 
-  if (
-    mediaType &&
-    mediaType !== "audio"
-  ) {
+  if (mediaType && mediaType !== "audio") {
     if (mediaType === "video") {
       return ["video-track", 400];
     } else if (mediaType === "mixed") {
@@ -676,11 +754,12 @@ async function fetchLyricsForSession(
 
   const trackId = uri.split(":")[2];
   $lyricsSelectionDiagnostics.set(null);
+  const resolvedOverride = await getLyricsOverridePreference(uri);
+  if (!session.isCurrent()) return null;
 
   if (LyricsContent) {
     LyricsContent.classList.add("HiddenTransitioned");
   }
-
 
   // Check if there's already data in localStorage
   const savedLyricsData = $currentLyricsData.get();
@@ -699,14 +778,19 @@ async function fetchLyricsForSession(
       } else {
         const lyricsData = JSON.parse(savedLyricsData);
         const isCurrentTrack = lyricsData?.uri === uri;
-        if (isCurrentTrack && lyricsData?.ProcessingPending !== true && isSourceCacheCompatible(lyricsData)) {
+        if (
+          isCurrentTrack &&
+          lyricsData?.ProcessingPending !== true &&
+          isSourceCacheCompatible(lyricsData) &&
+          lyricsMatchOverridePreference(lyricsData, resolvedOverride)
+        ) {
           const persistTrack = lyricsData?.ManualLyricsSelection !== true;
           const processed = await ensureProcessingVersion(
             trackId,
             uri,
             lyricsData,
             session,
-            persistTrack,
+            persistTrack
           );
           if (!session.isCurrent()) return null;
           const processedLyrics = processed.lyrics;
@@ -723,20 +807,9 @@ async function fetchLyricsForSession(
     }
   }
 
-  const manualSelection = await restoreManualLyricsSelectionForSession(trackId, uri, session);
-  if (manualSelection.handled) return manualSelection.result;
-
-  const localLyric = await LocalLyricsManager.get(uri);
-  if (!session.isCurrent()) return null;
-  if (localLyric) {
-    const lyricsData = { ...localLyric, uri };
-    const revision = await ensureLyricRevision(uri, lyricsData);
-    lyricsData.ManualLyricsSelection = false;
-    lyricsData.AutomaticLyricRevisionId = revision.id;
-    captureSourceTranslations(lyricsData);
-    presentLyrics(lyricsData, session);
-    return [lyricsData, 200];
-  }
+  const override = await restoreLyricsOverrideForSession(trackId, uri, session, resolvedOverride);
+  if (override.handled) return override.result;
+  const automaticPreference = override.preference;
 
   // Local files have no real track id (uri.split(":")[2] is the URL-encoded
   // artist name), so they can't be looked up in LyricsStore or fetched from the
@@ -750,14 +823,19 @@ async function fetchLyricsForSession(
     try {
       const lyricsFromCacheRes = await LyricsStore.GetItem(trackId);
       if (lyricsFromCacheRes) {
-        if (!isSourceCacheCompatible(lyricsFromCacheRes)) {
+        if (
+          !isSourceCacheCompatible(lyricsFromCacheRes) ||
+          lyricsFromCacheRes?.source === "ldb" ||
+          lyricsFromCacheRes?.ManualLyricsSelection === true
+        ) {
           await LyricsStore.RemoveItem(trackId);
         } else {
+          markLyricsOverridePreference(lyricsFromCacheRes, automaticPreference);
           const processed = await ensureProcessingVersion(
             trackId,
             uri,
             lyricsFromCacheRes,
-            session,
+            session
           );
           if (!session.isCurrent()) return null;
           const lyricsFromCache = processed.lyrics;
@@ -773,7 +851,6 @@ async function fetchLyricsForSession(
       return ["unknown-error", 0];
     }
   }
-
 
   if (!navigator.onLine) {
     return ["offline", 400];
@@ -813,7 +890,9 @@ async function fetchLyricsForSession(
       return ["lyrics-not-found", 404];
     }
 
-    return processFreshLyrics(trackId, uri, lyrics, session);
+    return processFreshLyrics(trackId, uri, lyrics, session, {
+      overridePreference: automaticPreference,
+    });
   } catch (error) {
     lyricsLogger.error("Error fetching lyrics", error);
     HideLoaderContainer();

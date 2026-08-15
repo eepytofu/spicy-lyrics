@@ -20,8 +20,14 @@ const npvSource = readFileSync(
   "utf8"
 );
 const npvCss = readFileSync(new URL("../src/css/NPVLyrics.css", import.meta.url), "utf8");
-const nowBarSource = readFileSync(new URL("../src/components/Utils/NowBar.ts", import.meta.url), "utf8");
-const fullscreenSource = readFileSync(new URL("../src/components/Utils/Fullscreen.ts", import.meta.url), "utf8");
+const nowBarSource = readFileSync(
+  new URL("../src/components/Utils/NowBar.ts", import.meta.url),
+  "utf8"
+);
+const fullscreenSource = readFileSync(
+  new URL("../src/components/Utils/Fullscreen.ts", import.meta.url),
+  "utf8"
+);
 const settingsSource = readFileSync(new URL("../src/utils/settings.ts", import.meta.url), "utf8");
 
 test("NPV animation work is excluded from sidebar background observation", () => {
@@ -64,4 +70,37 @@ test("the TTML upload UI discloses that parsing stays on the device", () => {
   assert.match(uploadSource, /TTML is parsed on your device/u);
   assert.match(uploadSource, /without\s+sending their contents anywhere/u);
   assert.doesNotMatch(uploadSource, /ParseTTML/u);
+});
+
+test("local lyrics actions use the unified override pipeline", () => {
+  const managerSource = readFileSync(
+    new URL("../src/components/ReactComponents/LyricsManager/index.tsx", import.meta.url),
+    "utf8"
+  );
+  const databaseSource = readFileSync(
+    new URL(
+      "../src/components/ReactComponents/LyricsManager/hooks/useLyricsDB.ts",
+      import.meta.url
+    ),
+    "utf8"
+  );
+
+  assert.match(
+    uploadSource,
+    /openedTrack = useRef\([\s\S]*SpotifyPlayer\.GetUri\(\)[\s\S]*SpotifyPlayer\.GetName\(\)/u
+  );
+  assert.match(uploadSource, /useLocalLyricsOverride\(uri, rawSource, mode/u);
+  assert.match(uploadSource, /toast\.dismiss\(progressToast\)/u);
+  assert.match(uploadSource, /<h2 className="sl-ldb-upload-title">Upload Lyrics<\/h2>/u);
+  assert.match(uploadSource, /mode === "persistent"/u);
+  assert.match(uploadSource, /mode === "temporary"/u);
+  assert.doesNotMatch(uploadSource, /ProcessLyrics|setTimeout/u);
+
+  assert.match(managerSource, /label="Upload Lyrics"/u);
+  assert.match(managerSource, /label="Return to Automatic"/u);
+  assert.match(
+    databaseSource,
+    /preference\?\.kind === "local" && SpotifyPlayer\.GetUri\(\) === uri/u
+  );
+  assert.match(databaseSource, /setLyricsOverridePreference\(automaticLyricsOverride\(uri\)\)/u);
 });

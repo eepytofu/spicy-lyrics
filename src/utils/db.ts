@@ -6,9 +6,10 @@ const dbLogger = new Logger("Database");
 export const ObjectStores = {
   LyricsStore: "lyricsStore",
   JapaneseAssets: "japaneseAssets",
-}
+  LyricsOverrides: "lyricsOverrides",
+};
 
-export const dbPromise = openDB("spicylyrics", 2, {
+export const dbPromise = openDB("spicylyrics", 3, {
   upgrade(db) {
     dbLogger.debug("Upgrade invoked");
     if (!db.objectStoreNames.contains(ObjectStores.LyricsStore)) {
@@ -19,6 +20,10 @@ export const dbPromise = openDB("spicylyrics", 2, {
       db.createObjectStore(ObjectStores.JapaneseAssets);
       dbLogger.debug("Created '", ObjectStores.JapaneseAssets, "' store");
     }
+    if (!db.objectStoreNames.contains(ObjectStores.LyricsOverrides)) {
+      db.createObjectStore(ObjectStores.LyricsOverrides);
+      dbLogger.debug("Created '", ObjectStores.LyricsOverrides, "' store");
+    }
   },
 });
 
@@ -28,13 +33,13 @@ export async function ensurePersistence() {
 
     const granted = await navigator.storage.persist();
     if (!granted) {
-      dbLogger.warn("Data persistence request was denied; This can lead to potential data loss")
+      dbLogger.warn("Data persistence request was denied; This can lead to potential data loss");
     } else {
-      dbLogger.debug("Data persistence request was accepted")
+      dbLogger.debug("Data persistence request was accepted");
     }
     return granted;
   } catch (e) {
-    dbLogger.warn("Persistence check failed")
+    dbLogger.warn("Persistence check failed");
     return false;
   }
 }

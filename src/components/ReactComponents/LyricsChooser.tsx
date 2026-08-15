@@ -22,6 +22,7 @@ import {
 import { resolveLyricsSourceLabel } from "../../utils/Lyrics/LyricsSourcePreferences.ts";
 import { chooserCandidateRecords } from "../../utils/Lyrics/LyricsCandidateDisplay.ts";
 import { $currentLyricsData, $developerMode } from "../../utils/stores.ts";
+import type { LyricsOverrideLifetime } from "../../utils/Lyrics/LyricsOverridePreference.ts";
 
 type CurrentLyrics = {
   uri?: string;
@@ -90,7 +91,7 @@ function groupFailures(failures: LyricsCandidateFailure[]) {
 
 function candidateMetadata(
   record: LyricsCandidateRecord,
-  fallback: { title: string; artist: string; album: string },
+  fallback: { title: string; artist: string; album: string }
 ): { title: string; artist: string; album: string } {
   return {
     title: record.result.match?.title || fallback.title,
@@ -101,9 +102,9 @@ function candidateMetadata(
 
 function recommendedRecord(session: LyricsCandidateSession | null): LyricsCandidateRecord | null {
   if (!session?.recommendedRevisionId) return null;
-  return session.records.find(
-    (record) => record.revision.id === session.recommendedRevisionId,
-  ) ?? null;
+  return (
+    session.records.find((record) => record.revision.id === session.recommendedRevisionId) ?? null
+  );
 }
 
 type QualitySignal = {
@@ -182,10 +183,13 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const activeProviders = useMemo(() => getActiveLyricsSourceOrder(), [uri]);
   const searchableProviders = useMemo(
     () => manualLyricsSearchProviders(activeProviders),
-    [activeProviders],
+    [activeProviders]
   );
   const spotifyTitle = SpotifyPlayer.GetName() ?? "";
-  const spotifyArtist = SpotifyPlayer.GetArtists()?.map((entry) => entry.name).join(", ") ?? "";
+  const spotifyArtist =
+    SpotifyPlayer.GetArtists()
+      ?.map((entry) => entry.name)
+      .join(", ") ?? "";
   const spotifyAlbum = SpotifyPlayer.GetAlbumName() ?? "";
   const restoredSearchOverrides = current?.ManualLyricsSelection
     ? completeLyricsSearchOverrides(current.ManualLyricsSearchOverrides)
@@ -198,19 +202,19 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     album: spotifyAlbum,
   });
   const [candidateSession, setCandidateSession] = useState<LyricsCandidateSession | null>(() =>
-    uri ? getLyricsCandidateSession(uri) : null,
+    uri ? getLyricsCandidateSession(uri) : null
   );
   const [automaticRecord, setAutomaticRecord] = useState<LyricsCandidateRecord | null>(null);
   const [requestKind, setRequestKind] = useState<RequestKind | null>(null);
   const [busyRevisionId, setBusyRevisionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lifetime, setLifetime] = useState<LyricsOverrideLifetime>("persistent");
   const requestController = useRef<AbortController | null>(null);
 
-  const currentRevisionId = current?.LyricRevision?.id ?? candidateSession?.activeRevisionId ?? null;
+  const currentRevisionId =
+    current?.LyricRevision?.id ?? candidateSession?.activeRevisionId ?? null;
   const automaticRevisionId =
-    current?.AutomaticLyricRevisionId ??
-    candidateSession?.automaticRevisionId ??
-    currentRevisionId;
+    current?.AutomaticLyricRevisionId ?? candidateSession?.automaticRevisionId ?? currentRevisionId;
 
   function selectionContext() {
     return {
@@ -222,7 +226,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   async function runCandidateRequest(
     kind: RequestKind,
     providers: typeof activeProviders,
-    overrides?: { title?: string; artist?: string },
+    overrides?: { title?: string; artist?: string }
   ) {
     if (!uri || requestKind) return;
     requestController.current?.abort();
@@ -231,23 +235,11 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     setRequestKind(kind);
     setError(null);
     try {
-      const requestContext = kind === "initial"
-        ? { activeRevisionId: currentRevisionId }
-        : selectionContext();
+      const requestContext =
+        kind === "initial" ? { activeRevisionId: currentRevisionId } : selectionContext();
       const next = overrides
-        ? await searchLyricsCandidates(
-            uri,
-            providers,
-            overrides,
-            controller.signal,
-            requestContext,
-          )
-        : await loadLyricsCandidates(
-            uri,
-            providers,
-            controller.signal,
-            requestContext,
-          );
+        ? await searchLyricsCandidates(uri, providers, overrides, controller.signal, requestContext)
+        : await loadLyricsCandidates(uri, providers, controller.signal, requestContext);
       if (controller.signal.aborted || SpotifyPlayer.GetUri() !== uri) return;
       setResultFallback({
         title: overrides?.title?.trim() || spotifyTitle,
@@ -275,13 +267,18 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     setAutomaticRecord(null);
     setTitle(restoredSearchOverrides?.title ?? SpotifyPlayer.GetName() ?? "");
     setArtist(
-      restoredSearchOverrides?.artist
-      ?? SpotifyPlayer.GetArtists()?.map((entry) => entry.name).join(", ")
-      ?? "",
+      restoredSearchOverrides?.artist ??
+        SpotifyPlayer.GetArtists()
+          ?.map((entry) => entry.name)
+          .join(", ") ??
+        ""
     );
     setResultFallback({
       title: SpotifyPlayer.GetName() ?? "",
-      artist: SpotifyPlayer.GetArtists()?.map((entry) => entry.name).join(", ") ?? "",
+      artist:
+        SpotifyPlayer.GetArtists()
+          ?.map((entry) => entry.name)
+          .join(", ") ?? "",
       album: SpotifyPlayer.GetAlbumName() ?? "",
     });
     setRequestKind(null);
@@ -313,7 +310,11 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     setBusyRevisionId(record.revision.id);
     setError(null);
     try {
-      const result = await useLyricsCandidate(record, candidateSession?.searchOverrides ?? null);
+      const result = await useLyricsCandidate(
+        record,
+        candidateSession?.searchOverrides ?? null,
+        lifetime
+      );
       if (!result) throw new Error("Candidate no longer belongs to the current track");
       await ApplyLyrics(result);
       onClose();
@@ -345,11 +346,13 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const currentManualProvider = current?.ManualLyricsSelection
     ? current.LyricRevision?.providerId || current.fetchProvider || current.source || null
     : null;
-  const restoredOverrideFailure = candidateSession?.searchOverrides === null && currentManualProvider
-    ? candidateSession.failures.find((failure) => failure.provider === currentManualProvider) ?? null
-    : null;
+  const restoredOverrideFailure =
+    candidateSession?.searchOverrides === null && currentManualProvider
+      ? (candidateSession.failures.find((failure) => failure.provider === currentManualProvider) ??
+        null)
+      : null;
   const failureGroups = groupFailures(
-    (candidateSession?.failures ?? []).filter((failure) => failure !== restoredOverrideFailure),
+    (candidateSession?.failures ?? []).filter((failure) => failure !== restoredOverrideFailure)
   );
 
   return (
@@ -388,6 +391,18 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
         </button>
       </form>
 
+      <label className="sl-chooser-lifetime">
+        <span>Selection lifetime</span>
+        <select
+          value={lifetime}
+          onChange={(event) => setLifetime(event.currentTarget.value as LyricsOverrideLifetime)}
+          disabled={busyRevisionId !== null || requestKind !== null}
+        >
+          <option value="persistent">Persistent</option>
+          <option value="temporary">This session</option>
+        </select>
+      </label>
+
       <div
         className={`sl-chooser-progress${requestKind ? " active" : ""}`}
         role="progressbar"
@@ -395,88 +410,103 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
         aria-hidden={requestKind ? undefined : true}
       />
 
-      {error && <div className="sl-chooser-error" role="alert">{error}</div>}
+      {error && (
+        <div className="sl-chooser-error" role="alert">
+          {error}
+        </div>
+      )}
 
       <div className="sl-chooser-results" aria-live="polite" aria-busy={requestKind !== null}>
         <div className="sl-chooser-list">
-          {requestKind !== null && displayRecords.length === 0 ? <LoadingRows /> : displayRecords.map((record) => {
-            const selected = record.revision.id === currentRevisionId;
-            const automaticOption = current?.ManualLyricsSelection === true
-              && record.revision.id === automaticRecord?.revision.id;
-            const automatic = !automaticOption
-              && record.revision.id === candidateSession?.recommendedRevisionId;
-            const busy = automaticOption
-              ? busyRevisionId === "auto"
-              : record.revision.id === busyRevisionId;
-            const unavailable = selected || busyRevisionId !== null || requestKind !== null;
-            const metadata = candidateMetadata(record, resultFallback);
-            const metadataLine = [metadata.artist, metadata.album].filter(Boolean).join(" · ");
-            const signalSummary = qualitySignals(record).map((signal) => signal.label).join(", ");
-            const confidence = confidenceLabel(record);
-            const providerLabel = sourceLabel(record.result.lyrics);
-            return (
-              <button
-                type="button"
-                className={`sl-chooser-result${selected ? " selected" : ""}${automatic || automaticOption ? " automatic" : ""}`}
-                key={record.revision.id}
-                onClick={() => {
-                  if (!unavailable) {
-                    if (automaticOption) void handleReturnToAuto();
-                    else void handleUse(record);
-                  }
-                }}
-                aria-disabled={unavailable}
-                aria-pressed={selected}
-                aria-label={`${selected ? "Current" : automaticOption ? "Restore automatic" : "Select"} ${providerLabel} lyrics for ${metadata.title}. ${signalSummary}`}
-                title={metadata.title}
-              >
-                <span className="sl-chooser-result-main">
-                  <strong>{metadata.title}</strong>
-                  <span className="sl-chooser-result-meta">
-                    <small title={metadataLine}>{metadataLine || "Unknown artist"}</small>
-                    {automaticOption ? (
-                      <span className="sl-chooser-auto-badge">Automatic</span>
-                    ) : automatic ? (
-                      <span className="sl-chooser-auto-badge">Auto pick</span>
-                    ) : null}
+          {requestKind !== null && displayRecords.length === 0 ? (
+            <LoadingRows />
+          ) : (
+            displayRecords.map((record) => {
+              const selected = record.revision.id === currentRevisionId;
+              const automaticOption =
+                current?.ManualLyricsSelection === true &&
+                record.revision.id === automaticRecord?.revision.id;
+              const automatic =
+                !automaticOption && record.revision.id === candidateSession?.recommendedRevisionId;
+              const busy = automaticOption
+                ? busyRevisionId === "auto"
+                : record.revision.id === busyRevisionId;
+              const unavailable = selected || busyRevisionId !== null || requestKind !== null;
+              const metadata = candidateMetadata(record, resultFallback);
+              const metadataLine = [metadata.artist, metadata.album].filter(Boolean).join(" · ");
+              const signalSummary = qualitySignals(record)
+                .map((signal) => signal.label)
+                .join(", ");
+              const confidence = confidenceLabel(record);
+              const providerLabel = sourceLabel(record.result.lyrics);
+              return (
+                <button
+                  type="button"
+                  className={`sl-chooser-result${selected ? " selected" : ""}${automatic || automaticOption ? " automatic" : ""}`}
+                  key={record.revision.id}
+                  onClick={() => {
+                    if (!unavailable) {
+                      if (automaticOption) void handleReturnToAuto();
+                      else void handleUse(record);
+                    }
+                  }}
+                  aria-disabled={unavailable}
+                  aria-pressed={selected}
+                  aria-label={`${selected ? "Current" : automaticOption ? "Return to Automatic" : "Select"} ${providerLabel} lyrics for ${metadata.title}. ${signalSummary}`}
+                  title={metadata.title}
+                >
+                  <span className="sl-chooser-result-main">
+                    <strong>{metadata.title}</strong>
+                    <span className="sl-chooser-result-meta">
+                      <small title={metadataLine}>{metadataLine || "Unknown artist"}</small>
+                      {automaticOption ? (
+                        <span className="sl-chooser-auto-badge">Automatic</span>
+                      ) : automatic ? (
+                        <span className="sl-chooser-auto-badge">Auto pick</span>
+                      ) : null}
+                    </span>
                   </span>
-                </span>
-                <span className="sl-chooser-result-source">
-                  <span className="sl-chooser-result-provider">
-                    <strong>{providerLabel}</strong>
+                  <span className="sl-chooser-result-source">
+                    <span className="sl-chooser-result-provider">
+                      <strong>{providerLabel}</strong>
+                    </span>
+                    <span className="sl-chooser-result-quality">
+                      <small title={signalSummary}>
+                        {formatLabel(record.result.lyrics.Type)}
+                        <span aria-hidden="true"> · </span>
+                        <span
+                          className={`sl-chooser-confidence sl-chooser-confidence--${record.assessment.signals.confidence}`}
+                        >
+                          {confidence}
+                        </span>
+                      </small>
+                    </span>
                   </span>
-                  <span className="sl-chooser-result-quality">
-                    <small title={signalSummary}>
-                      {formatLabel(record.result.lyrics.Type)}
-                      <span aria-hidden="true"> · </span>
-                      <span className={`sl-chooser-confidence sl-chooser-confidence--${record.assessment.signals.confidence}`}>
-                        {confidence}
-                      </span>
-                    </small>
-                  </span>
-                </span>
-                <span className="sl-chooser-result-action" aria-hidden="true">
-                  {selected ? (
-                    <>
+                  <span className="sl-chooser-result-action" aria-hidden="true">
+                    {selected ? (
+                      <>
+                        <svg viewBox="0 0 16 16">
+                          <path d="m3 8 3 3 7-7" />
+                        </svg>
+                        <span>Current</span>
+                      </>
+                    ) : busy ? (
+                      <>
+                        <span className="sl-chooser-spinner" />
+                        <span>Applying</span>
+                      </>
+                    ) : automaticOption ? (
+                      <span>Return to Automatic</span>
+                    ) : (
                       <svg viewBox="0 0 16 16">
-                        <path d="m3 8 3 3 7-7" />
+                        <path d="m6 3 5 5-5 5" />
                       </svg>
-                      <span>Current</span>
-                    </>
-                  ) : busy ? (
-                    <>
-                      <span className="sl-chooser-spinner" />
-                      <span>Applying</span>
-                    </>
-                  ) : (
-                    <svg viewBox="0 0 16 16">
-                      <path d="m6 3 5 5-5 5" />
-                    </svg>
-                  )}
-                </span>
-              </button>
-            );
-          })}
+                    )}
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
 
         {!displayRecords.length && requestKind === null && (
@@ -490,7 +520,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
             ? "Checking enabled lyric sources…"
             : requestKind === "search"
               ? "Searching enabled lyric sources…"
-            : `${displayRecords.length} result${displayRecords.length === 1 ? "" : "s"}`}
+              : `${displayRecords.length} result${displayRecords.length === 1 ? "" : "s"}`}
         </span>
         {developerMode && (!!candidateSession?.failures.length || !!displayRecords.length) && (
           <details className="sl-chooser-diagnostics">
@@ -501,9 +531,13 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                   <strong>Saved override</strong>
                   <ul>
                     <li>
-                      <span>{resolveLyricsSourceLabel(restoredOverrideFailure.provider) ?? restoredOverrideFailure.provider}</span>
                       <span>
-                        Restored from cache · auto lookup {failureLabel(restoredOverrideFailure).toLocaleLowerCase()}
+                        {resolveLyricsSourceLabel(restoredOverrideFailure.provider) ??
+                          restoredOverrideFailure.provider}
+                      </span>
+                      <span>
+                        Restored from cache · auto lookup{" "}
+                        {failureLabel(restoredOverrideFailure).toLocaleLowerCase()}
                       </span>
                     </li>
                   </ul>
@@ -532,8 +566,11 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                         <li key={record.revision.id}>
                           <span>{sourceLabel(record.result.lyrics)}</span>
                           <span>
-                            score {record.assessment.selectionScore} · match {record.assessment.trackMatchScore} · timing {record.assessment.structuralTimingScore}
-                            {record.assessment.rankingTrackMatchScore !== record.assessment.trackMatchScore
+                            score {record.assessment.selectionScore} · match{" "}
+                            {record.assessment.trackMatchScore} · timing{" "}
+                            {record.assessment.structuralTimingScore}
+                            {record.assessment.rankingTrackMatchScore !==
+                            record.assessment.trackMatchScore
                               ? ` · ranking match ${record.assessment.rankingTrackMatchScore}`
                               : ""}
                             {discovery ? ` · ${discovery}` : ""}

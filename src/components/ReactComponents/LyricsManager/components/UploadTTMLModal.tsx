@@ -1,12 +1,10 @@
 import React, { useRef, useState } from "react";
 import { toast } from "sonner";
 import { SpotifyPlayer } from "../../../../components/Global/SpotifyPlayer";
-import fetchLyrics from "../../../../utils/Lyrics/fetchLyrics";
+import { useLocalLyricsOverride } from "../../../../utils/Lyrics/fetchLyrics";
 import ApplyLyrics from "../../../../utils/Lyrics/Global/Applyer";
-import { parseTtmlDocument } from "../../../../utils/Lyrics/TtmlDocument";
-import { ProcessLyrics } from "../../../../utils/Lyrics/ProcessLyrics";
-import { $currentLyricsData } from "../../../../utils/stores";
 import { LocalLyricsManager } from "../../../../utils/Lyrics/manager";
+import { getLyricsOverridePreference } from "../../../../utils/Lyrics/LyricsOverridePreference.ts";
 import { IconButton } from "./IconButton";
 import { ArrowLeftIcon, UploadIcon } from "./Icons";
 
@@ -23,7 +21,10 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const songName = SpotifyPlayer.GetName() ?? "Unknown Song";
+  const openedTrack = useRef({
+    uri: SpotifyPlayer.GetUri(),
+    title: SpotifyPlayer.GetName() ?? "Unknown Song",
+  }).current;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -33,73 +34,99 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
   async function handleUpload() {
     if (!file || uploading) return;
 
-    const uri = SpotifyPlayer.GetUri();
+    const uri = openedTrack.uri;
     if (!uri) {
       toast.error("No track is currently playing.", { duration: 5000 });
       return;
     }
 
+    if (SpotifyPlayer.GetUri() !== uri) {
+      toast.error("The playing track changed. Reopen Upload Lyrics and try again.", {
+        duration: 5000,
+      });
+      return;
+    }
+
     setUploading(true);
-
-    const reader = new FileReader();
-    reader.onerror = () => {
-      toast.error("Error reading TTML file.", { duration: 5000 });
-      setUploading(false);
-    };
-    reader.onload = async (e) => {
-      try {
-        const ttml = e.target?.result as string;
-
-        if (mode === "persistent") {
-          await LocalLyricsManager.put(uri, ttml);
-          $currentLyricsData.set("");
-          setTimeout(() => {
-            fetchLyrics(uri)
-              .then(ApplyLyrics)
-          }, 25);
-          toast.success("TTML saved to Local DB!", { duration: 5000 });
-          onDone("persistent");
-        } else {
-          toast("Found TTML, Parsing...", { duration: 3000 });
-          const result = parseTtmlDocument(ttml);
-          if (!result) {
-            toast.error("Failed to parse TTML.", { duration: 5000 });
-            setUploading(false);
-            return;
-          }
-          const dataToSave = {
-            ...result,
-            uri,
-          };
-          await ProcessLyrics(dataToSave);
-          $currentLyricsData.set(JSON.stringify(dataToSave));
-          setTimeout(() => {
-            fetchLyrics(uri)
-              .then((lyrics) => {
-                ApplyLyrics(lyrics);
-                toast.success("Lyrics Parsed and Applied!", { duration: 5000 });
-              })
-              .catch((err) => {
-                toast.error("Error applying lyrics", { duration: 5000 });
-                console.error("Error applying lyrics:", err);
-              });
-          }, 25);
-          onDone("temporary");
-        }
-      } catch (err) {
-        toast.error("Upload failed.", { duration: 5000 });
-        console.error("TTML upload error:", err);
-        setUploading(false);
+    const progressToast = toast.loading("Reading and applying lyrics…");
+    let previousRaw: string | null = null;
+    let storedRaw = false;
+    let committed = false;
+    try {
+      const rawSource = await file.text();
+      if (SpotifyPlayer.GetUri() !== uri) {
+        toast.error("The playing track changed. Nothing was applied.", { duration: 5000 });
+        return;
       }
-    };
-    reader.readAsText(file);
+      if (!LocalLyricsManager.parseRaw(rawSource)) {
+        toast.error("Failed to parse lyrics.", { duration: 5000 });
+        return;
+      }
+      const previousPreference = await getLyricsOverridePreference(uri);
+      previousRaw = mode === "persistent" ? await LocalLyricsManager.getRaw(uri) : null;
+      if (SpotifyPlayer.GetUri() !== uri) {
+        toast.error("The playing track changed. Nothing was applied.", { duration: 5000 });
+        return;
+      }
+      if (mode === "persistent") {
+        await LocalLyricsManager.put(uri, rawSource);
+        storedRaw = true;
+        if (SpotifyPlayer.GetUri() !== uri) {
+          if (previousRaw === null) await LocalLyricsManager.remove(uri);
+          else await LocalLyricsManager.put(uri, previousRaw);
+          storedRaw = false;
+          toast.error("The playing track changed. Nothing was applied.", { duration: 5000 });
+          return;
+        }
+      }
+      const lyrics = await useLocalLyricsOverride(uri, rawSource, mode, { previousPreference });
+      if (!lyrics || SpotifyPlayer.GetUri() !== uri) {
+        if (storedRaw) {
+          if (previousRaw === null) await LocalLyricsManager.remove(uri);
+          else await LocalLyricsManager.put(uri, previousRaw);
+          storedRaw = false;
+        }
+        toast.error(
+          SpotifyPlayer.GetUri() === uri
+            ? "Could not apply lyrics. Nothing was saved."
+            : "The playing track changed. Nothing was applied.",
+          { duration: 5000 }
+        );
+        return;
+      }
+      storedRaw = false;
+      committed = true;
+      await ApplyLyrics(lyrics);
+      toast.success(
+        mode === "persistent" ? "Lyrics saved and applied." : "Lyrics applied for this session.",
+        { duration: 5000 }
+      );
+      onDone(mode);
+    } catch (err) {
+      if (storedRaw) {
+        try {
+          if (previousRaw === null) await LocalLyricsManager.remove(uri);
+          else await LocalLyricsManager.put(uri, previousRaw);
+        } catch (rollbackError) {
+          console.error("Lyrics upload rollback error:", rollbackError);
+        }
+      }
+      toast.error(
+        committed ? "Lyrics were selected but could not be displayed." : "Upload failed.",
+        { duration: 5000 }
+      );
+      console.error("Lyrics upload error:", err);
+    } finally {
+      toast.dismiss(progressToast);
+      setUploading(false);
+    }
   }
 
   return (
     <div className="sl-ldb-upload-root">
       <div className="sl-ldb-upload-header">
-        <h2 className="sl-ldb-upload-title">Upload TTML</h2>
-        <p className="sl-ldb-upload-subtitle">For: {songName}</p>
+        <h2 className="sl-ldb-upload-title">Upload Lyrics</h2>
+        <p className="sl-ldb-upload-subtitle">For: {openedTrack.title}</p>
       </div>
 
       <div className="sl-ldb-upload-file-section">
@@ -122,7 +149,7 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
           className={`sl-ldb-upload-mode-card${mode === "persistent" ? " sl-ldb-upload-mode-card--active" : ""}`}
           onClick={() => setMode("persistent")}
         >
-          <span className="sl-ldb-upload-mode-title">Persistent Upload</span>
+          <span className="sl-ldb-upload-mode-title">Persistent</span>
           <span className="sl-ldb-upload-mode-desc">Stored in local DB, survives restarts</span>
         </button>
         <button
@@ -130,8 +157,10 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
           className={`sl-ldb-upload-mode-card${mode === "temporary" ? " sl-ldb-upload-mode-card--active" : ""}`}
           onClick={() => setMode("temporary")}
         >
-          <span className="sl-ldb-upload-mode-title">Temporary Upload</span>
-          <span className="sl-ldb-upload-mode-desc">Applied only to current song until refresh</span>
+          <span className="sl-ldb-upload-mode-title">This Session</span>
+          <span className="sl-ldb-upload-mode-desc">
+            Applied only to current song until refresh
+          </span>
         </button>
       </div>
 

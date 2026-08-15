@@ -22,6 +22,11 @@ async function put(uri: string, ttml: unknown) {
   }
 }
 
+function parseRaw(data: unknown): any | null {
+  const parsed = typeof data === "string" ? parseTtmlDocument(data) : null;
+  return parsed ? Object.assign({}, parsed, { source: "ldb" }) : null;
+}
+
 async function get(uri: string): Promise<any | null> {
   try {
     const db = await dbPromise;
@@ -30,8 +35,7 @@ async function get(uri: string): Promise<any | null> {
       return null;
     }
 
-    const parsed = typeof data === "string" ? parseTtmlDocument(data) : null;
-    return parsed ? Object.assign({}, parsed, { source: "ldb" }) : null;
+    return parseRaw(data);
   } catch (error) {
     logCaught("get", error, { uri });
     return null;
@@ -74,6 +78,7 @@ async function remove(uri: string): Promise<void> {
 export const LocalLyricsManager = {
   put,
   get,
+  parseRaw,
   getRaw,
   listKeys,
   remove,

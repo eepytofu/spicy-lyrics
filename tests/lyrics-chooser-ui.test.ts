@@ -8,7 +8,7 @@ const chooser = readSource("../src/components/ReactComponents/LyricsChooser.tsx"
 const page = readSource("../src/components/Pages/PageView.ts");
 const icons = readSource("../src/components/Styling/Icons.ts");
 const sources = readSource(
-  "../src/components/ReactComponents/SettingsPanel/LyricsSourcesManager.tsx",
+  "../src/components/ReactComponents/SettingsPanel/LyricsSourcesManager.tsx"
 );
 const css = readSource("../src/css/settings-panel.css");
 const externalSources = readSource("../src/utils/Lyrics/ExternalSources.ts");
@@ -22,18 +22,28 @@ test("chooser exposes compact all-provider metadata search from lyric controls",
   assert.match(chooser, />Artist</);
   assert.match(chooser, /requestKind === "search" \? "Searching…" : "Search"/);
   assert.match(chooser, /runCandidateRequest\("search", searchableProviders, overrides\)/);
-  assert.doesNotMatch(chooser, /<select|setProvider|provider === "all"/);
+  assert.doesNotMatch(chooser, /setProvider|provider === "all"/);
+  assert.match(chooser, /<select[\s\S]*value=\{lifetime\}/);
   assert.doesNotMatch(chooser, /"Load alternatives"/);
   assert.doesNotMatch(chooser, /sl-chooser-card/);
 });
 
 test("chooser auto-loads candidate sources and keeps manual search playback-scoped", () => {
-  assert.match(chooser, /if \(uri && \(current\?\.ManualLyricsSelection === true \|\| !next\?\.alternativesLoaded\)\)/);
+  assert.match(
+    chooser,
+    /if \(uri && \(current\?\.ManualLyricsSelection === true \|\| !next\?\.alternativesLoaded\)\)/
+  );
   assert.match(chooser, /runCandidateRequest\("initial", activeProviders\)/);
   assert.match(chooser, /manualLyricsSearchProviders/);
   assert.match(chooser, /restoredSearchOverrides\?\.title \?\? spotifyTitle/);
-  assert.match(chooser, /useLyricsCandidate\(record, candidateSession\?\.searchOverrides \?\? null\)/);
-  assert.match(chooser, /setResultFallback\(\{[\s\S]*?title: overrides\?\.title\?\.trim\(\) \|\| spotifyTitle/);
+  assert.match(
+    chooser,
+    /useLyricsCandidate\([\s\S]*?record,[\s\S]*?candidateSession\?\.searchOverrides \?\? null,[\s\S]*?lifetime/
+  );
+  assert.match(
+    chooser,
+    /setResultFallback\(\{[\s\S]*?title: overrides\?\.title\?\.trim\(\) \|\| spotifyTitle/
+  );
   assert.doesNotMatch(chooser, /const resultFallback = \{[\s\S]*?title: title\.trim\(\)/);
   assert.match(chooser, />Automatic</);
   assert.match(externalSources, /searchLyricsCandidates/);
@@ -74,23 +84,39 @@ test("chooser summarizes selector-owned confidence and gates diagnostics to deve
   assert.match(chooser, /Healthy timing/);
   assert.match(chooser, /Agrees with other sources/);
   assert.doesNotMatch(chooser, /function SignalIcon|sl-chooser-current/);
-  assert.doesNotMatch(chooser, /sl-chooser-actions|Return to Auto/);
+  assert.doesNotMatch(chooser, /sl-chooser-actions/);
+  assert.match(chooser, /<span>Return to Automatic<\/span>/);
   assert.match(chooser, /<span className="sl-chooser-auto-badge">Automatic<\/span>/);
   assert.match(chooser, /if \(automaticOption\) void handleReturnToAuto\(\)/);
   assert.match(chooser, /chooserCandidateRecords\(records, current, automaticRecord\)/);
   assert.match(chooser, /displayRecords\.map\(\(record\)/);
   assert.match(chooser, /const developerMode = useStore\(\$developerMode\)/);
-  assert.match(chooser, /developerMode && \(!!candidateSession\?\.failures\.length \|\| !!displayRecords\.length\)/);
+  assert.match(
+    chooser,
+    /developerMode && \(!!candidateSession\?\.failures\.length \|\| !!displayRecords\.length\)/
+  );
   assert.match(chooser, /<summary>Diagnostics<\/summary>/);
   assert.match(chooser, /function groupFailures\(failures: LyricsCandidateFailure\[\]\)/);
   assert.match(chooser, />Saved override</);
   assert.match(chooser, /Restored from cache · auto lookup/);
-  assert.match(chooser, /sl-chooser-diagnostics-failure[\s\S]*group\.providers\.join\(", "\)[\s\S]*group\.label/);
+  assert.match(
+    chooser,
+    /sl-chooser-diagnostics-failure[\s\S]*group\.providers\.join\(", "\)[\s\S]*group\.label/
+  );
   assert.match(chooser, /function LoadingRows\(\)/);
-  assert.match(chooser, /requestKind !== null && displayRecords\.length === 0 \? <LoadingRows \/>/);
+  assert.match(
+    chooser,
+    /requestKind !== null && displayRecords\.length === 0\s*\?\s*\(\s*<LoadingRows \/>/
+  );
   assert.match(css, /grid-template-columns:\s*minmax\(140px, 180px\) minmax\(0, 1fr\)/u);
-  assert.match(css, /sl-chooser-diagnostics-failure[\s\S]*minmax\(220px, 1fr\) minmax\(100px, 140px\)/u);
-  assert.match(css, /sl-chooser-diagnostics-failure > span:first-child[\s\S]*white-space:\s*normal/u);
+  assert.match(
+    css,
+    /sl-chooser-diagnostics-failure[\s\S]*minmax\(220px, 1fr\) minmax\(100px, 140px\)/u
+  );
+  assert.match(
+    css,
+    /sl-chooser-diagnostics-failure > span:first-child[\s\S]*white-space:\s*normal/u
+  );
   assert.match(css, /\.sl-chooser-footer\s*\{[\s\S]*position:\s*relative[\s\S]*display:\s*block/u);
   assert.match(css, /\.sl-chooser-diagnostics summary\s*\{[\s\S]*margin-left:\s*auto/u);
   assert.match(css, /min-height:\s*62px/u);

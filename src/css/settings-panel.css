@@ -766,7 +766,9 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
     padding-bottom: 10px;
   }
 
-  .sl-sp-source-stack--has-options:not(.sl-sp-source-stack--open):has(.sl-sp-source-stack-layer--2) {
+  .sl-sp-source-stack--has-options:not(.sl-sp-source-stack--open):has(
+      .sl-sp-source-stack-layer--2
+    ) {
     padding-bottom: 18px;
   }
 
@@ -1196,6 +1198,25 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
     height: 34px;
   }
 
+  .sl-chooser-lifetime {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption-size) !important;
+  }
+
+  .sl-chooser-lifetime select {
+    height: 30px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    padding: 0 8px;
+    background: var(--accent-tint-bg);
+    box-shadow: inset 0 0 0 1px var(--hairline);
+    color: var(--color-text-primary);
+  }
+
   .sl-chooser-progress {
     height: 2px;
     overflow: hidden;
@@ -1264,10 +1285,22 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
     animation: sl-chooser-skeleton 1.35s var(--ease-standard) infinite alternate;
   }
 
-  .sl-chooser-skeleton-bar.title { width: min(72%, 230px); height: 13px; }
-  .sl-chooser-skeleton-bar.metadata { width: min(88%, 290px); height: 10px; }
-  .sl-chooser-skeleton-bar.provider { width: 78%; height: 12px; }
-  .sl-chooser-skeleton-bar.sync { width: 58%; height: 9px; }
+  .sl-chooser-skeleton-bar.title {
+    width: min(72%, 230px);
+    height: 13px;
+  }
+  .sl-chooser-skeleton-bar.metadata {
+    width: min(88%, 290px);
+    height: 10px;
+  }
+  .sl-chooser-skeleton-bar.provider {
+    width: 78%;
+    height: 12px;
+  }
+  .sl-chooser-skeleton-bar.sync {
+    width: 58%;
+    height: 9px;
+  }
 
   .sl-chooser-skeleton-arrow {
     justify-self: end;
@@ -1543,16 +1576,24 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
   }
 
   @keyframes sl-chooser-progress {
-    to { transform: translateX(310%); }
+    to {
+      transform: translateX(310%);
+    }
   }
 
   @keyframes sl-chooser-spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   @keyframes sl-chooser-skeleton {
-    from { opacity: 0.46; }
-    to { opacity: 0.82; }
+    from {
+      opacity: 0.46;
+    }
+    to {
+      opacity: 0.82;
+    }
   }
 
   @media (max-width: 700px) {

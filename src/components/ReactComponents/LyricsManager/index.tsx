@@ -8,9 +8,8 @@ import { TrackRow } from "./components/TrackRow";
 import { IconButton } from "./components/IconButton";
 import { UploadIcon, ResetIcon } from "./components/Icons";
 import { SpotifyPlayer } from "../../Global/SpotifyPlayer";
-import fetchLyrics from "../../../utils/Lyrics/fetchLyrics";
+import { returnToAutomaticLyrics } from "../../../utils/Lyrics/fetchLyrics";
 import ApplyLyrics from "../../../utils/Lyrics/Global/Applyer";
-import { $currentLyricsData } from "../../../utils/stores";
 
 type LyricsDBPanelProps = {
   onUploadClick: () => void;
@@ -73,22 +72,20 @@ export default function LyricsDBPanel({ onUploadClick }: LyricsDBPanelProps) {
     Spicetify.Player.playUri(uri);
   }
 
-  function handleResetTTML() {
+  async function handleReturnToAutomatic() {
     const uri = SpotifyPlayer.GetUri();
     if (!uri) {
       toast.error("No track is currently playing.", { duration: 4000 });
       return;
     }
-    $currentLyricsData.set("");
-    toast("TTML has been reset.", { duration: 4000 });
-    setTimeout(() => {
-      fetchLyrics(uri)
-        .then(ApplyLyrics)
-        .catch((err) => {
-          toast.error("Error applying lyrics", { duration: 4000 });
-          console.error("Error applying lyrics:", err);
-        });
-    }, 25);
+    try {
+      const lyrics = await returnToAutomaticLyrics(uri);
+      await ApplyLyrics(lyrics);
+      toast.success("Returned to automatic lyrics.", { duration: 4000 });
+    } catch (err) {
+      toast.error("Could not restore automatic lyrics.", { duration: 4000 });
+      console.error("Error restoring automatic lyrics:", err);
+    }
   }
 
   return (
@@ -97,14 +94,14 @@ export default function LyricsDBPanel({ onUploadClick }: LyricsDBPanelProps) {
         <SearchBar value={query} onChange={setQuery} placeholder="Search saved lyrics…" />
         <IconButton
           icon={<ResetIcon size={14} />}
-          label="Reset TTML"
+          label="Return to Automatic"
           variant="danger"
-          onClick={handleResetTTML}
-          title="Clear loaded TTML for the currently playing song"
+          onClick={() => void handleReturnToAutomatic()}
+          title="Stop overriding lyrics for the currently playing song"
         />
         <IconButton
           icon={<UploadIcon size={14} />}
-          label="Upload TTML"
+          label="Upload Lyrics"
           variant="primary"
           onClick={onUploadClick}
         />
@@ -125,9 +122,21 @@ export default function LyricsDBPanel({ onUploadClick }: LyricsDBPanelProps) {
           ))
         ) : filtered.length === 0 ? (
           <div className="sl-ldb-empty">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M20 8v14M20 27.5v1" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="20" cy="20" r="16.5" stroke="currentColor" strokeWidth="2"/>
+            <svg
+              width="40"
+              height="40"
+              viewBox="0 0 40 40"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                d="M20 8v14M20 27.5v1"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+              <circle cx="20" cy="20" r="16.5" stroke="currentColor" strokeWidth="2" />
             </svg>
             <p>{query.trim() ? "No matching entries" : "No lyrics saved yet"}</p>
           </div>
