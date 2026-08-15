@@ -843,6 +843,67 @@ describe("provider search flow", () => {
     });
   });
 
+  it("retries only Soda's probabilistic detail risk rejection", async () => {
+    const searchBody = {
+      result_groups: [{
+        data: [{
+          meta: { item_type: "track" },
+          entity: { track: {
+            id: "soda-risk-fixture",
+            name: "Risk Fixture",
+            artists: [{ name: "Artist" }],
+            duration: 180_000,
+          } },
+        }],
+      }],
+    };
+    const successBody = {
+      track: {
+        id: "soda-risk-fixture",
+        name: "Risk Fixture",
+        artists: [{ name: "Artist" }],
+        duration: 180_000,
+      },
+      lyric: { type: "krc", content: "[1000,1000]<0,1000,0>line" },
+    };
+    const track = {
+      id: "spotify-risk-fixture",
+      title: "Risk Fixture",
+      artists: ["Artist"],
+      album: "",
+      durationMs: 180_000,
+    };
+
+    let detailAttempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) return new Response(JSON.stringify(searchBody));
+      detailAttempts += 1;
+      return new Response(JSON.stringify(
+        detailAttempts === 1 ? { status_code: 1000062 } : successBody,
+      ));
+    }));
+    await expect(sodaProvider(track)).resolves.toMatchObject({ Type: "Syllable" });
+    expect(detailAttempts).toBe(2);
+
+    detailAttempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) return new Response(JSON.stringify(searchBody));
+      detailAttempts += 1;
+      return new Response(JSON.stringify({ status_code: 12345 }));
+    }));
+    await expect(sodaProvider(track)).resolves.toBeUndefined();
+    expect(detailAttempts).toBe(1);
+
+    detailAttempts = 0;
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/search/track")) return new Response(JSON.stringify(searchBody));
+      detailAttempts += 1;
+      return new Response(JSON.stringify({ status_code: 1000062 }));
+    }));
+    await expect(sodaProvider(track)).resolves.toBeUndefined();
+    expect(detailAttempts).toBe(4);
+  });
+
   it("uses Soda simple display names as artist aliases without another lookup", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       result_groups: [{

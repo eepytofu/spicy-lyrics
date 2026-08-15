@@ -212,7 +212,8 @@ export async function searchSoda(
   return (await searchSodaAssessed(track, clientParams, signal)).map(({ candidate }) => candidate);
 }
 
-// Unsigned detail requests draw a probabilistic risk rejection; only that outcome is retried.
+// Only the observed app-risk status is transient on unsigned detail requests.
+const SODA_RISK_REJECTION_STATUS = 1000062;
 const SODA_DETAIL_ATTEMPTS = 4;
 
 async function fetchSodaDetail(
@@ -233,7 +234,10 @@ async function fetchSodaDetail(
       if (!response.ok) return undefined;
       const payload = await readSodaPayload<any>(response, signal);
       if (payload.kind === "invalid-payload") return payload;
-      if (!successfulSodaBody(payload.body)) continue;
+      if (!successfulSodaBody(payload.body)) {
+        if (Number(payload.body?.status_code) === SODA_RISK_REJECTION_STATUS) continue;
+        return { kind: "valid", body: undefined };
+      }
       if (String(payload.body?.track?.id ?? "") !== song.id) return { kind: "valid", body: undefined };
       return payload;
     } catch (error) {
