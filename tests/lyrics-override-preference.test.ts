@@ -55,6 +55,24 @@ test("temporary override shadows durable state only for the session", async () =
   assert.equal(restored?.preferenceId, automatic.preferenceId);
 });
 
+test("temporary candidate returns to automatic when a new session has no saved override", async () => {
+  const { storage, values } = memoryStorage();
+  const currentSession = new LyricsOverridePreferenceController(storage);
+  currentSession.setSession(
+    candidateLyricsOverride(uri, "temporary", {
+      revisionId: "temporary-revision",
+      automaticRevisionId: "automatic-revision",
+      snapshot: { uri, Type: "Line" },
+    })
+  );
+
+  assert.equal((await currentSession.get(uri))?.kind, "candidate");
+  assert.equal(values.has(uri), false);
+
+  const nextSession = new LyricsOverridePreferenceController(storage);
+  assert.equal(await nextSession.get(uri), null);
+});
+
 test("persistent local preference keeps its raw source outside the preference row", async () => {
   const { storage, values } = memoryStorage();
   const controller = new LyricsOverridePreferenceController(storage);

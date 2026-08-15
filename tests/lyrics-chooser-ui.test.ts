@@ -10,6 +10,10 @@ const icons = readSource("../src/components/Styling/Icons.ts");
 const sources = readSource(
   "../src/components/ReactComponents/SettingsPanel/LyricsSourcesManager.tsx"
 );
+const sourcesSection = readSource(
+  "../src/components/ReactComponents/SettingsPanel/SourcesSection.tsx"
+);
+const stores = readSource("../src/utils/stores.ts");
 const css = readSource("../src/css/settings-panel.css");
 const externalSources = readSource("../src/utils/Lyrics/ExternalSources.ts");
 const fetchLyrics = readSource("../src/utils/Lyrics/fetchLyrics.ts");
@@ -23,7 +27,7 @@ test("chooser exposes compact all-provider metadata search from lyric controls",
   assert.match(chooser, /requestKind === "search" \? "Searching…" : "Search"/);
   assert.match(chooser, /runCandidateRequest\("search", searchableProviders, overrides\)/);
   assert.doesNotMatch(chooser, /setProvider|provider === "all"/);
-  assert.match(chooser, /<select[\s\S]*value=\{lifetime\}/);
+  assert.doesNotMatch(chooser, /Selection lifetime|<select/);
   assert.doesNotMatch(chooser, /"Load alternatives"/);
   assert.doesNotMatch(chooser, /sl-chooser-card/);
 });
@@ -38,7 +42,7 @@ test("chooser auto-loads candidate sources and keeps manual search playback-scop
   assert.match(chooser, /restoredSearchOverrides\?\.title \?\? spotifyTitle/);
   assert.match(
     chooser,
-    /useLyricsCandidate\([\s\S]*?record,[\s\S]*?candidateSession\?\.searchOverrides \?\? null,[\s\S]*?lifetime/
+    /useLyricsCandidate\([\s\S]*?record,[\s\S]*?candidateSession\?\.searchOverrides \?\? null,[\s\S]*?manualSelectionLifetime/
   );
   assert.match(
     chooser,
@@ -51,6 +55,18 @@ test("chooser auto-loads candidate sources and keeps manual search playback-scop
   assert.match(externalSources, /overrides:\s*normalizedOverrides/);
   assert.match(externalSources, /trackInfo\(uri, overrides\)/);
   assert.doesNotMatch(sources, /Last Selection/);
+});
+
+test("manual selection lifetime is a persisted Sources setting", () => {
+  assert.match(
+    stores,
+    /\$manualLyricsSelectionLifetime = persistAtom<LyricsOverrideLifetime>\([\s\S]*?"manualLyricsSelectionLifetime",[\s\S]*?"persistent"/
+  );
+  assert.match(sourcesSection, /label="Manual Selection Lifetime"/);
+  assert.match(sourcesSection, /options=\{\["temporary", "persistent"\]\}/);
+  assert.match(sourcesSection, /labels=\{\["This session", "Persistent"\]\}/);
+  assert.match(sourcesSection, /\$manualLyricsSelectionLifetime\.set/);
+  assert.doesNotMatch(sourcesSection, /commitSourceSettingsChange/);
 });
 
 test("chooser diagnostics disclose NetEase native-title discovery", () => {

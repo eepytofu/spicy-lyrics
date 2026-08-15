@@ -21,8 +21,11 @@ import {
 } from "../../utils/Lyrics/ManualLyricsSearch.ts";
 import { resolveLyricsSourceLabel } from "../../utils/Lyrics/LyricsSourcePreferences.ts";
 import { chooserCandidateRecords } from "../../utils/Lyrics/LyricsCandidateDisplay.ts";
-import { $currentLyricsData, $developerMode } from "../../utils/stores.ts";
-import type { LyricsOverrideLifetime } from "../../utils/Lyrics/LyricsOverridePreference.ts";
+import {
+  $currentLyricsData,
+  $developerMode,
+  $manualLyricsSelectionLifetime,
+} from "../../utils/stores.ts";
 
 type CurrentLyrics = {
   uri?: string;
@@ -179,6 +182,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const uri = useCurrentUri() ?? SpotifyPlayer.GetUri() ?? "";
   const rawLyrics = useStore($currentLyricsData);
   const developerMode = useStore($developerMode);
+  const manualSelectionLifetime = useStore($manualLyricsSelectionLifetime);
   const current = useMemo(() => parseCurrentLyrics(rawLyrics, uri), [rawLyrics, uri]);
   const activeProviders = useMemo(() => getActiveLyricsSourceOrder(), [uri]);
   const searchableProviders = useMemo(
@@ -208,7 +212,6 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const [requestKind, setRequestKind] = useState<RequestKind | null>(null);
   const [busyRevisionId, setBusyRevisionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lifetime, setLifetime] = useState<LyricsOverrideLifetime>("persistent");
   const requestController = useRef<AbortController | null>(null);
 
   const currentRevisionId =
@@ -313,7 +316,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
       const result = await useLyricsCandidate(
         record,
         candidateSession?.searchOverrides ?? null,
-        lifetime
+        manualSelectionLifetime
       );
       if (!result) throw new Error("Candidate no longer belongs to the current track");
       await ApplyLyrics(result);
@@ -390,18 +393,6 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
           {requestKind === "search" ? "Searching…" : "Search"}
         </button>
       </form>
-
-      <label className="sl-chooser-lifetime">
-        <span>Selection lifetime</span>
-        <select
-          value={lifetime}
-          onChange={(event) => setLifetime(event.currentTarget.value as LyricsOverrideLifetime)}
-          disabled={busyRevisionId !== null || requestKind !== null}
-        >
-          <option value="persistent">Persistent</option>
-          <option value="temporary">This session</option>
-        </select>
-      </label>
 
       <div
         className={`sl-chooser-progress${requestKind ? " active" : ""}`}

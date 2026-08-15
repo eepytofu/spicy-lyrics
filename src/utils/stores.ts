@@ -1,6 +1,7 @@
 import { atom } from "nanostores";
 import { ProjectVersion } from "../../project/config.ts";
 import type { LyricsSelectionDiagnostics, LyricsSelectionMode } from "./Lyrics/LyricsCandidateSelector.ts";
+import type { LyricsOverrideLifetime } from "./Lyrics/LyricsOverridePreference.ts";
 
 export const SETTINGS_KEY = "SL:settings";
 
@@ -95,6 +96,10 @@ export const $prioritizeAppleMusicQuality = persistAtom<boolean>("prioritizeAppl
 export const $lyricsSelectionMode = persistAtom<LyricsSelectionMode>(
   "lyricsSelectionMode",
   "smart"
+);
+export const $manualLyricsSelectionLifetime = persistAtom<LyricsOverrideLifetime>(
+  "manualLyricsSelectionLifetime",
+  "persistent"
 );
 export const $musixmatchToken = persistAtom<string>("musixmatchToken", "");
 export const $externalLyricsWorkerUrl = persistAtom<string>("externalLyricsWorkerUrl", "");
