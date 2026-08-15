@@ -17,6 +17,7 @@ const assessment = (provider: string) => ({
   totalScore: 80,
   selectionScore: 80,
   trackMatchScore: 80,
+  rankingTrackMatchScore: 80,
   structuralTimingScore: 100,
   timingAgreementScore: 65,
   timingScore: 89.5,

@@ -53,6 +53,7 @@ export type LyricsCandidateAssessment = {
   totalScore: number;
   selectionScore: number;
   trackMatchScore: number;
+  rankingTrackMatchScore: number;
   structuralTimingScore: number;
   timingAgreementScore: number;
   timingScore: number;
@@ -78,6 +79,7 @@ export type LyricsSelectionResult = {
 type LineSnapshot = { text: string; normalized: string; start?: number; end?: number };
 
 const PLAIN_LYRICS_PENALTY = 15;
+const NATIVE_TITLE_RANKING_MATCH_CAP = 90;
 
 function finite(value: unknown): number | undefined {
   const number = Number(value);
@@ -250,6 +252,31 @@ function matchScore(match: LyricsMatchMetadata | undefined): number {
   return 65;
 }
 
+function rankingMatchScore(match: LyricsMatchMetadata | undefined, providerScore: number): number {
+  if (match?.discovery?.kind !== "netease-native-title") return providerScore;
+  const { title, artists, duration, versionConflict } = match.evidence ?? {};
+  const titleScore = finite(title);
+  const artistScore = finite(artists);
+  const durationScore = finite(duration);
+  if (
+    match.coherent !== true
+    || versionConflict !== false
+    || match.discoveryEvidence?.canonicalTitleVersionConflict !== false
+    || titleScore === undefined
+    || artistScore === undefined
+    || durationScore === undefined
+    || titleScore < 0.9
+    || artistScore < 0.85
+    || durationScore < 0.8
+  ) {
+    return providerScore;
+  }
+  // Discovery admission tolerates missing duration, but Smart Match receives
+  // support only when title, artist, and duration all corroborate the retry.
+  const primaryIdentityScore = (titleScore + artistScore + durationScore) * 100 / 3;
+  return Math.max(providerScore, Math.min(NATIVE_TITLE_RANKING_MATCH_CAP, primaryIdentityScore));
+}
+
 function agreementScore(candidate: LyricsCandidate, candidates: LyricsCandidate[]): number {
   const similarities = candidates
     .filter((peer) => peer !== candidate)
@@ -322,7 +349,8 @@ function reasonList(
 
 export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs: number): LyricsCandidateAssessment[] {
   return candidates.map((candidate) => {
-    const track = matchScore(candidate.match);
+    const providerTrack = matchScore(candidate.match);
+    const track = rankingMatchScore(candidate.match, providerTrack);
     const structural = structuralTimingScore(candidate, durationMs);
     const timingAgreement = timingAgreementScore(candidate, candidates);
     const timing = structural * 0.7 + timingAgreement * 0.3;
@@ -349,7 +377,8 @@ export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs
       format,
       totalScore: rounded(total),
       selectionScore: rounded(selectionScore),
-      trackMatchScore: rounded(track),
+      trackMatchScore: rounded(providerTrack),
+      rankingTrackMatchScore: rounded(track),
       structuralTimingScore: rounded(structural),
       timingAgreementScore: rounded(timingAgreement),
       timingScore: rounded(timing),

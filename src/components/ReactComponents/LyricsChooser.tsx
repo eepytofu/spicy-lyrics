@@ -533,6 +533,9 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                           <span>{sourceLabel(record.result.lyrics)}</span>
                           <span>
                             score {record.assessment.selectionScore} · match {record.assessment.trackMatchScore} · timing {record.assessment.structuralTimingScore}
+                            {record.assessment.rankingTrackMatchScore !== record.assessment.trackMatchScore
+                              ? ` · ranking match ${record.assessment.rankingTrackMatchScore}`
+                              : ""}
                             {discovery ? ` · ${discovery}` : ""}
                           </span>
                         </li>

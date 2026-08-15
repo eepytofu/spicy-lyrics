@@ -60,14 +60,27 @@ function lineResult(match: LyricsMatchMetadata, source: string): Result {
 }
 
 function syllableResult(match: LyricsMatchMetadata, source: string): Result {
+  const rows = [
+    ["al", "pha"],
+    ["be", "ta"],
+    ["gam", "ma"],
+  ];
   return {
     lyrics: {
       Type: "Syllable",
-      Content: [
-        { Lead: { StartTime: 0, EndTime: 60, Syllables: [{ Text: "alpha", StartTime: 0, EndTime: 60 }] } },
-        { Lead: { StartTime: 60, EndTime: 120, Syllables: [{ Text: "beta", StartTime: 60, EndTime: 120 }] } },
-        { Lead: { StartTime: 120, EndTime: 180, Syllables: [{ Text: "gamma", StartTime: 120, EndTime: 180 }] } },
-      ],
+      Content: rows.map(([first, second], index) => {
+        const start = index * 60;
+        return {
+          Lead: {
+            StartTime: start,
+            EndTime: start + 60,
+            Syllables: [
+              { Text: first, StartTime: start, EndTime: start + 30 },
+              { Text: second, StartTime: start + 30, EndTime: start + 60 },
+            ],
+          },
+        };
+      }),
       source,
       SourceMatch: match,
     },
@@ -541,4 +554,51 @@ test("Shojo-shaped recovery adds valid QQ timing and rejects wrong-artist KuGou"
     : []);
   assert.deepEqual(candidates.map((candidate) => candidate.provider), ["apple", "qq", "netease"]);
   assert.equal(selectLyricsCandidate(candidates, 180_000, "syncType").candidate?.provider, "qq");
+  const smart = selectLyricsCandidate(candidates, 180_000, "smart");
+  assert.equal(smart.candidate?.provider, "qq");
+  const qq = smart.diagnostics.candidates.find((candidate) => candidate.provider === "qq");
+  assert.equal(qq?.trackMatchScore, 82.4);
+  assert.equal(qq?.rankingTrackMatchScore, 90);
+});
+
+test("native-title ranking support stays bounded to accepted retries with duration evidence", () => {
+  const apple = {
+    provider: "apple",
+    orderIndex: 0,
+    lyrics: lineResult(match("Shojo Rei", { confidence: 1 }), "apple").lyrics,
+    match: match("Shojo Rei", { confidence: 1 }),
+  };
+  const enriched = (overrides: Partial<LyricsMatchMetadata> = {}) => {
+    const nativeMatch = match("少女レイ", {
+      confidence: 0.824,
+      discovery: {
+        kind: "netease-native-title",
+        provider: "netease",
+        originalTitle: "Shojo Rei",
+        queryTitle: "少女レイ",
+      },
+      ...overrides,
+    });
+    return {
+      provider: "qq",
+      orderIndex: 1,
+      lyrics: syllableResult(nativeMatch, "qq").lyrics,
+      match: nativeMatch,
+    };
+  };
+
+  const accepted = selectLyricsCandidate([apple, enriched()], 180_000, "smart");
+  assert.equal(accepted.candidate?.provider, "qq");
+  assert.equal(accepted.diagnostics.candidates[1].rankingTrackMatchScore, 90);
+
+  for (const unsafe of [
+    enriched({ discovery: undefined }),
+    enriched({ evidence: { ...match("少女レイ").evidence!, artists: 0 } }),
+    enriched({ evidence: { ...match("少女レイ").evidence!, duration: null } }),
+    enriched({ discoveryEvidence: { bestRequestedArtist: 1, canonicalTitleVersionConflict: true } }),
+  ]) {
+    const result = selectLyricsCandidate([apple, unsafe], 180_000, "smart");
+    assert.equal(result.candidate?.provider, "apple");
+    assert.equal(result.diagnostics.candidates[1].rankingTrackMatchScore, 82.4);
+  }
 });

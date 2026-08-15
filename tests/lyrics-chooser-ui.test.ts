@@ -47,6 +47,7 @@ test("chooser diagnostics disclose NetEase native-title discovery", () => {
   const chooser = readFileSync("src/components/ReactComponents/LyricsChooser.tsx", "utf8");
   assert.match(chooser, /netease-native-title/);
   assert.match(chooser, /via NetEase native title/);
+  assert.match(chooser, /ranking match/);
 });
 
 test("chooser uses accessible compact rows instead of a clipped action table", () => {
