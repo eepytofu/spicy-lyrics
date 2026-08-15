@@ -224,7 +224,10 @@ function collectLyricsText(lyrics: any): string[] {
   if (lyrics?.Type === "Static") {
     for (const line of lyrics.Lines || []) parts.push(line.Text || "");
   } else if (lyrics?.Type === "Line") {
-    for (const line of lyrics.Content || []) parts.push(line.Text || "");
+    for (const line of lyrics.Content || []) {
+      parts.push(line.Text || "");
+      for (const background of line.Background || []) parts.push(background.Text || "");
+    }
   } else if (lyrics?.Type === "Syllable") {
     for (const group of lyrics.Content || []) {
       for (const syl of group.Lead?.Syllables || []) parts.push(syl.Text || "");

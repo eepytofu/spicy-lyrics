@@ -93,6 +93,21 @@ test("provider-info rows are excluded from Han conversion and translation inputs
   assert.equal(timed.Content[0].Background[0].Syllables[0].Text, "背景繁體");
 });
 
+test("line-timed backgrounds remain translation inputs", () => {
+  const lyrics = {
+    Type: "Line",
+    Content: [{
+      Text: "lead",
+      Background: [{ Text: "background" }],
+    }],
+  };
+
+  assert.deepEqual(
+    collectTranslationLineRefs(lyrics).map(({ sourceText }) => sourceText),
+    ["lead", "background"],
+  );
+});
+
 test("processing skips provider-info rows before cleanup or readings", () => {
   const source = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
   assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(isProviderInfoEntry\(line\)\) continue;\s*const textProjection = projectLyricsText/u);
@@ -117,7 +132,7 @@ test("all native renderers filter complete marked rows and keep source indices",
 test("copy filtering covers Static, Line, and Syllable shapes before formatting", () => {
   const source = readSource("../src/utils/Lyrics/CopyLyrics.ts");
   assert.match(source, /lyrics\.Type === "Static"[\s\S]*?!shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
-  assert.match(source, /lyrics\.Type === "Line"[\s\S]*?!shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
+  assert.match(source, /lyrics\.Type === "Line"[\s\S]*?shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
   assert.match(source, /lyrics\.Type === "Syllable"[\s\S]*?shouldHideProviderInfoEntry\(group\?\.Lead, hideProviderInfo\)/u);
   assert.match(source, /hideProviderInfo = \$hideEmbeddedProviderInfo\.get\(\)/u);
 });

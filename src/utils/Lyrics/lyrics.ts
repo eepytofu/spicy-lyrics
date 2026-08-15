@@ -128,6 +128,7 @@ export interface LyricsLine {
   HasExtraSidecars?: boolean;
   Status?: string;
   DotLine?: boolean;
+  BGLine?: boolean;
   Syllables?: {
     Lead: SyllableLead[];
   };

@@ -65,14 +65,29 @@ function linesFromLyrics(lyrics: any, hideProviderInfo: boolean): CopyLine[] {
   }
 
   if (lyrics.Type === "Line") {
-    return (lyrics.Content ?? [])
-      .filter((line: any) => !shouldHideProviderInfoEntry(line, hideProviderInfo))
-      .map((line: any) => ({
-        text: cleanText(line?.Text),
-        startTime: line?.StartTime,
-        translatedText: cleanText(preferredCopyTranslation(line)),
-      }))
-      .filter((line: CopyLine) => line.text);
+    const out: CopyLine[] = [];
+    for (const line of lyrics.Content ?? []) {
+      if (shouldHideProviderInfoEntry(line, hideProviderInfo)) continue;
+      const text = cleanText(line?.Text);
+      if (text) {
+        out.push({
+          text,
+          startTime: line?.StartTime,
+          translatedText: cleanText(preferredCopyTranslation(line)),
+        });
+      }
+      for (const background of line?.Background ?? []) {
+        const backgroundText = cleanText(background?.Text);
+        if (backgroundText) {
+          out.push({
+            text: backgroundText,
+            startTime: background?.StartTime,
+            translatedText: cleanText(preferredCopyTranslation(background)),
+          });
+        }
+      }
+    }
+    return out;
   }
 
   if (lyrics.Type === "Syllable") {

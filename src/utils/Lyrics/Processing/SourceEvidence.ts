@@ -1,6 +1,6 @@
 import { isProviderInfoKind, providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
 
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 4;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 5;
 
 export type SourceTimingOwner = {
   readonly id: string;
@@ -94,7 +94,7 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
       line?.StartTime,
       line?.EndTime,
     );
-    return [{
+    const evidence: SourceEvidenceLine[] = [{
       id: `lead:${index}`,
       providerText: owner.providerText,
       ...(providerTranslation(lead) !== undefined
@@ -106,6 +106,29 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
       role: "lead" as const,
       timingOwners: [owner],
     }];
+    for (const [backgroundIndex, background] of (line?.Background || []).entries()) {
+      const backgroundOwner = textTimingOwner(
+        `background:${index}:${backgroundIndex}:span:0`,
+        background,
+        background?.StartTime,
+        background?.EndTime,
+      );
+      evidence.push({
+        id: `background:${index}:${backgroundIndex}`,
+        providerText: backgroundOwner.providerText,
+        ...(providerTranslation(background) !== undefined
+          ? { providerTranslation: providerTranslation(background) }
+          : {}),
+        ...(providerInfoKind(background)
+          ? { providerInfoKind: providerInfoKind(background) }
+          : {}),
+        startTime: backgroundOwner.startTime,
+        endTime: backgroundOwner.endTime,
+        role: "background",
+        timingOwners: [backgroundOwner],
+      });
+    }
+    return evidence;
   });
 }
 

@@ -110,6 +110,31 @@ test("lines without itunes:key are still read", () => {
   assert.equal(document.Content[1].OppositeAligned, true);
 });
 
+test("mixed keyed and unkeyed lines keep every line without key collisions", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><body><div><p begin="1s" end="2s" itunes:key="spicy-local-1">first</p><p begin="2s" end="3s">second</p><p begin="3s" end="4s" itunes:key="L3">third</p></div></body></tt>`);
+  assert.deepEqual(document.Content.map((line: any) => line.Text), ["first", "second", "third"]);
+});
+
+test("arbitrary agent identifiers retain stable alternating alignment", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><head><metadata><ttm:agent type="person" xml:id="alice"/><ttm:agent type="person" xml:id="bob"/><ttm:agent type="group" xml:id="choir"/></metadata></head><body><div><p begin="1s" end="2s" itunes:key="L1" ttm:agent="alice">one</p><p begin="2s" end="3s" itunes:key="L2" ttm:agent="bob">two</p><p begin="3s" end="4s" itunes:key="L3" ttm:agent="bob">three</p><p begin="4s" end="5s" itunes:key="L4" ttm:agent="choir">four</p></div></body></tt>`);
+  assert.deepEqual(document.Content.map((line: any) => line.OppositeAligned), [false, true, true, false]);
+});
+
+test("an agent typed other starts on the opposite side", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><head><metadata><ttm:agent type="other" xml:id="aside"/><ttm:agent type="person" xml:id="lead"/></metadata></head><body><div><p begin="1s" end="2s" itunes:key="L1" ttm:agent="aside">one</p><p begin="2s" end="3s" itunes:key="L2" ttm:agent="lead">two</p></div></body></tt>`);
+  assert.deepEqual(document.Content.map((line: any) => line.OppositeAligned), [true, false]);
+});
+
+test("line-timed background vocals retain their native line tier", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><body><div><p begin="1s" end="4s" itunes:key="L1">lead<span ttm:role="x-bg" begin="2s" end="3s">background<span ttm:role="x-translation" xml:lang="en">translated</span></span></p></div></body></tt>`);
+  assert.equal(document.Type, "Line");
+  assert.equal(document.Content[0].Text, "lead");
+  assert.equal(document.Content[0].Background[0].Text, "background");
+  assert.equal(document.Content[0].Background[0].StartTime, 2);
+  assert.equal(document.Content[0].Background[0].EndTime, 3);
+  assert.equal(document.Content[0].Background[0].ProviderTranslatedText, "translated");
+});
+
 test("a namespace-resetting div is still read", () => {
   const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"><body dur="00:03.000"><div xmlns="" begin="00:01.000" end="00:03.000"><p begin="00:01.000" end="00:03.000" ttm:agent="v1" itunes:key="L1"><span begin="00:01.000" end="00:03.000">歌</span></p></div></body></tt>`);
   assert.ok(document);

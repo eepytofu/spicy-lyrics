@@ -171,8 +171,15 @@ test("converts primary lyrics without touching translations or timing", () => {
 });
 
 test("respects the Chinese line predicate", () => {
-  const lyrics = { Type: "Line", Content: [{ Text: "\u6f22\u8a9e" }, { Text: "\u541b\u306e\u58f0" }] };
+  const lyrics = {
+    Type: "Line",
+    Content: [
+      { Text: "\u6f22\u8a9e", Background: [{ Text: "\u98a8\u88e1" }] },
+      { Text: "\u541b\u306e\u58f0" },
+    ],
+  };
   convertChineseLyricsText(lyrics, "simplified", (text) => !text.includes("\u306e"));
   assert.equal(lyrics.Content[0].Text, "\u6c49\u8bed");
+  assert.equal(lyrics.Content[0].Background[0].Text, "\u98ce\u91cc");
   assert.equal(lyrics.Content[1].Text, "\u541b\u306e\u58f0");
 });

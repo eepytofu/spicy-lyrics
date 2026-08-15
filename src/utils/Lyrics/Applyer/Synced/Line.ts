@@ -17,7 +17,7 @@ import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
 import { indexedVisibleLyricsEntries, isProviderInfoEntry } from "../../ProviderInfo.ts";
 
 // Define the data structure for lyrics
-type LyricsLineData = TimedTextEntry;
+type LyricsLineData = TimedTextEntry & { Background?: TimedTextEntry[] };
 
 interface LyricsData {
   Type: string;
@@ -63,7 +63,9 @@ export function ApplyLineLyrics(
     $hideEmbeddedProviderInfo.get(),
   );
   const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
-  const hasRtlLines = visibleLines.some(({ entry }) => isRtl(entry.Text));
+  const hasRtlLines = visibleLines.some(({ entry }) =>
+    isRtl(entry.Text) || entry.Background?.some((background) => isRtl(background.Text))
+  );
   const applyContext = beginLyricsApply("Line", hasOppositeAligned, hasRtlLines);
   if (!applyContext) return;
   const { lineElements } = applyContext;
@@ -83,7 +85,9 @@ export function ApplyLineLyrics(
   const fixHanGlyphVariants = $fixHanGlyphVariants.get();
 
   const isJapaneseLyrics = (data as any).Language === "jpn"
-    || visibleLines.some(({ entry }) => isJapaneseEntry(entry));
+    || visibleLines.some(({ entry }) =>
+      isJapaneseEntry(entry) || entry.Background?.some((background) => isJapaneseEntry(background))
+    );
 
   visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
     const providerInfo = isProviderInfoEntry(line);
@@ -147,6 +151,43 @@ export function ApplyLineLyrics(
     }
 
     lineElements.push(lineElem);
+
+    line.Background?.forEach((background, backgroundIndex) => {
+      const backgroundElement = document.createElement("div");
+      backgroundElement.classList.add("line", "bg-line");
+      backgroundElement.dataset.spicyLyricsLineId = `background:${sourceIndex}:${backgroundIndex}`;
+      backgroundElement.dataset.spicyLyricsOriginalText = background.Text || "";
+      const backgroundContext = createHanLanguageContext(
+        data,
+        background.Text,
+        fixHanGlyphVariants,
+        background.ReadingPrimaryScript,
+      );
+      applyHanLanguageTag(backgroundElement, backgroundContext);
+      const backgroundOptions = {
+        ...renderOptions,
+        hanLanguageContext: backgroundContext,
+      };
+      if (renderFullLineBaseTextWithReadings(backgroundElement, background, backgroundOptions)) {
+        forceStackedLine(backgroundElement, line.OppositeAligned);
+      }
+      const hasBackgroundExtras = appendLineExtras(
+        backgroundElement,
+        background,
+        backgroundOptions,
+      );
+      if (isRtl(background.Text)) backgroundElement.classList.add("rtl");
+      if (line.OppositeAligned) backgroundElement.classList.add("OppositeAligned");
+      LyricsObject.Types.Line.Lines.push({
+        HTMLElement: backgroundElement,
+        StartTime: ConvertTime(background.StartTime),
+        EndTime: ConvertTime(background.EndTime),
+        TotalTime: ConvertTime(background.EndTime) - ConvertTime(background.StartTime),
+        HasExtraSidecars: hasBackgroundExtras,
+        BGLine: true,
+      });
+      lineElements.push(backgroundElement);
+    });
     if (arr[index + 1] && arr[index + 1].entry.StartTime - line.EndTime >= getLyricsBetweenShow()) {
       appendInterludeLine(
         lineElements,

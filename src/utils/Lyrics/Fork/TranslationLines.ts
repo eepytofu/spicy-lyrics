@@ -38,6 +38,13 @@ export function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
       if (group?.Text) {
         refs.push({ obj: group, sourceText: group.Text, field: "TranslatedText" });
       }
+      for (const background of group?.Background || []) {
+        refs.push({
+          obj: background,
+          sourceText: background?.Text || "",
+          field: "TranslatedText",
+        });
+      }
     }
   } else if (lyrics?.Type === "Syllable") {
     for (const group of lyrics.Content || []) {

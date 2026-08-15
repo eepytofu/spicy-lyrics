@@ -5,7 +5,10 @@ function lyricLineTexts(lyrics: any): string[] {
     return (lyrics.Lines || []).map((line: any) => line.Text || "");
   }
   if (lyrics?.Type === "Line") {
-    return (lyrics.Content || []).map((line: any) => line.Text || "");
+    return (lyrics.Content || []).flatMap((line: any) => [
+      line.Text || "",
+      ...(line.Background || []).map((background: any) => background.Text || ""),
+    ]);
   }
   if (lyrics?.Type === "Syllable") {
     return (lyrics.Content || []).flatMap((group: any) => [

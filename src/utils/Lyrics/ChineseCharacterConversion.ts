@@ -133,7 +133,10 @@ export function convertChineseLyricsText(
   if (lyrics?.Type === "Static") {
     for (const line of lyrics.Lines || []) convertTextEntry(line);
   } else if (lyrics?.Type === "Line") {
-    for (const line of lyrics.Content || []) convertTextEntry(line);
+    for (const line of lyrics.Content || []) {
+      convertTextEntry(line);
+      for (const background of line.Background || []) convertTextEntry(background);
+    }
   } else if (lyrics?.Type === "Syllable") {
     for (const vocal of lyrics.Content || []) {
       if (isProviderInfoEntry(vocal?.Lead)) continue;

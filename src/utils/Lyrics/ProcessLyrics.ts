@@ -277,6 +277,12 @@ const gatherText = (
         entries.push({ target: vocalGroup, line: vocalGroup, lineText, textProjection });
         textLines.push(lineText);
       }
+      for (const background of vocalGroup.Background || []) {
+        const textProjection = projectLyricsText(background);
+        const lineText = textProjection.analysisText;
+        entries.push({ target: background, line: background, lineText, textProjection });
+        bgTextLines.push(lineText);
+      }
     }
   } else if (lyrics.Type === "Syllable") {
     for (const vocalGroup of lyrics.Content) {
@@ -370,7 +376,13 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
           !isProviderInfoEntry(line) && (
             hasTransliteration(line) ||
             typeof line.RomanizedText === "string" ||
-            line.ReadingRenderPlan != null
+            line.ReadingRenderPlan != null ||
+            line.Background?.some(
+              (background: any) =>
+                hasTransliteration(background) ||
+                typeof background.RomanizedText === "string" ||
+                background.ReadingRenderPlan != null
+            ) === true
           )
       ) === true
     );

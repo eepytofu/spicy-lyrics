@@ -79,6 +79,39 @@ test("syllable evidence preserves fragments, timing owners, and background roles
   ]);
 });
 
+test("line evidence preserves background text, translation, timing, and role", () => {
+  const lyrics = {
+    Type: "Line",
+    Content: [{
+      Text: "lead",
+      StartTime: 1,
+      EndTime: 4,
+      Background: [{
+        Text: "  background  ",
+        StartTime: 2,
+        EndTime: 3,
+        ProviderTranslatedText: "translation",
+      }],
+    }],
+  };
+
+  const evidence = ensureSourceEvidence(lyrics)!;
+  assert.deepEqual(evidence.lines[1], {
+    id: "background:0:0",
+    providerText: "  background  ",
+    providerTranslation: "translation",
+    startTime: 2,
+    endTime: 3,
+    role: "background",
+    timingOwners: [{
+      id: "background:0:0:span:0",
+      providerText: "  background  ",
+      startTime: 2,
+      endTime: 3,
+    }],
+  });
+});
+
 test("rehydrated cache evidence is frozen again without recapturing display text", () => {
   const cachedEvidence = {
     schemaVersion: SOURCE_EVIDENCE_SCHEMA_VERSION,

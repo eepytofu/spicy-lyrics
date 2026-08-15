@@ -57,3 +57,10 @@ test("background processing has one renderer listener", () => {
   assert.doesNotMatch(appSource, /addEventListener\("spicy-lyrics:processing-ready"/u);
   assert.match(pageSource, /addEventListener\("spicy-lyrics:processing-ready"/u);
 });
+
+test("line-timed background vocals are rendered without changing lyric tier", () => {
+  const source = readSource("../src/utils/Lyrics/Applyer/Synced/Line.ts");
+  assert.match(source, /line\.Background\?\.forEach/u);
+  assert.match(source, /classList\.add\("line", "bg-line"\)/u);
+  assert.match(source, /BGLine: true/u);
+});

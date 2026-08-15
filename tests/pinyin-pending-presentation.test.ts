@@ -35,3 +35,15 @@ test("ordinary Japanese pending lyrics do not reserve the Pinyin Above row", () 
 
   assert.equal(isChineseDocumentPendingReading(lyrics), false);
 });
+
+test("line-timed backgrounds contribute to pending document routing", () => {
+  const lyrics = {
+    Type: "Line",
+    Content: [{
+      Text: "la",
+      Background: [{ Text: "无大碍 没伤到脑袋 习武十载" }],
+    }],
+  };
+
+  assert.equal(isChineseDocumentPendingReading(lyrics), true);
+});

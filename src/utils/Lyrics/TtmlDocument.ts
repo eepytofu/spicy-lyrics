@@ -25,6 +25,20 @@ type NativeGroup = {
   TransliteratedText?: string;
 };
 
+type NativeLine = {
+  Type: "Vocal";
+  Text: string;
+  StartTime: number;
+  EndTime: number;
+  OppositeAligned?: boolean;
+  Background?: NativeLine[];
+  ProviderTranslatedText?: string;
+  ProviderTranslationLanguage?: string;
+  ProviderRomanizedText?: string;
+  RomanizedText?: string;
+  TransliteratedText?: string;
+};
+
 const seconds = (ms: number): number => ms / 1000;
 
 function preferred(contents: readonly SubLyricContent[] | undefined): SubLyricContent | undefined {
@@ -69,39 +83,64 @@ function toGroup(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): N
   return group;
 }
 
-function syllableContent(lines: readonly LyricLine[]): Record<string, unknown>[] {
+function oppositeAlignment(lines: readonly LyricLine[], agents: Record<string, { type?: string }> | undefined): boolean[] {
+  let previousPerson: string | undefined;
+  let previousOpposite = false;
+  return lines.map((line) => {
+    const agentId = line.agentId || "v1";
+    const agentType = agents?.[agentId]?.type;
+    if (agentType === "group") return false;
+    if (previousPerson === undefined) {
+      previousPerson = agentId;
+      previousOpposite = agentType === "other";
+    } else if (previousPerson !== agentId) {
+      previousPerson = agentId;
+      previousOpposite = !previousOpposite;
+    }
+    return previousOpposite;
+  });
+}
+
+function syllableContent(lines: readonly LyricLine[], alignments: readonly boolean[]): Record<string, unknown>[] {
   const content: Record<string, unknown>[] = [];
-  for (const line of lines) {
+  lines.forEach((line, index) => {
     const Lead = toGroup(line);
-    if (!Lead) continue;
+    if (!Lead) return;
     const entry: Record<string, unknown> = {
       Type: "Vocal",
-      // AMLL uses agent v1 for ordinary lines and v2 for the duet side.
-      OppositeAligned: line.agentId === "v2",
+      OppositeAligned: alignments[index],
       Lead,
     };
     const background = line.backgroundVocal ? toGroup(line.backgroundVocal) : undefined;
     if (background) entry.Background = [background];
     content.push(entry);
-  }
+  });
   return content;
 }
 
-function lineContent(lines: readonly LyricLine[]): Record<string, unknown>[] {
-  const content: Record<string, unknown>[] = [];
-  for (const line of lines) {
-    const Text = line.text?.trim() ? line.text : (line.words ?? []).map((word) => word.text).join("");
-    if (!Text.trim()) continue;
-    const entry: Record<string, unknown> = {
-      Type: "Vocal",
-      Text,
-      StartTime: seconds(line.startTime),
-      EndTime: seconds(line.endTime),
-      OppositeAligned: line.agentId === "v2",
-    };
-    applySidecars(entry, line);
+function toLine(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): NativeLine | undefined {
+  const Text = line.text?.trim() ? line.text : (line.words ?? []).map((word) => word.text).join("");
+  if (!Text.trim()) return undefined;
+  const entry: NativeLine = {
+    Type: "Vocal",
+    Text,
+    StartTime: seconds(line.startTime),
+    EndTime: seconds(line.endTime),
+  };
+  applySidecars(entry as unknown as Record<string, unknown>, line);
+  return entry;
+}
+
+function lineContent(lines: readonly LyricLine[], alignments: readonly boolean[]): NativeLine[] {
+  const content: NativeLine[] = [];
+  lines.forEach((line, index) => {
+    const entry = toLine(line);
+    if (!entry) return;
+    entry.OppositeAligned = alignments[index];
+    const background = line.backgroundVocal ? toLine(line.backgroundVocal) : undefined;
+    if (background) entry.Background = [background];
     content.push(entry);
-  }
+  });
   return content;
 }
 
@@ -117,17 +156,27 @@ function carries(entries: Record<string, unknown>[], field: string): boolean {
 
 const ITUNES_NS = 'xmlns:itunes="http://music.apple.com/lyric-ttml-internal"';
 
-/**
- * AMLL's parser drops any `<p>` without `itunes:key`, which hand-authored TTML often
- * omits, so supply it rather than repeat the text loss this replaces.
- */
 function withLineKeys(ttml: string): string {
-  let index = 0;
+  const used = new Set(
+    [...ttml.matchAll(/\situnes:key\s*=\s*(["'])(.*?)\1/giu)].map((match) => match[2]),
+  );
+  let index = 1;
+  const nextKey = (): string => {
+    let key = `spicy-local-${index++}`;
+    while (used.has(key)) key = `spicy-local-${index++}`;
+    used.add(key);
+    return key;
+  };
   const keyed = ttml.replace(/<p(\s[^>]*)?>/gu, (tag, attributes = "") => {
-    index += 1;
-    return /\situnes:key\s*=/u.test(tag) ? tag : `<p${attributes} itunes:key="L${index}">`;
+    return /\situnes:key\s*=/u.test(tag)
+      ? tag
+      : `<p${attributes} itunes:key="${nextKey()}">`;
   });
   return /xmlns:itunes\s*=/u.test(keyed) ? keyed : keyed.replace(/<tt(\s|>)/u, `<tt ${ITUNES_NS}$1`);
+}
+
+function hasUnkeyedLines(ttml: string): boolean {
+  return [...ttml.matchAll(/<p(?:\s[^>]*)?>/gu)].some((match) => !/\situnes:key\s*=/u.test(match[0]));
 }
 
 /**
@@ -148,15 +197,16 @@ export function parseTtmlDocument(
     }
   };
 
-  let result = read(ttml);
-  // Only pay for the repair when a document that clearly holds lines yielded none.
-  if (!result?.lines.length && /<p[\s>]/u.test(ttml)) result = read(withLineKeys(ttml)) ?? result;
+  const result = read(hasUnkeyedLines(ttml) ? withLineKeys(ttml) : ttml);
   if (!result) return null;
 
   const lines = result.lines ?? [];
+  const alignments = oppositeAlignment(lines, result.metadata.agents);
   const isLineTimed = result.metadata.timingMode === "Line"
     || lines.every((line) => !(line.words ?? []).length);
-  const Content = isLineTimed ? lineContent(lines) : syllableContent(lines);
+  const Content = isLineTimed
+    ? lineContent(lines, alignments)
+    : syllableContent(lines, alignments);
   if (!Content.length) return null;
 
   const includesTranslation = carries(Content, "ProviderTranslatedText");
