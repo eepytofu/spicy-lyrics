@@ -4,7 +4,7 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 <p align="center">
   <img src="assets/乐鸣东方.avif" alt="TTML lyrics demo for 乐鸣东方" width="45%">
-  <img src="assets/一梦红尘.avif" alt="Line-synced lyrics demo for 一梦红尘" width="45%">
+  <img src="assets/一梦红尘.avif" alt="Line lyrics demo for 一梦红尘" width="45%">
 </p>
 
 ## Fork stuff
@@ -62,7 +62,7 @@ Custom server support is still experimental and hasn't been fully tested end to 
 <configured-base-url>/<spotifyTrackId>?title=...&artist=...&artist_name=...&album=...&duration=...
 ```
 
-The response can be native Spicy Lyrics JSON, TTML, LRC, or plain text. Native JSON can preserve syllable timing, translations, duet roles, and background vocals. HTTPS is required except for localhost development.
+The response can be native Spicy Lyrics JSON, TTML, LRC, or plain text. Native JSON can preserve Syllable timing, translations, duet roles, and background vocals. HTTPS is required except for localhost development.
 
 </details>
 
