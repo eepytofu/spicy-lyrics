@@ -65,7 +65,10 @@ test("manual selection lifetime is a persisted Sources setting", () => {
   assert.match(sourcesSection, /label="Manual Selection Lifetime"/);
   assert.match(sourcesSection, /options=\{\["temporary", "persistent"\]\}/);
   assert.match(sourcesSection, /labels=\{\["This session", "Persistent"\]\}/);
-  assert.match(sourcesSection, /\$manualLyricsSelectionLifetime\.set/);
+  assert.match(sourcesSection, /resetLyricsCandidateOverrides\(\)/);
+  assert.match(sourcesSection, /Previous manual selections reset to Auto Match/);
+  assert.match(sourcesSection, /returnToAutomaticLyrics\(currentUri\)/);
+  assert.match(sourcesSection, /\$manualLyricsSelectionLifetime\.set\(next\)/);
   assert.doesNotMatch(sourcesSection, /commitSourceSettingsChange/);
 });
 

@@ -1,4 +1,8 @@
-import { clearManualLyricsSelection, getManualLyricsSelection } from "./ManualLyricsSelection.ts";
+import {
+  clearAllManualLyricsSelections,
+  clearManualLyricsSelection,
+  getManualLyricsSelection,
+} from "./ManualLyricsSelection.ts";
 import type { CompleteLyricsSearchOverrides } from "./ManualLyricsSearch.ts";
 import { isLyricsRevisionCacheCompatible, LyricsRevisionStore } from "./LyricsRevisionCache.ts";
 
@@ -39,6 +43,7 @@ export type LyricsOverrideStorage = {
   get(trackUri: string): Promise<unknown>;
   put(trackUri: string, preference: LyricsOverridePreference): Promise<void>;
   remove(trackUri: string): Promise<void>;
+  removeCandidates(): Promise<string[]>;
 };
 
 const databaseStorage: LyricsOverrideStorage = {
@@ -53,6 +58,25 @@ const databaseStorage: LyricsOverrideStorage = {
   async remove(trackUri) {
     const { dbPromise, ObjectStores } = await import("../db.ts");
     await (await dbPromise).delete(ObjectStores.LyricsOverrides, trackUri);
+  },
+  async removeCandidates() {
+    const { dbPromise, ObjectStores } = await import("../db.ts");
+    const database = await dbPromise;
+    const transaction = database.transaction(ObjectStores.LyricsOverrides, "readwrite");
+    const removed: string[] = [];
+    let cursor = await transaction.store.openCursor();
+    while (cursor) {
+      if (
+        typeof cursor.key === "string" &&
+        normalizeLyricsOverridePreference(cursor.value, cursor.key)?.kind === "candidate"
+      ) {
+        removed.push(cursor.key);
+        await cursor.delete();
+      }
+      cursor = await cursor.continue();
+    }
+    await transaction.done;
+    return removed;
   },
 };
 
@@ -191,6 +215,19 @@ export class LyricsOverridePreferenceController {
     this.loaded.clear();
   }
 
+  async resetCandidates(): Promise<string[]> {
+    await Promise.all(this.writes.values());
+    const affected = new Set(await this.storage.removeCandidates());
+    for (const [trackUri, preference] of this.session) {
+      if (preference.kind === "candidate") affected.add(trackUri);
+    }
+    for (const trackUri of affected) {
+      this.session.delete(trackUri);
+      this.loaded.delete(trackUri);
+    }
+    return [...affected];
+  }
+
   isCurrent(trackUri: string, preferenceId: string): boolean {
     return this.session.get(trackUri)?.preferenceId === preferenceId;
   }
@@ -259,6 +296,13 @@ export function isCurrentLyricsOverridePreference(trackUri: string, preferenceId
 
 export function clearLyricsOverrideSessionIfCurrent(trackUri: string, preferenceId: string): void {
   preferences.clearIfCurrent(trackUri, preferenceId);
+}
+
+export async function resetLyricsCandidateOverrides(): Promise<string[]> {
+  const affected = await preferences.resetCandidates();
+  await clearAllManualLyricsSelections();
+  for (const trackUri of affected) legacyMigrations.delete(trackUri);
+  return affected;
 }
 
 async function migrateLegacyPreference(trackUri: string): Promise<LyricsOverridePreference | null> {

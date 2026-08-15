@@ -25,6 +25,15 @@ function memoryStorage() {
     async remove(key) {
       values.delete(key);
     },
+    async removeCandidates() {
+      const removed: string[] = [];
+      for (const [key, preference] of values) {
+        if (preference.kind !== "candidate") continue;
+        removed.push(key);
+        values.delete(key);
+      }
+      return removed;
+    },
   };
   return { storage, values };
 }
@@ -71,6 +80,36 @@ test("temporary candidate returns to automatic when a new session has no saved o
 
   const nextSession = new LyricsOverridePreferenceController(storage);
   assert.equal(await nextSession.get(uri), null);
+});
+
+test("resetting candidates removes durable and session choices without touching local or automatic overrides", async () => {
+  const localUri = "spotify:track:local-fixture";
+  const automaticUri = "spotify:track:automatic-fixture";
+  const { storage, values } = memoryStorage();
+  const controller = new LyricsOverridePreferenceController(storage);
+  await controller.set(
+    candidateLyricsOverride(uri, "persistent", {
+      revisionId: "saved-candidate",
+      automaticRevisionId: "automatic-revision",
+      snapshot: { uri, Type: "Line" },
+    })
+  );
+  await controller.set(localLyricsOverride(localUri, "persistent", "local raw"));
+  const automatic = automaticLyricsOverride(automaticUri);
+  await controller.set(automatic);
+  controller.setSession(
+    candidateLyricsOverride(automaticUri, "temporary", {
+      revisionId: "session-candidate",
+      automaticRevisionId: "automatic-revision",
+      snapshot: { uri: automaticUri, Type: "Syllable" },
+    })
+  );
+
+  assert.deepEqual(new Set(await controller.resetCandidates()), new Set([uri, automaticUri]));
+  assert.equal(values.has(uri), false);
+  assert.equal((await controller.get(uri))?.kind, undefined);
+  assert.equal((await controller.get(localUri))?.kind, "local");
+  assert.equal((await controller.get(automaticUri))?.preferenceId, automatic.preferenceId);
 });
 
 test("persistent local preference keeps its raw source outside the preference row", async () => {
