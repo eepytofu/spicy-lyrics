@@ -10,7 +10,22 @@ export type LyricsMatchMetadata = {
   durationMs?: number;
   confidence?: number;
   score?: number;
+  coherent?: boolean;
+  evidence?: {
+    title?: number;
+    artists?: number | null;
+    album?: number | null;
+    albumArtists?: number | null;
+    duration?: number | null;
+    versionConflict?: boolean;
+  };
   method?: string;
+  discovery?: {
+    kind: "netease-native-title";
+    provider: "netease";
+    originalTitle: string;
+    queryTitle: string;
+  };
 };
 
 export type LyricsCandidate = {

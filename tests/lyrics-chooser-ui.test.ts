@@ -37,8 +37,16 @@ test("chooser auto-loads candidate sources and keeps manual search playback-scop
   assert.doesNotMatch(chooser, /const resultFallback = \{[\s\S]*?title: title\.trim\(\)/);
   assert.match(chooser, />Automatic</);
   assert.match(externalSources, /searchLyricsCandidates/);
+  assert.match(externalSources, /\$lyricsSelectionMode\.get\(\) !== "strict"/);
+  assert.match(externalSources, /normalizedOverrides,\s*false,/);
   assert.match(externalSources, /trackInfo\(uri, overrides\)/);
   assert.doesNotMatch(sources, /Last Selection/);
+});
+
+test("chooser diagnostics disclose NetEase native-title discovery", () => {
+  const chooser = readFileSync("src/components/ReactComponents/LyricsChooser.tsx", "utf8");
+  assert.match(chooser, /netease-native-title/);
+  assert.match(chooser, /via NetEase native title/);
 });
 
 test("chooser uses accessible compact rows instead of a clipped action table", () => {

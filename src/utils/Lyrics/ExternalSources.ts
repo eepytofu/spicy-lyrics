@@ -47,6 +47,11 @@ import {
   normalizeLyricsSearchOverrides,
   type LyricsSearchOverrides,
 } from "./ManualLyricsSearch.ts";
+import {
+  acquireWithNativeTitleEnrichment,
+  nativeTitleRetryInfo,
+  type NativeTitleHint,
+} from "./LyricsDiscoveryEnrichment.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -452,26 +457,42 @@ async function acquireEntries(
   mode: "strict" | "concurrent",
   parentSignal?: AbortSignal,
   overrides: LyricsSearchOverrides = {},
+  nativeTitleEnrichment = false,
 ): Promise<AcquiredProviderEntries | null> {
   if (parentSignal?.aborted) return null;
   const info = trackInfo(uri, overrides);
   if (!info) return null;
   let sharedSpicyRequest: ReturnType<typeof spicyRaw> | undefined;
-  const context: ProviderAdapterContext = {
-    info,
-    getSpicyRequest: () => {
-      sharedSpicyRequest ??= spicyRaw(info.id);
-      return sharedSpicyRequest;
-    },
+  const getSpicyRequest = () => {
+    sharedSpicyRequest ??= spicyRaw(info.id);
+    return sharedSpicyRequest;
   };
-  const records = await acquireProviderOutcomes(
-    order,
-    mode,
-    (provider) => runProviderAcquisition(
+  const acquire = (
+    provider: LyricsSourceProviderId,
+    hint?: NativeTitleHint,
+  ) => {
+    const requestInfo = hint ? nativeTitleRetryInfo(info, hint) : info;
+    const context: ProviderAdapterContext = {
+      info: requestInfo,
+      getSpicyRequest,
+    };
+    return runProviderAcquisition(
       (signal) => providerAdapter(provider).acquire(context, signal),
       parentSignal,
-    ),
-  );
+    );
+  };
+  const records = nativeTitleEnrichment && mode === "concurrent"
+    ? await acquireWithNativeTitleEnrichment(
+        order,
+        info.title,
+        acquire,
+        parentSignal,
+      )
+    : await acquireProviderOutcomes(
+        order,
+        mode,
+        (provider) => acquire(provider),
+      );
   for (const { provider, outcome } of records) reportProviderFailure(provider, outcome);
   return {
     durationMs: info.durationMs,
@@ -577,7 +598,14 @@ export async function loadLyricsCandidates(
     activeRevisionId?: string | null;
   },
 ): Promise<LyricsCandidateSession | null> {
-  const acquired = await acquireEntries(uri, order, "concurrent", parentSignal);
+  const acquired = await acquireEntries(
+    uri,
+    order,
+    "concurrent",
+    parentSignal,
+    {},
+    $lyricsSelectionMode.get() !== "strict",
+  );
   if (!acquired || parentSignal?.aborted) return null;
   const selected = selectProviderEntry(
     acquired.entries,
@@ -609,6 +637,7 @@ export async function searchLyricsCandidates(
     "concurrent",
     parentSignal,
     normalizedOverrides,
+    false,
   );
   if (!acquired || parentSignal?.aborted) return null;
   const selected = selectProviderEntry(
@@ -635,6 +664,8 @@ export async function fetchLyricsFromProviders(
     order,
     mode === "strict" ? "strict" : "concurrent",
     parentSignal,
+    {},
+    mode !== "strict",
   );
   if (!acquired || parentSignal?.aborted) return null;
   if (acquired.records.some(({ outcome }) => outcome.kind === "queued")) {

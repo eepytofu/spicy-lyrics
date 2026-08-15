@@ -14,7 +14,7 @@ import {
   type LyricsSourceProviderId,
 } from "./LyricsSourcePreferences.ts";
 
-export const LYRICS_SOURCE_CACHE_VERSION = 21;
+export const LYRICS_SOURCE_CACHE_VERSION = 22;
 
 export function getActiveLyricsSourceOrder(): LyricsSourceProviderId[] {
   const custom = parseCustomLyricsServers($customLyricsServers.get());

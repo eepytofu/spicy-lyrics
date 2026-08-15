@@ -148,6 +148,12 @@ function confidenceLabel(record: LyricsCandidateRecord): string {
   return `${confidence[0].toUpperCase()}${confidence.slice(1)} confidence`;
 }
 
+function discoveryLabel(record: LyricsCandidateRecord): string | null {
+  return record.result.match?.discovery?.kind === "netease-native-title"
+    ? "via NetEase native title"
+    : null;
+}
+
 function LoadingRows() {
   return (
     <div className="sl-chooser-skeleton-list" aria-hidden="true">
@@ -520,14 +526,18 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                 <section>
                   <strong>Candidate scores</strong>
                   <ul>
-                    {displayRecords.map((record) => (
-                      <li key={record.revision.id}>
-                        <span>{sourceLabel(record.result.lyrics)}</span>
-                        <span>
-                          score {record.assessment.selectionScore} · match {record.assessment.trackMatchScore} · timing {record.assessment.structuralTimingScore}
-                        </span>
-                      </li>
-                    ))}
+                    {displayRecords.map((record) => {
+                      const discovery = discoveryLabel(record);
+                      return (
+                        <li key={record.revision.id}>
+                          <span>{sourceLabel(record.result.lyrics)}</span>
+                          <span>
+                            score {record.assessment.selectionScore} · match {record.assessment.trackMatchScore} · timing {record.assessment.structuralTimingScore}
+                            {discovery ? ` · ${discovery}` : ""}
+                          </span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               )}
