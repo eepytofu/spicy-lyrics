@@ -111,6 +111,7 @@ export type JapaneseTimedTextSpan = {
 };
 
 export type JapaneseLineTextMap = {
+  sourceText: string;
   lineText: string;
   spans: JapaneseTimedTextSpan[];
 };

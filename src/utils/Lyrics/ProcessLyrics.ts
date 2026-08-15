@@ -88,11 +88,16 @@ import {
 import type { AboveReadingSegment, ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 import { isProviderInfoEntry } from "./ProviderInfo.ts";
+import {
+  buildTextAnalysisProjection,
+  mapAnalysisCodePointRangeToDisplay,
+  type TextAnalysisProjection,
+} from "./Processing/TextAnalysisProjection.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v71: rebuild Han routes after completing the shared Chinese/Japanese form audit.
-export const LYRICS_PROCESSING_VERSION = 71;
+// v72: keep compatibility normalization in analysis without rewriting display text.
+export const LYRICS_PROCESSING_VERSION = 72;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -202,24 +207,34 @@ const romanizeGreekText = (text: string): string => {
   return result != null ? result : text;
 };
 
-type RomanizeEntry = { target: any; line: any; lineText: string };
-
-const normalizeLyricsText = (target: any): string => {
-  if (typeof target?.Text !== "string") return "";
-  target.Text = cleanInvisibles(target.Text.normalize("NFKC"));
-  return target.Text;
+type RomanizeEntry = {
+  target: any;
+  line: any;
+  lineText: string;
+  textProjection: TextAnalysisProjection;
 };
 
-const normalizeSyllableText = (target: any): string => {
-  if (typeof target?.Text !== "string") return "";
-  target.Text = cleanInvisiblesPreserveEdges(target.Text.normalize("NFKC"));
-  return target.Text;
+const projectLyricsText = (target: any): TextAnalysisProjection => {
+  if (typeof target?.Text !== "string") return buildTextAnalysisProjection("");
+  target.Text = cleanInvisibles(target.Text);
+  return buildTextAnalysisProjection(target.Text);
 };
 
-const normalizedSyllableLine = (syllables: any[]): string => {
+const projectSyllableText = (target: any): TextAnalysisProjection => {
+  if (typeof target?.Text !== "string") return buildTextAnalysisProjection("");
+  target.Text = cleanInvisiblesPreserveEdges(target.Text);
+  return buildTextAnalysisProjection(target.Text);
+};
+
+const projectedSyllableLine = (
+  syllables: any[],
+): { text: string; projections: TextAnalysisProjection[] } => {
   let text = "";
+  const projections: TextAnalysisProjection[] = [];
   for (let index = 0; index < syllables.length; index += 1) {
-    const normalized = normalizeSyllableText(syllables[index]);
+    const projection = projectSyllableText(syllables[index]);
+    const normalized = projection.analysisText;
+    projections.push(projection);
     if (
       index > 0 &&
       !/\s$/u.test(text) &&
@@ -230,7 +245,7 @@ const normalizedSyllableLine = (syllables: any[]): string => {
     }
     text += normalized;
   }
-  return text;
+  return { text, projections };
 };
 
 const gatherText = (
@@ -248,16 +263,18 @@ const gatherText = (
   if (lyrics.Type === "Static") {
     for (const line of lyrics.Lines) {
       if (isProviderInfoEntry(line)) continue;
-      const lineText = normalizeLyricsText(line);
-      entries.push({ target: line, line, lineText });
+      const textProjection = projectLyricsText(line);
+      const lineText = textProjection.analysisText;
+      entries.push({ target: line, line, lineText, textProjection });
       textLines.push(lineText);
     }
   } else if (lyrics.Type === "Line") {
     for (const vocalGroup of lyrics.Content) {
       if (isProviderInfoEntry(vocalGroup)) continue;
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
-        const lineText = normalizeLyricsText(vocalGroup);
-        entries.push({ target: vocalGroup, line: vocalGroup, lineText });
+        const textProjection = projectLyricsText(vocalGroup);
+        const lineText = textProjection.analysisText;
+        entries.push({ target: vocalGroup, line: vocalGroup, lineText, textProjection });
         textLines.push(lineText);
       }
     }
@@ -268,28 +285,30 @@ const gatherText = (
 
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
-        const text = normalizedSyllableLine(syllables);
-        const lineEntries: RomanizeEntry[] = syllables.map((syllable: any) => ({
+        const projected = projectedSyllableLine(syllables);
+        const lineEntries: RomanizeEntry[] = syllables.map((syllable: any, index: number) => ({
           target: syllable,
           line: vocalGroup,
           lineText: "",
+          textProjection: projected.projections[index],
         }));
-        for (const entry of lineEntries) entry.lineText = text;
+        for (const entry of lineEntries) entry.lineText = projected.text;
         entries.push(...lineEntries);
-        textLines.push(text);
+        textLines.push(projected.text);
       }
 
       if (vocalGroup.Background !== undefined) {
         for (const bg of vocalGroup.Background) {
-          const lineText = normalizedSyllableLine(bg.Syllables);
-          const bgEntries: RomanizeEntry[] = bg.Syllables.map((syllable: any) => ({
+          const projected = projectedSyllableLine(bg.Syllables);
+          const bgEntries: RomanizeEntry[] = bg.Syllables.map((syllable: any, index: number) => ({
             target: syllable,
             line: vocalGroup,
             lineText: "",
+            textProjection: projected.projections[index],
           }));
-          for (const entry of bgEntries) entry.lineText = lineText;
+          for (const entry of bgEntries) entry.lineText = projected.text;
           entries.push(...bgEntries);
-          bgTextLines.push(lineText);
+          bgTextLines.push(projected.text);
         }
       }
     }
@@ -406,7 +425,13 @@ const romanizeLineText = async (
   language: string,
   arabicReadings: ReadonlyMap<string, string>,
 ): Promise<{ text: string; aboveReadingSegments?: AboveReadingSegment[] } | undefined> => {
-  const entry: RomanizeEntry = { target: { Text: text }, line: {}, lineText: text };
+  const textProjection = buildTextAnalysisProjection(text);
+  const entry: RomanizeEntry = {
+    target: { Text: text },
+    line: {},
+    lineText: textProjection.analysisText,
+    textProjection,
+  };
   const changed = await romanizeEntry(entry, docContext, language, arabicReadings, false);
   return changed
     ? {
@@ -490,7 +515,7 @@ const postProcessSyllableRomanization = async (
       if (isJapaneseLine && !groupHasKorean && japaneseMap) {
         try {
           const packageResult = await processJapanesePackageLine(
-            effectiveLineText,
+            japaneseMap.sourceText,
             syllables,
             japaneseMap.spans,
             syllables,
@@ -507,8 +532,8 @@ const postProcessSyllableRomanization = async (
             delete syllable.JapaneseRomajiTiming;
           }
           group.JapaneseReading = {
-            sourceText: effectiveLineText,
-            ...(packageResult.displayText !== effectiveLineText
+            sourceText: japaneseMap.sourceText,
+            ...(packageResult.displayText !== japaneseMap.sourceText
               ? { displayText: packageResult.displayText }
               : {}),
             romaji: packageResult.romaji,
@@ -630,21 +655,15 @@ const romanizeEntry = async (
   allowChineseProviderJapaneseRepair: boolean = false
 ): Promise<boolean> => {
   const { target, line } = entry;
-
-  if (target.Text) {
-    const normalized = target.Text.normalize("NFKC");
-    target.Text = annotateJapanese
-      ? cleanInvisibles(normalized)
-      : cleanInvisiblesPreserveEdges(normalized);
-  }
+  const analysisText = entry.textProjection.analysisText;
   const cjkLineRoute = resolveCjkLineRoute(entry.lineText || target.Text || "", docContext);
   const targetDocContext =
     cjkLineRoute === "Japanese"
       ? { ...docContext, cjkDominantBranch: "Japanese" as const }
       : docContext;
-  const targetScripts = scriptBranchForLine(target.Text || "", targetDocContext);
+  const targetScripts = scriptBranchForLine(analysisText, targetDocContext);
   const preferGeneratedReading = shouldPreferGeneratedReading(
-    target.Text || "",
+    analysisText,
     targetScripts
   );
   const providerReading = preserveUsableProviderReading(target, targetScripts);
@@ -657,14 +676,14 @@ const romanizeEntry = async (
     return true;
   }
 
-  let text: string = target.Text;
+  let text = analysisText;
   let changed = false;
 
   if (
     annotateJapanese &&
     cjkLineRoute === "Japanese" &&
     targetScripts.includes("Japanese") &&
-    ItemJapaneseTest.test(target.Text || "")
+    ItemJapaneseTest.test(analysisText)
   ) {
     const packageRomaji = await processJapanesePackageTextTarget(target, {
       textProjection: repairJapaneseDisplay
@@ -673,7 +692,7 @@ const romanizeEntry = async (
     });
     if (
       packageRomaji &&
-      acceptRomanization(target.Text || "", packageRomaji, [ScriptResidualTests.Japanese])
+      acceptRomanization(analysisText, packageRomaji, [ScriptResidualTests.Japanese])
     ) {
       line.HasTransliterations = true;
       return true;
@@ -689,7 +708,22 @@ const romanizeEntry = async (
       const projection = await projectChineseAboveReading(text);
       if (projection.valid && projection.aboveReadingSegments.length > 0) {
         text = projection.text;
-        target.AboveReadingSegments = projection.aboveReadingSegments;
+        const mappedSegments = projection.aboveReadingSegments.flatMap((segment) => {
+          const range = mapAnalysisCodePointRangeToDisplay(entry.textProjection, {
+            start: segment.canonicalRange.startCp,
+            end: segment.canonicalRange.endCp,
+          });
+          return range
+            ? [{
+                ...segment,
+                canonicalRange: { startCp: range.start, endCp: range.end },
+              }]
+            : [];
+        });
+        target.AboveReadingSegments =
+          mappedSegments.length === projection.aboveReadingSegments.length
+            ? mappedSegments
+            : undefined;
       } else {
         delete target.AboveReadingSegments;
         text = await romanizeChineseDominantCjkText(text, {
@@ -704,7 +738,7 @@ const romanizeEntry = async (
         romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
       });
     }
-    changed = text !== target.Text;
+    changed = text !== analysisText;
   }
 
   for (const script of targetScripts) {
@@ -752,7 +786,7 @@ const romanizeEntry = async (
     }
     if (
       !acceptRomanization(
-        target.Text || "",
+        analysisText,
         text,
         targetScripts.map((script) => ScriptResidualTests[script])
       )
@@ -866,7 +900,7 @@ export const ProcessLyrics = async (
   if (presentScripts.includes("Arabic")) {
     const sourceTexts = lyrics.Type === "Syllable"
       ? new Set(entries.map((entry) => entry.lineText))
-      : new Set(entries.map((entry) => entry.target?.Text || ""));
+      : new Set(entries.map((entry) => entry.textProjection.analysisText));
     arabicPhrases = Array.from(
       new Set(Array.from(sourceTexts).flatMap(collectArabicScriptPhrases)),
     );
@@ -884,12 +918,12 @@ export const ProcessLyrics = async (
   const needsRomanizationOrJapaneseReading = entries.some(
     (entry) =>
       shouldPreferGeneratedReading(
-        entry.target?.Text || "",
+        entry.textProjection.analysisText,
         scriptBranchForLine(entry.lineText || entry.target?.Text || "", docContext)
       ) ||
       !entry.target?.ProviderRomanizedText ||
       (scriptBranchForLine(entry.lineText, docContext).includes("Japanese") &&
-        ItemJapaneseTest.test(entry.target.Text || "") &&
+        ItemJapaneseTest.test(entry.textProjection.analysisText) &&
         !entry.target.JapaneseReading)
   );
   if (presentScripts.length > 0 && needsRomanizationOrJapaneseReading) {
@@ -930,7 +964,7 @@ export const ProcessLyrics = async (
           pinyinPlacement === "below" &&
           cjkLineRoute === "Chinese"
         ) {
-          display = joinMandarinReadingWords(entry.target.Text || "", display);
+          display = joinMandarinReadingWords(entry.textProjection.analysisText, display);
         }
         entry.target.ReadingRenderPlan = buildLineFallbackPlan(
           entry.target.Text || "",

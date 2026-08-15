@@ -8,7 +8,7 @@ import type {
 } from "./Model.ts";
 
 const normalizeSpan = (text: string): string =>
-  cleanInvisiblesPreserveEdges((text || "").normalize("NFKC"));
+  cleanInvisiblesPreserveEdges(text || "");
 const coreText = (text: string): string => text.replace(/^\s+|\s+$/gu, "");
 
 function appendBoundary(

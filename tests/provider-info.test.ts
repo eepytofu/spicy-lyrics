@@ -93,9 +93,9 @@ test("provider-info rows are excluded from Han conversion and translation inputs
   assert.equal(timed.Content[0].Background[0].Syllables[0].Text, "背景繁體");
 });
 
-test("processing skips provider-info rows before destructive normalization or readings", () => {
+test("processing skips provider-info rows before cleanup or readings", () => {
   const source = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
-  assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(isProviderInfoEntry\(line\)\) continue;\s*const lineText = normalizeLyricsText/u);
+  assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(isProviderInfoEntry\(line\)\) continue;\s*const textProjection = projectLyricsText/u);
   assert.match(source, /for \(const vocalGroup of lyrics\.Content\) \{\s*if \(isProviderInfoEntry\(vocalGroup\)\) continue;/u);
   assert.match(source, /if \(isProviderInfoEntry\(vocalGroup\.Lead\)\) continue;/u);
 });

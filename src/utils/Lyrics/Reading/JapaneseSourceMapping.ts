@@ -19,6 +19,7 @@ export function buildJapaneseLineTextMap(
   syllables: JapaneseReadable[],
 ): JapaneseLineTextMap {
   let lineText = "";
+  let sourceText = "";
   const spans: JapaneseLineTextMap["spans"] = [];
 
   for (let index = 0; index < syllables.length; index += 1) {
@@ -29,7 +30,10 @@ export function buildJapaneseLineTextMap(
 
     const leading = normalizedRaw.match(/^\s+/)?.[0] || "";
     const trailing = normalizedRaw.match(/\s+$/)?.[0] || "";
-    if (leading) lineText = appendLineSpaceIfNeeded(lineText);
+    if (leading) {
+      lineText = appendLineSpaceIfNeeded(lineText);
+      sourceText = appendLineSpaceIfNeeded(sourceText);
+    }
 
     const previousRaw = syllables[index - 1]?.Text || "";
     const nextNeedsLatinSpace =
@@ -37,17 +41,28 @@ export function buildJapaneseLineTextMap(
       lineText &&
       needsSyllableSpaceBefore(syllables, index) &&
       (LatinWordTextTest.test(previousRaw) || LatinWordTextTest.test(normalizedText));
-    if (nextNeedsLatinSpace) lineText = appendLineSpaceIfNeeded(lineText);
+    if (nextNeedsLatinSpace) {
+      lineText = appendLineSpaceIfNeeded(lineText);
+      sourceText = appendLineSpaceIfNeeded(sourceText);
+    }
 
-    const start = lineText.length;
+    const start = sourceText.length;
     lineText += normalizedText;
-    const end = lineText.length;
+    sourceText += rawText.trim();
+    const end = sourceText.length;
     if (normalizedText) {
       spans.push({ index, rawText, normalizedText, start, end });
     }
 
-    if (trailing) lineText = appendLineSpaceIfNeeded(lineText);
+    if (trailing) {
+      lineText = appendLineSpaceIfNeeded(lineText);
+      sourceText = appendLineSpaceIfNeeded(sourceText);
+    }
   }
 
-  return { lineText: lineText.replace(/\s+$/g, ""), spans };
+  return {
+    sourceText: sourceText.replace(/\s+$/g, ""),
+    lineText: lineText.replace(/\s+$/g, ""),
+    spans,
+  };
 }

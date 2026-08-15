@@ -9,7 +9,7 @@ import {
 test("projects ASCII and fullwidth authored readings without changing source evidence", () => {
   for (const source of ["今宵も天(そら)は明るく", "今宵も天（そら）は明るく"]) {
     const projection = projectProviderAuthoredJapaneseReadings(source);
-    assert.equal(projection.sourceText, "今宵も天(そら)は明るく");
+    assert.equal(projection.sourceText, source);
     assert.equal(projection.displayText, "今宵も天は明るく");
     assert.deepEqual(projection.hints.map((hint) => ({
       surface: projection.displayText.slice(hint.displayRange.start, hint.displayRange.end),

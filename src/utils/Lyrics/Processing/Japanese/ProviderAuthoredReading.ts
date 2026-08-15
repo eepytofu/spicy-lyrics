@@ -19,7 +19,7 @@ export type ProviderTextSpan = {
   readonly end: number;
 };
 
-const ParentheticalReading = /([\p{Script=Han}々〆ヵヶ]{1,12})\(([\p{Script=Hiragana}\p{Script=Katakana}ー]{1,24})\)/gu;
+const ParentheticalReading = /([\p{Script=Han}々〆ヵヶ]{1,12})[（(]([\p{Script=Hiragana}\p{Script=Katakana}ーｰ]{1,24})[）)]/gu;
 const TrailingDecorationOnly = /^[\s\p{P}\p{S}]*$/u;
 
 function annotationFitsVisibleSpan(
@@ -43,7 +43,7 @@ export function projectProviderAuthoredJapaneseReadings(
   text: string,
   spans?: readonly ProviderTextSpan[],
 ): ProviderAuthoredReadingProjection {
-  const sourceText = (text || "").normalize("NFKC");
+  const sourceText = text || "";
   const hints: ProviderAuthoredReadingHint[] = [];
   let displayText = "";
   let sourceCursor = 0;

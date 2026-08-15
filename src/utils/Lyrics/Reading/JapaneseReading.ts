@@ -53,6 +53,11 @@ import {
   entryRomaji,
 } from "./JapaneseRomaji.ts";
 import { applyJapaneseReadingContextToSyllables } from "./JapaneseTimedProjection.ts";
+import {
+  buildTextAnalysisProjection,
+  mapAnalysisUtf16RangeToDisplay,
+  mapDisplayUtf16RangeToAnalysis,
+} from "../Processing/TextAnalysisProjection.ts";
 
 export {
   JapaneseKanaTextTest,
@@ -91,6 +96,31 @@ function projectJapaneseText(
     );
   }
   return projected;
+}
+
+export function projectJapaneseReadingToSource(
+  reading: JapaneseReading,
+  sourceText: string,
+  options: JapaneseAnalysisOptions = {},
+): JapaneseReading | undefined {
+  const authoredProjection = projectProviderAuthoredJapaneseReadings(sourceText);
+  const displayText = projectJapaneseText(authoredProjection.displayText, options);
+  const textProjection = buildTextAnalysisProjection(displayText);
+  const analysisDisplayText = reading.displayText ?? reading.sourceText;
+  if (!textProjection.coordinateSafe || textProjection.analysisText !== analysisDisplayText) {
+    return undefined;
+  }
+  const furigana = reading.furigana.flatMap((segment) => {
+    const range = mapAnalysisUtf16RangeToDisplay(textProjection, segment);
+    return range ? [{ ...segment, ...range }] : [];
+  });
+  return {
+    sourceText,
+    ...(displayText !== sourceText ? { displayText } : {}),
+    romaji: reading.romaji,
+    ...(reading.romajiSegments ? { romajiSegments: reading.romajiSegments } : {}),
+    furigana,
+  };
 }
 
 function applyExplicitReadingOverrides(
@@ -216,25 +246,42 @@ export async function prepareJapaneseLineAnalysis(
   text: string,
   options: JapaneseAnalysisOptions = {},
 ): Promise<PreparedJapaneseLineAnalysis | undefined> {
-  const sourceText = (text || "").normalize("NFKC");
-  if (!JapaneseSourceTextTest.test(sourceText)) return undefined;
-  const projection =
+  const sourceText = text || "";
+  const authoredProjection =
     options.authoredReadingProjection?.sourceText === sourceText
       ? options.authoredReadingProjection
       : projectProviderAuthoredJapaneseReadings(sourceText);
-  const displayText = projectJapaneseText(projection.displayText, options);
+  const displayText = projectJapaneseText(authoredProjection.displayText, options);
+  const textProjection = buildTextAnalysisProjection(displayText);
+  const analysisText = textProjection.analysisText;
+  if (!JapaneseSourceTextTest.test(analysisText)) return undefined;
+  const analysisHints = authoredProjection.hints.flatMap((hint) => {
+    const displayRange = mapDisplayUtf16RangeToAnalysis(textProjection, hint.displayRange);
+    return displayRange
+      ? [{ ...hint, displayRange, reading: hint.reading.normalize("NFKC") }]
+      : [];
+  });
+  const analysisOptions: JapaneseAnalysisOptions = {
+    ...options,
+    textProjection: undefined,
+    authoredReadingProjection: undefined,
+  };
 
   const context = await buildJapaneseTokenContext(
-    displayText,
-    options,
-    projection.hints,
+    analysisText,
+    analysisOptions,
+    analysisHints,
   );
   const romajiProjection = buildRomajiProjectionFromContext(context);
-  let furigana: FuriganaSegment[] = [];
-  if (KanjiTextTest.test(displayText)) {
+  let analysisFurigana: FuriganaSegment[] = [];
+  if (KanjiTextTest.test(analysisText)) {
     await loadJitendexFuriganaGeometry();
-    furigana = buildFuriganaFromContext(displayText, context);
+    analysisFurigana = buildFuriganaFromContext(analysisText, context);
   }
+  const furigana = analysisFurigana.flatMap((segment) => {
+    const range = mapAnalysisUtf16RangeToDisplay(textProjection, segment);
+    return range ? [{ ...segment, ...range }] : [];
+  });
 
   const reading: JapaneseReading = {
     sourceText,
@@ -245,10 +292,44 @@ export async function prepareJapaneseLineAnalysis(
       : {}),
     furigana,
   };
+  const analysisReading: JapaneseReading = {
+    sourceText: analysisText,
+    romaji: romajiProjection.romaji,
+    ...(romajiProjection.segments.length > 0
+      ? { romajiSegments: romajiProjection.segments }
+      : {}),
+    furigana: analysisFurigana,
+  };
   return {
     reading,
     applyToSyllables: (syllables, spans) => {
-      applyJapaneseReadingContextToSyllables(reading, context, syllables, spans);
+      const analysisSpans = spans?.flatMap((span) => {
+        const range = mapDisplayUtf16RangeToAnalysis(textProjection, span);
+        return range
+          ? [{
+              ...span,
+              normalizedText: analysisText.slice(range.start, range.end),
+              ...range,
+            }]
+          : [];
+      });
+      if (spans && analysisSpans?.length !== spans.length) return;
+      applyJapaneseReadingContextToSyllables(
+        analysisReading,
+        context,
+        syllables,
+        analysisSpans,
+      );
+      for (const syllable of syllables) {
+        if (!syllable.JapaneseReading) continue;
+        const projected = projectJapaneseReadingToSource(
+          syllable.JapaneseReading,
+          syllable.Text || "",
+          options,
+        );
+        if (projected) syllable.JapaneseReading = projected;
+        else delete syllable.JapaneseReading;
+      }
     },
   };
 }
@@ -275,8 +356,7 @@ export async function annotateJapaneseTextTarget(
   target: JapaneseReadable,
   options: JapaneseAnalysisOptions = {},
 ): Promise<JapaneseReading | undefined> {
-  const text = target.Text?.normalize("NFKC") || "";
-  if (target.Text) target.Text = text;
+  const text = target.Text || "";
   const reading = await analyzeJapaneseLine(text, options);
   assignJapaneseReading(target, reading);
   return reading;
@@ -289,17 +369,10 @@ export async function applyJapaneseReadingToSyllables(
   options: JapaneseAnalysisOptions = {},
   prepared?: PreparedJapaneseLineAnalysis,
 ): Promise<JapaneseReading | undefined> {
-  const normalizedLineText = (lineText || "").normalize("NFKC");
-  const authoredDisplayText =
-    options.authoredReadingProjection?.sourceText === normalizedLineText
-      ? options.authoredReadingProjection.displayText
-      : projectProviderAuthoredJapaneseReadings(normalizedLineText).displayText;
-  const expectedDisplayText = projectJapaneseText(authoredDisplayText, options);
-  const analysis =
-    (prepared?.reading.displayText || prepared?.reading.sourceText) ===
-    expectedDisplayText
-      ? prepared
-      : await prepareJapaneseLineAnalysis(normalizedLineText, options);
+  const sourceText = lineText || "";
+  const analysis = prepared?.reading.sourceText === sourceText
+    ? prepared
+    : await prepareJapaneseLineAnalysis(sourceText, options);
   if (!analysis) {
     for (const syllable of syllables) {
       delete syllable.JapaneseReading;

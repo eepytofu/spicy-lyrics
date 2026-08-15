@@ -79,6 +79,32 @@ function tokenAnalyzer(
   };
 }
 
+test("halfwidth Kana analysis maps following furigana back to provider text", async () => {
+  const analysis = await prepareJapaneseLineAnalysis("ｶﾞ時計", {
+    analyzer: tokenAnalyzer("ガ時計", [
+      { surface: "ガ", readingKana: "ガ" },
+      { surface: "時計", readingKana: "トケイ" },
+    ]),
+    kanaRomanizer: (kana) => ({ ガ: "ga", トケイ: "tokei" })[kana] ?? kana,
+  });
+  assert.ok(analysis);
+  assert.equal(analysis.reading.sourceText, "ｶﾞ時計");
+  assert.equal(analysis.reading.displayText, undefined);
+  assert.deepEqual(
+    analysis.reading.furigana.map(({ start, end, reading }) => ({ start, end, reading })),
+    [{ start: 2, end: 4, reading: "とけい" }],
+  );
+
+  const syllable: any = { Text: "ｶﾞ時計" };
+  analysis.applyToSyllables([syllable]);
+  assert.equal(syllable.Text, "ｶﾞ時計");
+  assert.equal(syllable.JapaneseReading?.sourceText, "ｶﾞ時計");
+  assert.deepEqual(
+    syllable.JapaneseReading?.furigana.map(({ start, end, reading }) => ({ start, end, reading })),
+    [{ start: 2, end: 4, reading: "とけい" }],
+  );
+});
+
 async function timedJapaneseAnnotation(
   surface: string,
   readingKana: string,
