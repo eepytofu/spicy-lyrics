@@ -34,6 +34,7 @@ type CurrentLyrics = {
   sourceDisplayName?: string;
   fetchProvider?: string;
   ManualLyricsSelection?: boolean;
+  LyricsOverrideKind?: "automatic" | "local" | "candidate";
   ManualLyricsSearchOverrides?: CompleteLyricsSearchOverrides;
   AutomaticLyricRevisionId?: string;
   LyricRevision?: LyricsCandidateRecord["revision"];
@@ -184,6 +185,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const developerMode = useStore($developerMode);
   const manualSelectionLifetime = useStore($manualLyricsSelectionLifetime);
   const current = useMemo(() => parseCurrentLyrics(rawLyrics, uri), [rawLyrics, uri]);
+  const localOverride = current?.LyricsOverrideKind === "local";
   const activeProviders = useMemo(() => getActiveLyricsSourceOrder(), [uri]);
   const searchableProviders = useMemo(
     () => manualLyricsSearchProviders(activeProviders),
@@ -287,7 +289,10 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     setRequestKind(null);
     setBusyRevisionId(null);
     setError(null);
-    if (uri && (current?.ManualLyricsSelection === true || !next?.alternativesLoaded)) {
+    if (
+      uri &&
+      (current?.ManualLyricsSelection === true || localOverride || !next?.alternativesLoaded)
+    ) {
       void runCandidateRequest("initial", activeProviders);
     }
     return () => requestController.current?.abort();
@@ -345,7 +350,9 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   }
 
   const records = candidateSession?.records ?? [];
-  const displayRecords = chooserCandidateRecords(records, current, automaticRecord);
+  const resolvedAutomaticRecord = automaticRecord ?? recommendedRecord(candidateSession);
+  const displayRecords = chooserCandidateRecords(records, current, resolvedAutomaticRecord);
+  const displayResultCount = displayRecords.length + (localOverride ? 1 : 0);
   const currentManualProvider = current?.ManualLyricsSelection
     ? current.LyricRevision?.providerId || current.fetchProvider || current.source || null
     : null;
@@ -409,14 +416,45 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
 
       <div className="sl-chooser-results" aria-live="polite" aria-busy={requestKind !== null}>
         <div className="sl-chooser-list">
+          {localOverride && (
+            <button
+              type="button"
+              className="sl-chooser-result selected"
+              aria-disabled="true"
+              aria-pressed="true"
+              aria-label={`Current Local Lyrics for ${resultFallback.title}. ${formatLabel(current?.Type)}`}
+              title={resultFallback.title}
+            >
+              <span className="sl-chooser-result-main">
+                <strong>{resultFallback.title}</strong>
+                <span className="sl-chooser-result-meta">
+                  <small title={resultFallback.artist}>{resultFallback.artist || "Unknown artist"}</small>
+                </span>
+              </span>
+              <span className="sl-chooser-result-source">
+                <span className="sl-chooser-result-provider">
+                  <strong>Local Lyrics</strong>
+                </span>
+                <span className="sl-chooser-result-quality">
+                  <small>{formatLabel(current?.Type)}</small>
+                </span>
+              </span>
+              <span className="sl-chooser-result-action" aria-hidden="true">
+                <svg viewBox="0 0 16 16">
+                  <path d="m3 8 3 3 7-7" />
+                </svg>
+                <span>Current</span>
+              </span>
+            </button>
+          )}
           {requestKind !== null && displayRecords.length === 0 ? (
             <LoadingRows />
           ) : (
             displayRecords.map((record) => {
               const selected = record.revision.id === currentRevisionId;
               const automaticOption =
-                current?.ManualLyricsSelection === true &&
-                record.revision.id === automaticRecord?.revision.id;
+                (current?.ManualLyricsSelection === true || localOverride) &&
+                record.revision.id === resolvedAutomaticRecord?.revision.id;
               const automatic =
                 !automaticOption && record.revision.id === candidateSession?.recommendedRevisionId;
               const busy = automaticOption
@@ -500,7 +538,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        {!displayRecords.length && requestKind === null && (
+        {!displayResultCount && requestKind === null && (
           <div className="sl-chooser-empty">No lyrics found from searchable sources.</div>
         )}
       </div>
@@ -511,7 +549,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
             ? "Checking enabled lyric sources…"
             : requestKind === "search"
               ? "Searching enabled lyric sources…"
-              : `${displayRecords.length} result${displayRecords.length === 1 ? "" : "s"}`}
+              : `${displayResultCount} result${displayResultCount === 1 ? "" : "s"}`}
         </span>
         {developerMode && (!!candidateSession?.failures.length || !!displayRecords.length) && (
           <details className="sl-chooser-diagnostics">

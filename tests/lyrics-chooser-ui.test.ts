@@ -35,7 +35,7 @@ test("chooser exposes compact all-provider metadata search from lyric controls",
 test("chooser auto-loads candidate sources and keeps manual search playback-scoped", () => {
   assert.match(
     chooser,
-    /if \(uri && \(current\?\.ManualLyricsSelection === true \|\| !next\?\.alternativesLoaded\)\)/
+    /current\?\.ManualLyricsSelection === true \|\| localOverride \|\| !next\?\.alternativesLoaded/
   );
   assert.match(chooser, /runCandidateRequest\("initial", activeProviders\)/);
   assert.match(chooser, /manualLyricsSearchProviders/);
@@ -70,6 +70,18 @@ test("manual selection lifetime is a persisted Sources setting", () => {
   assert.match(sourcesSection, /returnToAutomaticLyrics\(currentUri\)/);
   assert.match(sourcesSection, /\$manualLyricsSelectionLifetime\.set\(next\)/);
   assert.doesNotMatch(sourcesSection, /commitSourceSettingsChange/);
+});
+
+test("chooser presents an applied local override without ranking it as a provider candidate", () => {
+  assert.match(chooser, /const localOverride = current\?\.LyricsOverrideKind === "local"/);
+  assert.match(chooser, />Local Lyrics</);
+  assert.match(chooser, /localOverride \|\| !next\?\.alternativesLoaded/);
+  assert.match(
+    chooser,
+    /\(current\?\.ManualLyricsSelection === true \|\| localOverride\)[\s\S]*?resolvedAutomaticRecord/
+  );
+  assert.match(chooser, /if \(automaticOption\) void handleReturnToAuto\(\)/);
+  assert.doesNotMatch(chooser, /Local Lyrics[\s\S]{0,300}confidenceLabel/);
 });
 
 test("chooser diagnostics disclose NetEase native-title discovery", () => {
@@ -107,7 +119,7 @@ test("chooser summarizes selector-owned confidence and gates diagnostics to deve
   assert.match(chooser, /<span>Return to Automatic<\/span>/);
   assert.match(chooser, /<span className="sl-chooser-auto-badge">Automatic<\/span>/);
   assert.match(chooser, /if \(automaticOption\) void handleReturnToAuto\(\)/);
-  assert.match(chooser, /chooserCandidateRecords\(records, current, automaticRecord\)/);
+  assert.match(chooser, /chooserCandidateRecords\(records, current, resolvedAutomaticRecord\)/);
   assert.match(chooser, /displayRecords\.map\(\(record\)/);
   assert.match(chooser, /const developerMode = useStore\(\$developerMode\)/);
   assert.match(
