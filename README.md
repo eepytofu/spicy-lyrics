@@ -11,10 +11,11 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 ### Lyrics and sources
 
-- Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music, giving you more coverage and more chances to find syllable-synced or line-synced lyrics. [Set up the Worker](worker/README.md).
+- Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. [Set up the Worker](worker/README.md).
 - A source manager for enabling, disabling, and ordering providers.
-- Lyrics from QQ, KuGou, NetEase, and Soda sometimes embed track headers, credit rows, and rights notices. These are detected and can be hidden with **Hide Embedded Provider Info**; promotional notices are always hidden. Provider text, timing, and order are never rewritten.
-- When Spotify metadata is romanized, localized, or wrong, you can search again with the original title and artist. The chooser searches again with that metadata, lets you pick the right match, and remembers what you chose for that track.
+- Embedded provider headers, credits, and rights notices can be hidden with **Hide Embedded Provider Info**.
+- When Spotify metadata is romanized, localized, or wrong, search again with the original title and artist, pick the right match, and it stays remembered for that track.
+- TTML is parsed on your device, so local lyrics load without a network round trip.
 
 <p align="center">
   <img src="assets/lyrics_picker.webp" alt="Choose Lyrics dialog showing manual metadata search and ranked lyric candidates" width="70%">
@@ -23,7 +24,8 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 ### Readings and display
 
 - Japanese reading hints from the lyrics, such as `天(そら)`, become furigana and romaji, override inferred readings, and appear in amber.
-- Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, plus a new option to display readings above Han characters. Japanese readings in mixed Chinese lines also share the above-character reading row.
+- Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, plus an option to show readings above Han characters.
+- Various quality-of-life improvements and fixes throughout.
 
 
 ## Install from source
@@ -92,8 +94,6 @@ If source changes aren't showing up, clear the current song caches under **Advan
 ## Service, security, and license notes
 
 Some lyric sources use unofficial interfaces and may stop working. Lyrics and metadata may have their own terms or usage rights, so keep that in mind if you deploy, log, use, or redistribute them.
-
-Local TTML uploads are stored in the browser's local database. Parsing still uses the Spicy Lyrics service, so the TTML contents are sent there whenever a saved file is loaded.
 
 The optional Worker has open CORS and no built-in authentication or rate limiting. Review the code and add whatever Cloudflare protections you need before putting it on a public or high-traffic deployment. See [SECURITY.md](SECURITY.md) and [worker/NOTICE.md](worker/NOTICE.md) for scope and attribution.
 
