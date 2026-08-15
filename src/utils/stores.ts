@@ -20,6 +20,18 @@ function saveSettingsBlob(obj: Record<string, any>) {
 
 const _settings: Record<string, any> = readSettingsBlob();
 
+function migrateRenamedSetting(from: string, to: string): void {
+  if (_settings[to] === undefined && _settings[from] !== undefined) {
+    _settings[to] = _settings[from];
+  }
+  if (from in _settings) {
+    delete _settings[from];
+    saveSettingsBlob(_settings);
+  }
+}
+
+migrateRenamedSetting("ignoreMusixmatchWordSync", "ignoreMusixmatchSyllableSync");
+
 export function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_settings[key] !== undefined ? _settings[key] : defaultValue);
   store.listen((v) => {
