@@ -1,4 +1,5 @@
 import type { NativeLyrics, ProviderId, ProviderInfoKind, TrackMetadata } from "./types";
+import { versionTags } from "./matching/normalize";
 
 export type ProviderInfoContext = {
   reference: TrackMetadata;
@@ -161,6 +162,121 @@ function splitHeaderArtists(value: string): Set<string> {
     .split(/\s*(?:[/／、,，&＆]|\band\b)\s*/u)
     .map(compact)
     .filter(Boolean));
+}
+
+const TRAILING_ANNOTATION_PAIRS = new Map([
+  [")", "("],
+  ["）", "（"],
+  ["]", "["],
+  ["】", "【"],
+  ["》", "《"],
+]);
+
+type TrailingAnnotation = {
+  base: string;
+  annotation: string;
+};
+
+function trailingBalancedAnnotation(value: string): TrailingAnnotation | undefined {
+  const trimmed = value.trim();
+  const closer = trimmed.at(-1);
+  const opener = closer ? TRAILING_ANNOTATION_PAIRS.get(closer) : undefined;
+  if (!opener) return undefined;
+
+  let depth = 0;
+  for (let index = trimmed.length - 1; index >= 0; index -= 1) {
+    const character = trimmed[index];
+    if (character === closer) depth += 1;
+    if (character !== opener) continue;
+    depth -= 1;
+    if (depth !== 0) continue;
+    const base = trimmed.slice(0, index).trimEnd();
+    const annotation = trimmed.slice(index);
+    return base && annotation.length > 2 ? { base, annotation } : undefined;
+  }
+  return undefined;
+}
+
+function sharesBoundedForm(left: string, right: string): boolean {
+  const leftAnnotation = trailingBalancedAnnotation(left);
+  const rightAnnotation = trailingBalancedAnnotation(right);
+  const leftForms = [compact(left), compact(leftAnnotation?.base ?? "")].filter(Boolean);
+  const rightForms = new Set([compact(right), compact(rightAnnotation?.base ?? "")].filter(Boolean));
+  return leftForms.some((form) => rightForms.has(form));
+}
+
+function headerVersionTags(value: string): Set<string> {
+  const tags = versionTags(value);
+  if (/(?:^|[^\p{L}])(?:\d{2,4}\s*)?ver(?:sion)?\.?(?:$|[^\p{L}])/iu.test(value)) tags.add("explicit-version");
+  if (/\b(?:remaster(?:ed)?|radio\s+edit|album\s+version)\b/iu.test(value)) tags.add("explicit-version");
+  return tags;
+}
+
+function headerDoesNotAddVersionIdentity(value: string, expected: string): boolean {
+  const valueTags = headerVersionTags(value);
+  const expectedTags = headerVersionTags(expected);
+  // Selected metadata may be more specific than an embedded base-title row,
+  // but the embedded row cannot introduce a version absent from that metadata.
+  return [...valueTags].every((tag) => expectedTags.has(tag));
+}
+
+type BoundedTitleMatch = {
+  continuation?: string;
+};
+
+function boundedTitleMatch(value: string, expected: string): BoundedTitleMatch | undefined {
+  if (compact(value) === compact(expected)) return undefined;
+  if (!headerDoesNotAddVersionIdentity(value, expected)) return undefined;
+  if (!sharesBoundedForm(value, expected)) return undefined;
+  const expectedAnnotation = trailingBalancedAnnotation(expected);
+  if (expectedAnnotation && compact(value) === compact(expectedAnnotation.base)) {
+    return { continuation: expectedAnnotation.annotation };
+  }
+  return {};
+}
+
+function splitHeaderArtistValues(value: string): string[] {
+  return value
+    .split(/\s*(?:[/／、,，&＆]|\band\b)\s*/u)
+    .map((artist) => artist.trim())
+    .filter(Boolean);
+}
+
+function matchesBoundedArtists(value: string, expected: string[]): boolean {
+  const headerArtists = splitHeaderArtistValues(value);
+  return expected.length > 0 && expected.every((artist) =>
+    headerArtists.some((headerArtist) => sharesBoundedForm(headerArtist, artist)));
+}
+
+function matchesBoundedTrackHeader(text: string, context: ProviderInfoContext): BoundedTitleMatch | undefined {
+  const titles = headerTitles(context);
+  const selectedArtists = context.selected?.artists.filter((artist) => compact(artist)) ?? [];
+  const structured = TRACK_HEADER_ROW.exec(text);
+  if (structured && selectedArtists.length) {
+    const leftTitle = titles.some((title) => compact(structured[1]) === compact(title)
+      || Boolean(boundedTitleMatch(structured[1], title)));
+    const rightTitle = titles.some((title) => compact(structured[2]) === compact(title)
+      || Boolean(boundedTitleMatch(structured[2], title)));
+    if ((leftTitle && matchesBoundedArtists(structured[2], selectedArtists))
+      || (rightTitle && matchesBoundedArtists(structured[1], selectedArtists))) return {};
+  }
+
+  for (const title of titles) {
+    const match = boundedTitleMatch(text, title);
+    if (match) return match;
+  }
+  return undefined;
+}
+
+function hasTrackHeaderTitleShape(text: string, context: ProviderInfoContext): boolean {
+  const structured = TRACK_HEADER_ROW.exec(text);
+  if (!structured) return false;
+  return [structured[1], structured[2]].some((side) =>
+    headerTitles(context).some((title) => sharesBoundedForm(side, title)));
+}
+
+function matchesHeaderContinuation(text: string, continuation: string): boolean {
+  return text.normalize("NFKC").trim() === continuation.normalize("NFKC").trim();
 }
 
 function matchesHeaderSides(
@@ -328,7 +444,18 @@ export function markEmbeddedProviderInfo(
   markRights(entries, provider);
 
   const hasHeader = !entries[0].kind && matchesTrackHeader(entries[0].text, context);
-  let leadingStart = hasHeader ? 1 : 0;
+  const boundedHeader = !hasHeader && !entries[0].kind
+    ? matchesBoundedTrackHeader(entries[0].text, context)
+    : undefined;
+  const headerIndices = hasHeader || boundedHeader ? [0] : [];
+  let leadingStart = headerIndices.length ? 1 : 0;
+  if (boundedHeader?.continuation
+    && entries[leadingStart]
+    && !entries[leadingStart].kind
+    && matchesHeaderContinuation(entries[leadingStart].text, boundedHeader.continuation)) {
+    headerIndices.push(leadingStart);
+    leadingStart += 1;
+  }
   let hasAuthoritativeLeadingCredit = false;
   while (entries[leadingStart]?.kind === "credit") {
     hasAuthoritativeLeadingCredit = true;
@@ -341,15 +468,23 @@ export function markEmbeddedProviderInfo(
     ? leadingStart
     : undefined;
   if (postCreditHeader !== undefined) leadingStart += 1;
-  const leading = scanBoundaryBlock(
+  let leading = scanBoundaryBlock(
     entries,
     leadingStart,
     1,
     postCreditHeader === undefined && (hasHeader || hasAuthoritativeLeadingCredit),
   );
+  if (!leading.length
+    && !headerIndices.length
+    && leadingStart === 0
+    && !entries[0].kind
+    && !parseMetadataRow(entries[0].text)
+    && hasTrackHeaderTitleShape(entries[0].text, context)) {
+    leading = scanBoundaryBlock(entries, 1, 1);
+  }
   if (leading.length) {
     for (const index of leading) entries[index].setKind("credit");
-    if (hasHeader) entries[0].setKind("trackHeader");
+    for (const index of headerIndices) entries[index].setKind("trackHeader");
     if (postCreditHeader !== undefined) entries[postCreditHeader].setKind("trackHeader");
   }
 

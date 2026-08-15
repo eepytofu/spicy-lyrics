@@ -330,7 +330,7 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it("does not treat a partial selected artist set as a provider header", () => {
+  it("recovers strict credits without treating a partial selected artist set as a header", () => {
     const context: ProviderInfoContext = {
       reference: {
         id: "4Be8UHXmXCaKBWTi4OwpU6",
@@ -351,8 +351,191 @@ describe("embedded provider-info classification", () => {
       "第一句歌词",
     ], "kugou"), "kugou", context);
 
-    expect(kinds(result)).toEqual(Array(4).fill(undefined));
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
   });
+
+  it("recovers 食语人间 through one bounded provider-title annotation", () => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "spotify-food-world",
+        title: "食语人间",
+        artists: ["三无Marblue", "祖娅纳惜"],
+        album: "食语人间",
+        durationMs: 240_000,
+      },
+      selected: {
+        title: "食语人间",
+        artists: ["三无Marblue", "祖娅纳惜"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(syllableLyrics([
+      "食语人间 (《食物语》手游三周年主题纪念曲) - 三无Marblue/祖娅纳惜",
+      "作词：A",
+      "作曲：B",
+      "编曲：C",
+      "first lyric",
+    ]), "qq", context);
+
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
+  });
+
+  it.each([
+    "Bounded Track（edition）",
+    "Bounded Track[edition]",
+    "Bounded Track【edition】",
+    "Bounded Track《edition》",
+  ])("accepts one supported trailing balanced title annotation: %s", (header) => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "bounded-track",
+        title: "Bounded Track",
+        artists: ["Artist"],
+        album: "Bounded Track",
+        durationMs: 200_000,
+      },
+      selected: {
+        title: "Bounded Track",
+        artists: ["Artist"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      header,
+      "Lyrics：Alice",
+      "Composer：Bob",
+      "first lyric",
+    ]), "qq", context);
+
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
+  });
+
+  it("recovers 不谓侠 when a selected artist has one trailing alias annotation", () => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "netease:473403027",
+        title: "不谓侠",
+        artists: ["萧忆情Alex"],
+        album: "萧音弥漫",
+        durationMs: 266_000,
+      },
+      selected: {
+        title: "不谓侠",
+        artists: ["萧忆情Alex"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(syllableLyrics([
+      "不谓侠 - 萧忆情Alex (Alex)",
+      "词：迟意",
+      "曲：潮汐-tide",
+      "编曲：潮汐-tide",
+      "first lyric",
+    ]), "qq", context);
+
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
+  });
+
+  it("recovers symmetric base-title and split-header 马步摇 shapes only beside strict blocks", () => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "netease:2644122969",
+        title: "马步摇（《一梦江湖》马步谣变奏欢乐版）",
+        artists: ["一梦江湖"],
+        album: "《马步谣》欢乐重置版",
+        durationMs: 265_000,
+      },
+      selected: {
+        title: "马步摇（《一梦江湖》马步谣变奏欢乐版）",
+        artists: ["一梦江湖"],
+      },
+    };
+    const baseTitle = markEmbeddedProviderInfo(lineLyrics([
+      "马步摇",
+      "原唱：双笙",
+      "原曲：《马步谣》",
+      "曲：纯白P",
+      "词：冉语优",
+      "first lyric",
+    ]), "qq", context);
+    const splitTitle = markEmbeddedProviderInfo(lineLyrics([
+      "马步摇",
+      "（《一梦江湖》马步谣变奏欢乐版）",
+      "原曲：《马步谣》",
+      "曲：纯白P",
+      "词：冉语优",
+      "first lyric",
+    ]), "netease", context);
+
+    expect(kinds(baseTitle)).toEqual(["trackHeader", "credit", "credit", "credit", "credit", undefined]);
+    expect(kinds(splitTitle)).toEqual([
+      "trackHeader",
+      "trackHeader",
+      "credit",
+      "credit",
+      "credit",
+      undefined,
+    ]);
+  });
+
+  it("marks a strict credit block after an unknown leading row without granting header identity", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "乐鸣东方 - another singer",
+      "作词：Alice",
+      "作曲：Bob",
+      "编曲：Carol",
+      "first lyric",
+    ]), "netease", LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", undefined]);
+  });
+
+  it("does not give bounded headers the exact header's relaxed single-credit trust", () => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "bounded-single-credit",
+        title: "食语人间",
+        artists: ["三无Marblue"],
+        album: "食语人间",
+        durationMs: 240_000,
+      },
+      selected: {
+        title: "食语人间",
+        artists: ["三无Marblue"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "食语人间 (纪念曲) - 三无Marblue",
+      "作词：Alice",
+      "first lyric",
+    ]), "qq", context);
+
+    expect(kinds(result)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it.each(["Studio Song (Live)", "Studio Song (2022Ver.)"])(
+    "keeps a conflicting version-shaped bounded header ordinary while recovering its strict credits: %s",
+    (header) => {
+      const context: ProviderInfoContext = {
+        reference: {
+          id: "studio-song",
+          title: "Studio Song",
+          artists: ["Artist"],
+          album: "Studio Song",
+          durationMs: 200_000,
+        },
+        selected: {
+          title: "Studio Song",
+          artists: ["Artist"],
+        },
+      };
+      const result = markEmbeddedProviderInfo(lineLyrics([
+        `${header} - Artist`,
+        "Lyrics：Alice",
+        "Composer：Bob",
+        "first lyric",
+      ]), "qq", context);
+
+      expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
+    },
+  );
 
   it("marks an exact header and independently anchored block after authoritative leading credits", () => {
     const context: ProviderInfoContext = {
@@ -502,6 +685,9 @@ describe("embedded provider-info classification", () => {
   });
 
   it.each([
+    ["section heading", ["[Chorus]", "sing it again", "first lyric"]],
+    ["duet and empty-value cues", ["Alice/Bob：", "Alice：hello", "Bob：world"]],
+    ["title inside a lyric line", ["今晚唱着乐鸣东方", "作词：Alice", "first lyric"]],
     ["colon lyric and dialogue", ["喧笑：突然安静", "甲：你好吗", "乙：我很好"]],
     ["standalone credit", ["作词：Alice", "第一句歌词"]],
     ["unknown unanchored block", ["PGM: Alice", "DJ: Bob", "FOH+录音: Carol", "第一句歌词"]],
