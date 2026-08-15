@@ -1,12 +1,5 @@
 import { TTMLParser, type LyricLine, type Syllable, type SubLyricContent } from "@applemusic-like-lyrics/ttml";
 
-/**
- * Replaces the remote `parseTTML` operation. The field contract mirrors
- * `worker/src/convert.ts` so every provider reaches processing in one shape.
- *
- * @fork-feature Local TTML parsing
- */
-
 type NativeSyllable = {
   Text: string;
   StartTime: number;
@@ -45,7 +38,6 @@ function preferred(contents: readonly SubLyricContent[] | undefined): SubLyricCo
   return contents?.find((entry) => entry.text.trim()) ?? undefined;
 }
 
-/** Ruby `text` is the written base, so it stays; its readings need an owner in `Processing/Japanese/`. */
 function toSyllables(words: readonly Syllable[]): NativeSyllable[] {
   return words
     .filter((word) => word.text)
@@ -185,7 +177,6 @@ function hasUnkeyedLines(ttml: string): boolean {
  */
 export function parseTtmlDocument(
   ttml: string,
-  // The browser supplies DOMParser; tests inject one because Node has none.
   domParser?: ConstructorParameters<typeof TTMLParser>[0] extends { domParser?: infer P } ? P : never
 ): Record<string, unknown> | null {
   const parser = new TTMLParser(domParser ? { domParser } : undefined);

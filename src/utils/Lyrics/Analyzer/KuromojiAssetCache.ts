@@ -1,14 +1,6 @@
-/**
- * A Spicetify extension is a single file with no asset directory beside it, so
- * the dictionary cannot ship with the analyzer's code and is cached instead.
- *
- * @fork-feature Cached Kuromoji dictionary assets
- */
-
-/** Part of every cache key, so a bump orphans stale entries instead of mixing dictionaries. */
+// Changing this value invalidates every cached dictionary asset.
 export const KUROMOJI_ASSET_VERSION = "kuromoji-0.1.2-ipadic-2.7.0-20070801";
 
-/** Pinned to a package version, and jsdelivr because the former host sent no CORS header. */
 const DEFAULT_DICTIONARY_BASE_URL = "https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/";
 
 const DictionaryFilename =
@@ -20,7 +12,6 @@ export function dictionaryBaseUrl(): string {
   return base.replace(/\/?$/u, "/");
 }
 
-/** Kuromoji joins `dicPath` with Node's `path.join`, so the prefix it asks for is unusable. */
 export function dictionaryAssetName(requestedPath: string): string {
   const filename = requestedPath.replace(/\\/gu, "/").split("/").at(-1) || "";
   if (!DictionaryFilename.test(filename)) {
@@ -42,8 +33,7 @@ export type DictionaryAssetStore = {
   write(key: string, bytes: Uint8Array): Promise<void>;
 };
 
-// Imported lazily because `db.ts` opens IndexedDB at module scope and `Logger.ts`
-// reaches into the settings stores, neither of which exists under the test runner.
+// Keep browser-owned persistence and logging outside the testable asset loader boundary.
 const database = () => import("../../db.ts");
 
 let logger: Promise<{ warn(...args: unknown[]): void }> | undefined;
@@ -52,7 +42,7 @@ async function warnCacheFailure(...args: unknown[]): Promise<void> {
     logger ??= import("../../Logger.ts").then(({ default: Logger }) => new Logger("KuromojiAssets"));
     (await logger).warn(...args);
   } catch {
-    // Nothing to log to, and a cache failure is already non-fatal.
+    return;
   }
 }
 
@@ -77,7 +67,7 @@ function browserStore(): DictionaryAssetStore {
         const { dbPromise, ensurePersistence, ObjectStores } = await database();
         if (!persistenceRequested) {
           persistenceRequested = true;
-          // ~17.8MB is well inside eviction territory without it.
+          // Request durable storage once before caching the dictionary.
           await ensurePersistence();
         }
         await (await dbPromise).put(ObjectStores.JapaneseAssets, bytes, key);
@@ -114,7 +104,7 @@ export function createDictionaryAssetLoader(
     const filename = dictionaryAssetName(requestedPath);
     const key = dictionaryCacheKey(filename);
 
-    // The cache is an optimisation: a store that fails costs a download, never the dictionary.
+    // Cache failures must never make the dictionary unavailable.
     const cached = await store.read(key).catch(() => undefined);
     if (cached) return cached;
 

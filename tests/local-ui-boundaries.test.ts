@@ -63,6 +63,5 @@ test("the generic modal accepts DOM nodes instead of executable markup strings",
 test("the TTML upload UI discloses that parsing stays on the device", () => {
   assert.match(uploadSource, /TTML is parsed on your device/u);
   assert.match(uploadSource, /without\s+sending their contents anywhere/u);
-  // The disclosure must never claim local parsing while a remote call remains.
   assert.doesNotMatch(uploadSource, /ParseTTML/u);
 });

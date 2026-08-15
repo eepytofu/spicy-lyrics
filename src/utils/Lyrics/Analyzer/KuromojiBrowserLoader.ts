@@ -21,8 +21,7 @@ export function buildKuromojiBrowserTokenizer(
   load: (filename: string) => Promise<Uint8Array> = loadDictionaryAsset
 ): Promise<any> {
   return new Promise((resolve, reject) => {
-    // kuromoji@0.1.2's browser build does not expose its dictionary loader, so
-    // XMLHttpRequest is the only seam. Other requests are forwarded untouched.
+    // The browser build exposes dictionary loading only through XMLHttpRequest.
     const xhrPrototype = XMLHttpRequest.prototype as any;
     const originalOpen = xhrPrototype.open;
     const originalSend = xhrPrototype.send;
@@ -39,7 +38,7 @@ export function buildKuromojiBrowserTokenizer(
 
       load(filename).then(
         (bytes) => {
-          // Own properties shadow the prototype's read-only getters.
+          // Own properties shadow the prototype's read-only response getters.
           Object.defineProperty(this, "status", { value: 200, configurable: true });
           Object.defineProperty(this, "response", {
             value: toArrayBuffer(bytes),
