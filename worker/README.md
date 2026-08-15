@@ -49,17 +49,17 @@ Required query data:
 - `title`
 - one or more `artist_name` values
 - `duration` in seconds
-- `request_version=16`
+- `request_version=17`
 
 `album` is optional but can improve matching. The extension supplies these values automatically.
 
 ```text
-/v1/lyrics/qq/spotify-id?request_version=16&title=Song&artist_name=Artist&album=Album&duration=240
+/v1/lyrics/qq/spotify-id?request_version=17&title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
 Successful responses are private and `no-store` in the browser. Cloudflare's edge cache can reuse them for one hour and serve stale data for one day when the origin fails. No-match results, invalid requests, cancellations, timeouts, rate limits, and upstream failures are not cached.
 
-Provider JSON can include `SourceMatch`, `ProviderCredits`, and `SongWriters`. Native lyric rows (`Lines[]`, `Content[]`, or `Content[].Lead`) can also carry an additive `ProviderInfoKind` value of `trackHeader`, `credit`, `rightsHolder`, `rightsNotice`, or `providerNotice`. The marker does not change provider text, timing, order, or source indices. Promotional provider notices are always omitted from display and copied text. Other embedded provider-info rows remain visible by default and can be hidden with the extension's **Hide Embedded Provider Info** setting. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
+Provider JSON can include `SourceMatch`, `ProviderCredits`, and `SongWriters`. `SourceMatch.discoveryEvidence` separately reports the strongest match for any requested artist and whether the provider's canonical title carries a conflicting version marker. Native lyric rows (`Lines[]`, `Content[]`, or `Content[].Lead`) can also carry an additive `ProviderInfoKind` value of `trackHeader`, `credit`, `rightsHolder`, `rightsNotice`, or `providerNotice`. The marker does not change provider text, timing, order, or source indices. Promotional provider notices are always omitted from display and copied text. Other embedded provider-info rows remain visible by default and can be hidden with the extension's **Hide Embedded Provider Info** setting. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
 
 The Worker returns `400` for invalid metadata, `404` for an unknown route or no safe match, `426` for a stale request contract, `429` when an upstream provider rate-limits the request, `499` after client cancellation, `504` when a provider times out, and `502` when an upstream request or response fails validation.
 

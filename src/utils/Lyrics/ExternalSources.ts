@@ -451,14 +451,23 @@ type AcquiredProviderEntries = {
   entries: ProviderEntry[];
 };
 
+type AcquireEntriesOptions = {
+  parentSignal?: AbortSignal;
+  overrides?: LyricsSearchOverrides;
+  nativeTitleEnrichment?: boolean;
+};
+
 async function acquireEntries(
   uri: string,
   order: LyricsSourceProviderId[],
   mode: "strict" | "concurrent",
-  parentSignal?: AbortSignal,
-  overrides: LyricsSearchOverrides = {},
-  nativeTitleEnrichment = false,
+  options: AcquireEntriesOptions = {},
 ): Promise<AcquiredProviderEntries | null> {
+  const {
+    parentSignal,
+    overrides = {},
+    nativeTitleEnrichment = false,
+  } = options;
   if (parentSignal?.aborted) return null;
   const info = trackInfo(uri, overrides);
   if (!info) return null;
@@ -470,6 +479,7 @@ async function acquireEntries(
   const acquire = (
     provider: LyricsSourceProviderId,
     hint?: NativeTitleHint,
+    requestSignal: AbortSignal | undefined = parentSignal,
   ) => {
     const requestInfo = hint ? nativeTitleRetryInfo(info, hint) : info;
     const context: ProviderAdapterContext = {
@@ -478,7 +488,7 @@ async function acquireEntries(
     };
     return runProviderAcquisition(
       (signal) => providerAdapter(provider).acquire(context, signal),
-      parentSignal,
+      requestSignal,
     );
   };
   const records = nativeTitleEnrichment && mode === "concurrent"
@@ -486,7 +496,7 @@ async function acquireEntries(
         order,
         info.title,
         acquire,
-        parentSignal,
+        { signal: parentSignal },
       )
     : await acquireProviderOutcomes(
         order,
@@ -602,9 +612,10 @@ export async function loadLyricsCandidates(
     uri,
     order,
     "concurrent",
-    parentSignal,
-    {},
-    $lyricsSelectionMode.get() !== "strict",
+    {
+      parentSignal,
+      nativeTitleEnrichment: $lyricsSelectionMode.get() !== "strict",
+    },
   );
   if (!acquired || parentSignal?.aborted) return null;
   const selected = selectProviderEntry(
@@ -635,9 +646,7 @@ export async function searchLyricsCandidates(
     uri,
     order,
     "concurrent",
-    parentSignal,
-    normalizedOverrides,
-    false,
+    { parentSignal, overrides: normalizedOverrides },
   );
   if (!acquired || parentSignal?.aborted) return null;
   const selected = selectProviderEntry(
@@ -663,9 +672,7 @@ export async function fetchLyricsFromProviders(
     uri,
     order,
     mode === "strict" ? "strict" : "concurrent",
-    parentSignal,
-    {},
-    mode !== "strict",
+    { parentSignal, nativeTitleEnrichment: mode !== "strict" },
   );
   if (!acquired || parentSignal?.aborted) return null;
   if (acquired.records.some(({ outcome }) => outcome.kind === "queued")) {

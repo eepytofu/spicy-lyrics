@@ -19,6 +19,10 @@ export type LyricsMatchMetadata = {
     duration?: number | null;
     versionConflict?: boolean;
   };
+  discoveryEvidence?: {
+    bestRequestedArtist?: number | null;
+    canonicalTitleVersionConflict?: boolean;
+  };
   method?: string;
   discovery?: {
     kind: "netease-native-title";

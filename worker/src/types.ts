@@ -64,6 +64,10 @@ export type ProviderMatchMetadata = {
     duration: number | null;
     versionConflict: boolean;
   };
+  discoveryEvidence?: {
+    bestRequestedArtist: number | null;
+    canonicalTitleVersionConflict: boolean;
+  };
   method: string;
 };
 

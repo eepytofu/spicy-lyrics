@@ -47,7 +47,41 @@ describe("provider candidate matching", () => {
 
     expect(assessment.evidence.title).toBe(1);
     expect(assessment.evidence.artists).toBeGreaterThanOrEqual(0.85);
+    expect(assessment.discoveryEvidence.bestRequestedArtist).toBe(1);
     expect(isStrongCandidate(assessment)).toBe(true);
+  });
+
+  it("separates one strong requested artist alias from extra cover performers", () => {
+    const assessment = assessCandidate(track("Shojo Rei", ["Mikito P"], 289_000), {
+      title: "少女レイ",
+      titleAliases: ["Shojo Rei"],
+      artists: ["宮下遊", "みきとP"],
+      artistAliases: ["みきとP (Mikito P)"],
+      album: "青に歩く",
+      durationMs: 288_613,
+    });
+
+    expect(assessment.evidence.artists).toBe(0.75);
+    expect(assessment.discoveryEvidence).toEqual({
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: false,
+    });
+  });
+
+  it("keeps canonical cover markers visible when a clean title alias wins scoring", () => {
+    const assessment = assessCandidate(track("Roki", ["Mikito P"], 231_000), {
+      title: "ロキ (Cover)",
+      titleAliases: ["Roki"],
+      artists: ["nameless", "みきとP"],
+      artistAliases: ["みきとP (Mikito P)"],
+      durationMs: 230_556,
+    });
+
+    expect(assessment.evidence.versionConflict).toBe(false);
+    expect(assessment.discoveryEvidence).toEqual({
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: true,
+    });
   });
 
   it("does not turn same-script bracket labels into artist aliases", () => {
@@ -87,6 +121,10 @@ describe("provider candidate matching", () => {
     expect(match.confidence).toBeGreaterThan(0.9);
     expect(match.method).toBe("search");
     expect(match.title).toBe("Example");
+    expect(match.discoveryEvidence).toEqual({
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: false,
+    });
   });
 
   it("builds a metadata-first query ladder before broad title-only searches", () => {

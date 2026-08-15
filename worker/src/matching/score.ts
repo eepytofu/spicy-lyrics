@@ -154,37 +154,20 @@ function albumEvidence(wanted: string, candidate: string): number {
   return wantedDropsToCandidate || candidateDropsToWanted ? 0.65 : 0;
 }
 
-function artistEvidence(wanted: string[], candidate: string[], aliases: string[] = []): number | null {
+type ArtistEvidenceAssessment = {
+  aggregate: number | null;
+  bestRequestedArtist: number | null;
+};
+
+function artistEvidenceAssessment(
+  wanted: string[],
+  candidate: string[],
+  aliases: string[] = [],
+): ArtistEvidenceAssessment {
   const wantedForms = unique(wanted.flatMap(artistForms));
   const candidateForms = unique([...candidate, ...aliases].flatMap(artistForms));
-  if (!wantedForms.length || !candidateForms.length) return null;
-
-  if (wanted.length > 5 && candidateForms.some((artist) => artist === "variousartists" || artist === "群星")) return 0.85;
-
-  const wantedIdentities = artistIdentities(wanted);
-  const candidateIdentities = artistIdentities(candidate);
-  const exactIdentityCount = wantedIdentities.filter((artist) => candidateIdentities.includes(artist)).length;
-  if (
-    exactIdentityCount === wantedIdentities.length
-    && candidateIdentities.length === wantedIdentities.length
-  ) return 1;
-
-  if (
-    wantedIdentities.length >= 2
-    && candidateIdentities.length + 1 === wantedIdentities.length
-    && candidateIdentities.every((artist) => wantedIdentities.includes(artist))
-  ) {
-    // A provider may omit one secondary playback credit. Lyricify treats that
-    // as a very-high match. Keep the tolerance directional: every returned
-    // identity must belong to the reference metadata, so extra wrong artists
-    // cannot receive the same boost.
-    return 0.88;
-  }
-
-  if (exactIdentityCount === wantedIdentities.length && candidateIdentities.length > wantedIdentities.length) {
-    // Extra provider credits are useful but not equivalent to the reference
-    // artist set. One extra identity is a high match; several are only medium.
-    return candidateIdentities.length === wantedIdentities.length + 1 ? 0.75 : 0.65;
+  if (!wantedForms.length || !candidateForms.length) {
+    return { aggregate: null, bestRequestedArtist: null };
   }
 
   const perArtist = wanted.map((artist) => {
@@ -200,18 +183,58 @@ function artistEvidence(wanted: string[], candidate: string[], aliases: string[]
     }
     return best;
   });
+  const bestRequestedArtist = perArtist.length ? Math.max(...perArtist) : null;
+  const assessed = (aggregate: number): ArtistEvidenceAssessment => ({
+    aggregate,
+    bestRequestedArtist,
+  });
+
+  if (wanted.length > 5 && candidateForms.some((artist) => artist === "variousartists" || artist === "群星")) {
+    return assessed(0.85);
+  }
+
+  const wantedIdentities = artistIdentities(wanted);
+  const candidateIdentities = artistIdentities(candidate);
+  const exactIdentityCount = wantedIdentities.filter((artist) => candidateIdentities.includes(artist)).length;
+  if (
+    exactIdentityCount === wantedIdentities.length
+    && candidateIdentities.length === wantedIdentities.length
+  ) return assessed(1);
+
+  if (
+    wantedIdentities.length >= 2
+    && candidateIdentities.length + 1 === wantedIdentities.length
+    && candidateIdentities.every((artist) => wantedIdentities.includes(artist))
+  ) {
+    // A provider may omit one secondary playback credit. Lyricify treats that
+    // as a very-high match. Keep the tolerance directional: every returned
+    // identity must belong to the reference metadata, so extra wrong artists
+    // cannot receive the same boost.
+    return assessed(0.88);
+  }
+
+  if (exactIdentityCount === wantedIdentities.length && candidateIdentities.length > wantedIdentities.length) {
+    // Extra provider credits are useful but not equivalent to the reference
+    // artist set. One extra identity is a high match; several are only medium.
+    return assessed(candidateIdentities.length === wantedIdentities.length + 1 ? 0.75 : 0.65);
+  }
+
   const coverage = perArtist.reduce((sum, value) => sum + value, 0) / Math.max(1, perArtist.length);
   const extraIdentityCap = candidateIdentities.length > wantedIdentities.length
     ? (candidateIdentities.length === wantedIdentities.length + 1 ? 0.75 : 0.65)
     : 1;
   if (coverage >= 0.99) {
-    if (candidateIdentities.length < wantedIdentities.length) return 0.65;
-    return Math.min(1, extraIdentityCap);
+    if (candidateIdentities.length < wantedIdentities.length) return assessed(0.65);
+    return assessed(Math.min(1, extraIdentityCap));
   }
-  if (coverage >= 0.8) return Math.min(0.88, extraIdentityCap);
-  if (coverage >= 0.55) return Math.min(0.65, extraIdentityCap);
-  if (coverage > 0) return 0.4;
-  return 0;
+  if (coverage >= 0.8) return assessed(Math.min(0.88, extraIdentityCap));
+  if (coverage >= 0.55) return assessed(Math.min(0.65, extraIdentityCap));
+  if (coverage > 0) return assessed(0.4);
+  return assessed(0);
+}
+
+function artistEvidence(wanted: string[], candidate: string[], aliases: string[] = []): number | null {
+  return artistEvidenceAssessment(wanted, candidate, aliases).aggregate;
 }
 
 function durationEvidence(wanted?: number, candidate?: number): number | null {
@@ -247,6 +270,10 @@ export type CandidateAssessment = {
     duration: number | null;
     versionConflict: boolean;
   };
+  discoveryEvidence: {
+    bestRequestedArtist: number | null;
+    canonicalTitleVersionConflict: boolean;
+  };
 };
 
 export type AssessedCandidate<T, TAssessment extends { score: number } = CandidateAssessment> = {
@@ -274,18 +301,24 @@ export function assessCandidate(track: TrackMetadata, candidate: TrackCandidate)
   const selectedTitle = titleEvidence[0]?.value ?? candidate.title;
   const conflict = versionConflict(track.title, selectedTitle);
   const title = titleEvidence[0]?.evidence ?? 0;
-  const artists = artistEvidence(track.artists, [
+  const artistAssessment = artistEvidenceAssessment(track.artists, [
     ...candidate.artists,
   ], candidate.artistAliases);
+  const artists = artistAssessment.aggregate;
   const album = track.album.trim() && candidate.album?.trim() ? albumEvidence(track.album, candidate.album) : null;
   const albumArtists = candidate.albumArtists?.length ? artistEvidence(track.artists, candidate.albumArtists) : null;
   const duration = durationEvidence(track.durationMs, candidate.durationMs);
+  const discoveryEvidence = {
+    bestRequestedArtist: artistAssessment.bestRequestedArtist,
+    canonicalTitleVersionConflict: versionConflict(track.title, candidate.title),
+  };
   if (!normalize(track.title) || !normalize(candidate.title)) {
     return {
       score: -100,
       confidence: 0,
       coherent: false,
       evidence: { title, artists, album, albumArtists, duration, versionConflict: conflict },
+      discoveryEvidence,
     };
   }
 
@@ -312,6 +345,7 @@ export function assessCandidate(track: TrackMetadata, candidate: TrackCandidate)
     confidence: Math.max(0, Math.min(1, score / 110)),
     coherent,
     evidence: { title, artists, album, albumArtists, duration, versionConflict: conflict },
+    discoveryEvidence,
   };
 }
 
@@ -350,6 +384,7 @@ export function matchMetadata(
     confidence: assessment.confidence,
     coherent: assessment.coherent,
     evidence: assessment.evidence,
+    discoveryEvidence: assessment.discoveryEvidence,
     method,
   };
 }

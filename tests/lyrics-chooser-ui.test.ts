@@ -38,7 +38,7 @@ test("chooser auto-loads candidate sources and keeps manual search playback-scop
   assert.match(chooser, />Automatic</);
   assert.match(externalSources, /searchLyricsCandidates/);
   assert.match(externalSources, /\$lyricsSelectionMode\.get\(\) !== "strict"/);
-  assert.match(externalSources, /normalizedOverrides,\s*false,/);
+  assert.match(externalSources, /overrides:\s*normalizedOverrides/);
   assert.match(externalSources, /trackInfo\(uri, overrides\)/);
   assert.doesNotMatch(sources, /Last Selection/);
 });

@@ -91,6 +91,10 @@ function match(
       duration: 1,
       versionConflict: false,
     },
+    discoveryEvidence: {
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: false,
+    },
     method: "catalog-search",
     ...overrides,
   };
@@ -137,6 +141,10 @@ test("rejects unsafe or unnecessary NetEase title hints", () => {
   assert.equal(nativeTitleHint("Shojo Rei", lyricsResult(match("Shoujo Rei"))), null);
   assert.equal(nativeTitleHint("Shojo Rei", lyricsResult(match("少女レイ", {
     evidence: { ...good.evidence!, artists: 0.8 },
+    discoveryEvidence: {
+      bestRequestedArtist: 0.8,
+      canonicalTitleVersionConflict: false,
+    },
   }))), null);
   assert.equal(nativeTitleHint("Shojo Rei", lyricsResult(match("少女レイ", {
     evidence: { ...good.evidence!, duration: 0.79 },
@@ -144,6 +152,26 @@ test("rejects unsafe or unnecessary NetEase title hints", () => {
   assert.equal(nativeTitleHint("Shojo Rei", lyricsResult(match("少女レイ", {
     evidence: { ...good.evidence!, versionConflict: true },
   }))), null);
+  assert.equal(nativeTitleHint("Roki", lyricsResult(match("ロキ (Cover)", {
+    evidence: { ...good.evidence!, artists: 0.75, versionConflict: false },
+    discoveryEvidence: {
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: true,
+    },
+  }))), null);
+});
+
+test("accepts a native-title hint when one requested artist alias is strong", () => {
+  const hint = nativeTitleHint("Shojo Rei", lyricsResult(match("少女レイ", {
+    artists: ["宮下遊", "みきとP"],
+    evidence: { ...match("少女レイ").evidence!, artists: 0.75 },
+    discoveryEvidence: {
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: false,
+    },
+  })));
+
+  assert.equal(hint?.title, "少女レイ");
 });
 
 test("requires strong title and artist evidence from an enriched provider result", () => {
@@ -158,6 +186,12 @@ test("requires strong title and artist evidence from an enriched provider result
   assert.equal(isAcceptedNativeTitleResult(lyricsResult(match("少女レイ", {
     evidence: { ...match("少女レイ").evidence!, title: 0.89 },
   }), "kugou")), false);
+  assert.equal(isAcceptedNativeTitleResult(lyricsResult(match("ロキ (Cover)", {
+    discoveryEvidence: {
+      bestRequestedArtist: 1,
+      canonicalTitleVersionConflict: true,
+    },
+  }), "qq")), false);
 });
 
 test("Roki-shaped timing confidence cannot admit wrong-artist QQ or KuGou results", async () => {
@@ -186,6 +220,37 @@ test("Roki-shaped timing confidence cannot admit wrong-artist QQ or KuGou result
       };
     },
   );
+  assert.deepEqual(
+    records.map(({ provider, outcome }) => [provider, outcome.kind]),
+    [["netease", "lyrics"], ["qq", "no-match"], ["kugou", "no-match"]],
+  );
+});
+
+test("Roki-shaped canonical cover evidence prevents every native-title retry", async () => {
+  const calls: string[] = [];
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "qq", "kugou"],
+    "Roki",
+    async (provider, hint) => {
+      calls.push(`${provider}:${hint?.title ?? "base"}`);
+      if (provider === "netease") {
+        return {
+          kind: "lyrics",
+          result: lineResult(match("ロキ (Cover)", {
+            artists: ["nameless", "みきとP"],
+            evidence: { ...match("ロキ (Cover)").evidence!, artists: 0.75 },
+            discoveryEvidence: {
+              bestRequestedArtist: 1,
+              canonicalTitleVersionConflict: true,
+            },
+          }), "netease"),
+        };
+      }
+      return { kind: "no-match" };
+    },
+  );
+
+  assert.deepEqual(calls, ["netease:base", "qq:base", "kugou:base"]);
   assert.deepEqual(
     records.map(({ provider, outcome }) => [provider, outcome.kind]),
     [["netease", "lyrics"], ["qq", "no-match"], ["kugou", "no-match"]],
@@ -268,6 +333,110 @@ test("starts every base request immediately and fills only approved no-match pro
   assert.equal(new Set(records.map((record) => record.provider)).size, records.length);
 });
 
+test("shared enrichment budget keeps completed retries and abandons slow retries", async () => {
+  let completedRetrySignal: AbortSignal | undefined;
+  let slowRetrySignal: AbortSignal | undefined;
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "qq", "kugou"],
+    "Shojo Rei",
+    async (provider, hint, signal) => {
+      if (!hint) {
+        if (provider === "netease") {
+          return {
+            kind: "lyrics",
+            result: lyricsResult(match("少女レイ", {
+              evidence: { ...match("少女レイ").evidence!, title: 0 },
+            })),
+          };
+        }
+        return { kind: "no-match" };
+      }
+      if (provider === "qq") {
+        completedRetrySignal = signal;
+        return { kind: "lyrics", result: syllableResult(match("少女レイ"), "qq") };
+      }
+      slowRetrySignal = signal;
+      return new Promise<ProviderAcquisitionOutcome<Result>>((resolve) => {
+        signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+      });
+    },
+    { budgetMs: 20 },
+  );
+
+  assert.equal(completedRetrySignal, slowRetrySignal);
+  assert.equal(slowRetrySignal?.aborted, true);
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "lyrics");
+  assert.equal(records.find(({ provider }) => provider === "kugou")?.outcome.kind, "no-match");
+});
+
+test("does not start a retry when its base no-match settles after the shared window", async () => {
+  const qqBase = deferred<ProviderAcquisitionOutcome<Result>>();
+  let retryCalls = 0;
+  const request = acquireWithNativeTitleEnrichment(
+    ["netease", "qq"],
+    "Shojo Rei",
+    async (provider, hint) => {
+      if (hint) {
+        retryCalls += 1;
+        return { kind: "lyrics", result: syllableResult(match("少女レイ"), provider) };
+      }
+      if (provider === "netease") {
+        return {
+          kind: "lyrics",
+          result: lyricsResult(match("少女レイ", {
+            evidence: { ...match("少女レイ").evidence!, title: 0 },
+          })),
+        };
+      }
+      return qqBase.promise;
+    },
+    { budgetMs: 15 },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  qqBase.resolve({ kind: "no-match" });
+  const records = await request;
+
+  assert.equal(retryCalls, 0);
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
+});
+
+test("parent cancellation aborts an active native-title retry", async () => {
+  const controller = new AbortController();
+  const retryStarted = deferred<void>();
+  let retrySignal: AbortSignal | undefined;
+  const request = acquireWithNativeTitleEnrichment(
+    ["netease", "qq"],
+    "Shojo Rei",
+    async (provider, hint, signal) => {
+      if (!hint) {
+        if (provider === "netease") {
+          return {
+            kind: "lyrics",
+            result: lyricsResult(match("少女レイ", {
+              evidence: { ...match("少女レイ").evidence!, title: 0 },
+            })),
+          };
+        }
+        return { kind: "no-match" };
+      }
+      retrySignal = signal;
+      retryStarted.resolve(undefined);
+      return new Promise<ProviderAcquisitionOutcome<Result>>((resolve) => {
+        signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+      });
+    },
+    { signal: controller.signal, budgetMs: 1_000 },
+  );
+
+  await retryStarted.promise;
+  controller.abort();
+  const records = await request;
+
+  assert.equal(retrySignal?.aborted, true);
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
+});
+
 test("does not retry an existing provider hit or start a retry after cancellation", async () => {
   const hint = match("エイリアンエイリアン", {
     evidence: { ...match("エイリアンエイリアン").evidence!, title: 0 },
@@ -296,7 +465,7 @@ test("does not retry an existing provider hit or start a retry after cancellatio
       cancelledCalls.push({ provider, hint: nativeHint });
       return provider === "netease" ? netease.promise : qq.promise;
     },
-    controller.signal,
+    { signal: controller.signal },
   );
   controller.abort();
   netease.resolve({ kind: "lyrics", result: lyricsResult(hint) });
@@ -344,7 +513,12 @@ test("Shojo-shaped recovery adds valid QQ timing and rejects wrong-artist KuGou"
         if (provider === "netease") {
           return { kind: "lyrics", result: lineResult(match("少女レイ", {
             confidence: 0.691,
-            evidence: { ...match("少女レイ").evidence!, title: 0 },
+            artists: ["宮下遊", "みきとP"],
+            evidence: { ...match("少女レイ").evidence!, title: 0, artists: 0.75 },
+            discoveryEvidence: {
+              bestRequestedArtist: 1,
+              canonicalTitleVersionConflict: false,
+            },
           }), "netease") };
         }
         return { kind: "no-match" };

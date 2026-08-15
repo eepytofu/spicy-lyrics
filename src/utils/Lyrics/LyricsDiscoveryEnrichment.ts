@@ -12,6 +12,13 @@ const METADATA_WORKER_PROVIDERS = new Set<LyricsSourceProviderId>([
   "soda",
 ]);
 
+export const NATIVE_TITLE_ENRICHMENT_BUDGET_MS = 8_000;
+
+export type NativeTitleEnrichmentOptions = {
+  signal?: AbortSignal;
+  budgetMs?: number;
+};
+
 const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const LATIN_SCRIPT = /\p{Script=Latin}/u;
 
@@ -40,7 +47,11 @@ function resultMatch(result: EnrichableLyricsResult): LyricsMatchMetadata | unde
 function reliableNeteaseHintMatch(match: LyricsMatchMetadata): boolean {
   return match.coherent === true
     && match.evidence?.versionConflict === false
-    && (match.evidence.artists ?? 0) >= 0.85
+    && match.discoveryEvidence?.canonicalTitleVersionConflict === false
+    && (
+      (match.evidence.artists ?? 0) >= 0.85
+      || (match.discoveryEvidence.bestRequestedArtist ?? 0) >= 0.85
+    )
     && (match.evidence.duration ?? 0) >= 0.8;
 }
 
@@ -91,6 +102,7 @@ export function isAcceptedNativeTitleResult(result: EnrichableLyricsResult): boo
   const duration = match?.evidence?.duration;
   return match?.coherent === true
     && match.evidence?.versionConflict === false
+    && match.discoveryEvidence?.canonicalTitleVersionConflict === false
     && (match.evidence.title ?? 0) >= 0.9
     && (match.evidence.artists ?? 0) >= 0.85
     && (duration === null || duration === undefined || duration >= 0.8);
@@ -113,52 +125,87 @@ function annotateNativeTitleResult<Result extends EnrichableLyricsResult>(
   };
 }
 
+type NativeTitleRetryWindow = {
+  signal: AbortSignal;
+  aborted: Promise<null>;
+  dispose: () => void;
+};
+
+function createNativeTitleRetryWindow(
+  parentSignal: AbortSignal | undefined,
+  budgetMs: number,
+): NativeTitleRetryWindow {
+  const controller = new AbortController();
+  let resolveAbort!: () => void;
+  const aborted = new Promise<null>((resolve) => { resolveAbort = () => resolve(null); });
+  controller.signal.addEventListener("abort", resolveAbort, { once: true });
+
+  const onParentAbort = () => controller.abort(parentSignal?.reason);
+  parentSignal?.addEventListener("abort", onParentAbort, { once: true });
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("Native-title enrichment budget expired", "TimeoutError")),
+    budgetMs,
+  );
+
+  return {
+    signal: controller.signal,
+    aborted,
+    dispose: () => {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener("abort", onParentAbort);
+    },
+  };
+}
+
 export async function acquireWithNativeTitleEnrichment<Result extends EnrichableLyricsResult>(
   order: readonly LyricsSourceProviderId[],
   originalTitle: string,
   acquire: (
     provider: LyricsSourceProviderId,
     hint?: NativeTitleHint,
+    signal?: AbortSignal,
   ) => Promise<ProviderAcquisitionOutcome<Result>>,
-  signal?: AbortSignal,
+  options: NativeTitleEnrichmentOptions = {},
 ): Promise<Array<ProviderAcquisitionRecord<LyricsSourceProviderId, Result>>> {
+  const { signal, budgetMs = NATIVE_TITLE_ENRICHMENT_BUDGET_MS } = options;
   const basePromises = order.map(async (provider, orderIndex) => ({
     provider,
     orderIndex,
     outcome: await acquire(provider),
   }));
   const neteaseIndex = order.indexOf("netease");
-  if (neteaseIndex < 0) return Promise.all(basePromises);
+  if (neteaseIndex < 0 || !order.some(nativeTitleRetryProvider)) return Promise.all(basePromises);
 
-  const neteasePromise = basePromises[neteaseIndex];
-  const retryPromises = order.map(async (provider, orderIndex) => {
-    if (!nativeTitleRetryProvider(provider)) return null;
-    const [neteaseRecord, baseRecord] = await Promise.all([
-      neteasePromise,
-      basePromises[orderIndex],
+  const neteaseRecord = await basePromises[neteaseIndex];
+  if (signal?.aborted || neteaseRecord.outcome.kind !== "lyrics") return Promise.all(basePromises);
+  const hint = nativeTitleHint(originalTitle, neteaseRecord.outcome.result);
+  if (!hint || signal?.aborted) return Promise.all(basePromises);
+
+  const retryWindow = createNativeTitleRetryWindow(signal, budgetMs);
+  try {
+    const retryPromises = order.map(async (provider, orderIndex) => {
+      if (!nativeTitleRetryProvider(provider)) return null;
+      const baseRecord = await basePromises[orderIndex];
+      if (retryWindow.signal.aborted || baseRecord.outcome.kind !== "no-match") return null;
+      const retried = await Promise.race([
+        acquire(provider, hint, retryWindow.signal),
+        retryWindow.aborted,
+      ]);
+      if (!retried || retried.kind !== "lyrics" || !isAcceptedNativeTitleResult(retried.result)) return null;
+      return annotateNativeTitleResult(retried.result, hint);
+    });
+
+    const [baseRecords, retries] = await Promise.all([
+      Promise.all(basePromises),
+      Promise.all(retryPromises),
     ]);
-    if (
-      signal?.aborted
-      || neteaseRecord.outcome.kind !== "lyrics"
-      || baseRecord.outcome.kind !== "no-match"
-    ) {
-      return null;
-    }
-    const hint = nativeTitleHint(originalTitle, neteaseRecord.outcome.result);
-    if (!hint || signal?.aborted) return null;
-    const retried = await acquire(provider, hint);
-    if (retried.kind !== "lyrics" || !isAcceptedNativeTitleResult(retried.result)) return null;
-    return annotateNativeTitleResult(retried.result, hint);
-  });
-
-  const [baseRecords, retries] = await Promise.all([
-    Promise.all(basePromises),
-    Promise.all(retryPromises),
-  ]);
-  return baseRecords.map((record, index) => {
-    const result = retries[index];
-    return result
-      ? { ...record, outcome: { kind: "lyrics" as const, result } }
-      : record;
-  });
+    return baseRecords.map((record, index) => {
+      const result = retries[index];
+      return result
+        ? { ...record, outcome: { kind: "lyrics" as const, result } }
+        : record;
+    });
+  } finally {
+    retryWindow.dispose();
+  }
 }
