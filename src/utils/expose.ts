@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { dbPromise } from "./db";
 import { LocalLyricsManager } from "./Lyrics/manager";
+import { clearKuromojiAssetCache } from "./Lyrics/Analyzer/KuromojiAssetCache";
 import { openSettingsPanel } from "./settings";
 import { OpenLyricsDBPanel } from "./openLyricsDBPanel";
 import { DeepFreeze } from "./utils";
@@ -24,6 +25,9 @@ export function exposeToWindow() {
             objectStores: {
                 lyricsStore: {
                     manager: LocalLyricsManager,
+                },
+                japaneseAssets: {
+                    clear: clearKuromojiAssetCache,
                 }
             }
         },

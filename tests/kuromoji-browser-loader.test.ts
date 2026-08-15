@@ -1,51 +1,88 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  buildKuromojiBrowserTokenizer,
-  KUROMOJI_DICTIONARY_ROOT,
-  kuromojiDictionaryUrl,
-} from "../src/utils/Lyrics/Analyzer/KuromojiBrowserLoader.ts";
+import { buildKuromojiBrowserTokenizer } from "../src/utils/Lyrics/Analyzer/KuromojiBrowserLoader.ts";
 
-test("Kuromoji dictionary paths resolve against the remote URL origin", () => {
-  assert.equal(
-    kuromojiDictionaryUrl("https:/kuromoji.pkgs.spikerko.org/base.dat.gz"),
-    `${KUROMOJI_DICTIONARY_ROOT}base.dat.gz`
-  );
-  assert.equal(
-    kuromojiDictionaryUrl("https:\\kuromoji.pkgs.spikerko.org\\unk_pos.dat.gz"),
-    `${KUROMOJI_DICTIONARY_ROOT}unk_pos.dat.gz`
-  );
-  assert.throws(() => kuromojiDictionaryUrl("https:/example.test/not-a-dictionary.js"));
-});
+class RecordingXhr {
+  responseType = "";
+  onload: (() => void) | null = null;
+  onerror: ((error: Error) => void) | null = null;
+  status = 0;
+  response: unknown = null;
 
-test("the actual browser loader opens every dictionary request on the dictionary origin", async () => {
-  const requested: string[] = [];
+  open(_method: string, _url: string): void {
+    throw new Error("a dictionary request must never reach the real transport");
+  }
+
+  send(): void {
+    throw new Error("a dictionary request must never reach the real transport");
+  }
+}
+
+function withFakeXhr<T>(run: () => Promise<T>): Promise<T> {
   const originalXhr = globalThis.XMLHttpRequest;
-
-  class FailingXhr {
-    responseType = "";
-    onload: (() => void) | null = null;
-    onerror: ((error: Error) => void) | null = null;
-
-    open(_method: string, url: string): void {
-      requested.push(url);
-    }
-
-    send(): void {
-      queueMicrotask(() => this.onerror?.(new Error("fixture stops after URL capture")));
-    }
-  }
-
-  Object.assign(globalThis, { XMLHttpRequest: FailingXhr });
-  try {
-    await assert.rejects(buildKuromojiBrowserTokenizer(), /fixture stops after URL capture/u);
-  } finally {
+  Object.assign(globalThis, { XMLHttpRequest: RecordingXhr });
+  return run().finally(() => {
     Object.assign(globalThis, { XMLHttpRequest: originalXhr });
-  }
+  });
+}
+
+test("every dictionary file is resolved through the asset loader, never the transport", async () => {
+  const requested: string[] = [];
+
+  await withFakeXhr(async () => {
+    await assert.rejects(
+      buildKuromojiBrowserTokenizer(async (filename) => {
+        requested.push(filename);
+        throw new Error("fixture stops after filename capture");
+      }),
+      /fixture stops after filename capture/u
+    );
+  });
 
   assert.equal(requested.length, 12);
-  assert.ok(requested.every((url) => url.startsWith(KUROMOJI_DICTIONARY_ROOT)));
-  assert.ok(requested.includes(`${KUROMOJI_DICTIONARY_ROOT}base.dat.gz`));
-  assert.ok(requested.includes(`${KUROMOJI_DICTIONARY_ROOT}unk_invoke.dat.gz`));
-  assert.ok(requested.every((url) => !url.startsWith("https:/kuromoji")));
+  assert.ok(requested.includes("base.dat.gz"));
+  assert.ok(requested.includes("unk_invoke.dat.gz"));
+  assert.ok(requested.every((filename) => /^[a-z_]+\.dat\.gz$/u.test(filename)));
+  assert.ok(requested.every((filename) => !filename.includes("/")));
+});
+
+test("the transport patch is removed once the build settles", async () => {
+  await withFakeXhr(async () => {
+    const prototype = RecordingXhr.prototype as any;
+    const open = prototype.open;
+    const send = prototype.send;
+
+    await assert.rejects(
+      buildKuromojiBrowserTokenizer(async () => {
+        throw new Error("stop");
+      })
+    );
+
+    assert.equal(prototype.open, open);
+    assert.equal(prototype.send, send);
+  });
+});
+
+test("non-dictionary requests are forwarded to the original transport", async () => {
+  await withFakeXhr(async () => {
+    const forwarded: string[] = [];
+    const prototype = RecordingXhr.prototype as any;
+    prototype.open = function (_method: string, url: string) {
+      forwarded.push(url);
+    };
+    prototype.send = function () {};
+
+    const pending = assert.rejects(
+      buildKuromojiBrowserTokenizer(async () => {
+        throw new Error("stop");
+      })
+    );
+
+    const unrelated = new (globalThis as any).XMLHttpRequest();
+    unrelated.open("GET", "https://example.test/not-a-dictionary.js");
+    unrelated.send();
+
+    await pending;
+    assert.deepEqual(forwarded, ["https://example.test/not-a-dictionary.js"]);
+  });
 });

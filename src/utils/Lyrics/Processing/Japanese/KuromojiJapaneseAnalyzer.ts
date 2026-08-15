@@ -87,7 +87,7 @@ export function normalizeKuromojiTokens(
       provenance: {
         analyzerId: "kuromoji",
         analyzerVersion: "1.0.0-wrapper",
-        dictionaryId: "kuromoji.pkgs.spikerko.org",
+        dictionaryId: "ipadic-2.7.0-20070801",
         rangeSource: "surfaceAligned",
         ...(rawToken.verbose?.word_id === undefined
           ? {}
