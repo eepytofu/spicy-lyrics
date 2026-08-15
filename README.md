@@ -14,8 +14,8 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 - Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. [Set up the Worker](worker/README.md).
 - A source manager for enabling, disabling, and ordering providers.
 - Embedded provider headers, credits, and rights notices can be hidden with **Hide Embedded Provider Info**.
-- When Spotify metadata is romanized, localized, or wrong, search again with the original title and artist, pick the right match, and it stays remembered for that track.
 - TTML is parsed on your device, so local lyrics load without a network round trip.
+- **Choose Lyrics** ranks every candidate so you can pick a different one, and remembers the choice for that track. When Spotify metadata is romanized, localized, or wrong, search again with the original title and artist.
 
 <p align="center">
   <img src="assets/lyrics_picker.webp" alt="Choose Lyrics dialog showing manual metadata search and ranked lyric candidates" width="70%">
