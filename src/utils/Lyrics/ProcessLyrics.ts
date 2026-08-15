@@ -91,8 +91,8 @@ import { isProviderInfoEntry } from "./ProviderInfo.ts";
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v69: keep promotional provider notices out of every derived lyric lane.
-export const LYRICS_PROCESSING_VERSION = 69;
+// v71: rebuild Han routes after completing the shared Chinese/Japanese form audit.
+export const LYRICS_PROCESSING_VERSION = 71;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 

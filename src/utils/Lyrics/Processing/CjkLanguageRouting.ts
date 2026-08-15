@@ -3,7 +3,7 @@ import type { AboveReadingKind, AboveReadingSegment } from "./Model.ts";
 import {
   countHanCodePoints,
   hasChineseOnlyHanForms,
-  hasJapaneseOnlyHanForms,
+  hasJapaneseDistinctiveHanForms,
 } from "./CjkLanguageEvidence.ts";
 
 export type CjkReadingBranch = "Japanese" | "Chinese";
@@ -80,7 +80,7 @@ export function resolveCjkDocumentContext(
     if (!HanTextTest.test(line)) continue;
     const chineseEvidence = hasChineseOnlyHanForms(line);
     if (chineseEvidence) chineseEvidenceLines += 1;
-    if (chineseEvidence || (!hasJapaneseOnlyHanForms(line) && countHanCodePoints(line) >= 5)) {
+    if (chineseEvidence || (!hasJapaneseDistinctiveHanForms(line) && countHanCodePoints(line) >= 5)) {
       longHanOnlyLines += 1;
     }
   }
@@ -111,7 +111,7 @@ const strongLineEvidence = (
   const hasHan = HanTextTest.test(text);
   if (!hasKana && !hasHan) return "Boundary";
   if (hasKana) return "Japanese";
-  if (hasJapaneseOnlyHanForms(text)) return "Japanese";
+  if (hasJapaneseDistinctiveHanForms(text)) return "Japanese";
   if (
     hasChineseOnlyHanForms(text) &&
     (document.branch === "Chinese" || document.bilingual)
@@ -191,7 +191,7 @@ export function resolveCjkLineRoute(
   const hasHan = HanTextTest.test(text);
   if (!hasKana) {
     if (!hasHan) return undefined;
-    if (hasJapaneseOnlyHanForms(text)) return "Japanese";
+    if (hasJapaneseDistinctiveHanForms(text)) return "Japanese";
     if (
       hasChineseOnlyHanForms(text) &&
       (docContext.cjkDominantBranch === "Chinese" || docContext.cjkBilingual)

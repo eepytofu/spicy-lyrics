@@ -215,6 +215,34 @@ test("Japanese Han forms and repeated lines cannot invent bilingual evidence", (
   assert.equal(resolveCjkLineRoute("人々往来 反戦記録", repeatedContext), "Japanese");
 });
 
+test("shared Chinese and Japanese Han forms follow document context", () => {
+  const chineseContext = {
+    presentScripts: ["Chinese"] as const,
+    primaryLanguage: "cmn",
+    iso2Language: "zh",
+    cjkDominantBranch: "Chinese" as const,
+    cjkBilingual: false,
+  };
+  const japaneseContext = {
+    presentScripts: ["Japanese"] as const,
+    primaryLanguage: "jpn",
+    iso2Language: "ja",
+    cjkDominantBranch: "Japanese" as const,
+    cjkBilingual: false,
+  };
+
+  // Provider evidence establishes 芸 as shared. Dictionary evidence establishes
+  // 腺 and 弁 as Chinese lexemes too. Context resolves all three, while a
+  // genuinely distinctive Japanese form still wins.
+  assert.equal(resolveCjkLineRoute("困天地芸芸衆生", chineseContext), "Chinese");
+  assert.equal(resolveCjkLineRoute("甲状腺功能正常", chineseContext), "Chinese");
+  assert.equal(resolveCjkLineRoute("弁言附于卷首", chineseContext), "Chinese");
+  assert.equal(resolveCjkLineRoute("芸術文化", japaneseContext), "Japanese");
+  assert.equal(resolveCjkLineRoute("甲状腺機能", japaneseContext), "Japanese");
+  assert.equal(resolveCjkLineRoute("弁護士", japaneseContext), "Japanese");
+  assert.equal(resolveCjkLineRoute("反戦記録", chineseContext), "Japanese");
+});
+
 test("Chinese-dominant mixed lines expose Chinese Han and Japanese kana branches", () => {
   const context = {
     presentScripts: ["Japanese", "Chinese"] as const,
