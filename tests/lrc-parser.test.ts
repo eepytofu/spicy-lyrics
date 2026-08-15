@@ -39,3 +39,22 @@ test("LRC parsing accepts provider colon-separated centiseconds", () => {
     { text: "decimal fraction", startTimeMs: 24_125 },
   ]);
 });
+
+test("enhanced LRC preserves authored word timing, whitespace, and zero-duration text", () => {
+  const parsed = parseLrcDocument([
+    "[offset:100]",
+    "[00:01.00]<00:01.00>A<00:01.25> <00:01.25>B<00:01.25>!<00:02.00>",
+  ].join("\n"), 4_000);
+
+  assert.deepEqual(parsed.synced, [{ text: "A B!", startTimeMs: 1_100 }]);
+  assert.deepEqual(parsed.enhanced, [{
+    startTimeMs: 1_100,
+    endTimeMs: 2_100,
+    words: [
+      { text: "A", startTimeMs: 1_100, endTimeMs: 1_350, isPartOfWord: false },
+      { text: " ", startTimeMs: 1_350, endTimeMs: 1_350, isPartOfWord: true },
+      { text: "B", startTimeMs: 1_350, endTimeMs: 1_350, isPartOfWord: true },
+      { text: "!", startTimeMs: 1_350, endTimeMs: 2_100, isPartOfWord: true },
+    ],
+  }]);
+});

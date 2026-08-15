@@ -27,6 +27,14 @@ import {
 import { externalSourceRequestUrl } from "./ExternalSourceRequest.ts";
 import { parseLrcDocument } from "./LrcParser.ts";
 import {
+  buildLineLyrics,
+  buildSyllableLyrics,
+  buildStaticLyrics,
+  type TimedLine,
+  type TimedWord,
+  type TimedWordLine,
+} from "./LyricsDocumentBuilders.ts";
+import {
   acquireProviderOutcomes,
   runProviderAcquisition,
   type ProviderAcquisitionRecord,
@@ -56,9 +64,6 @@ import {
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
 };
-type TimedLine = { text: string; startTimeMs: number; endTimeMs?: number };
-type TimedWord = { text: string; startTimeMs: number; endTimeMs: number; isPartOfWord: boolean };
-type TimedWordLine = { startTimeMs: number; endTimeMs: number; words: TimedWord[] };
 export type ExternalLyricsResult = { lyrics: any; status: number; match?: LyricsMatchMetadata };
 
 const DEFAULT_MUSIXMATCH_TOKEN = "21051986b9886beabe1ce01c3ce94c96319411f8f2c122676365e3";
@@ -92,33 +97,14 @@ function clean(value: unknown): string {
   return String(value ?? "").replace(/\r/g, "").replace(/[♪♫♬♩]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function buildStatic(lines: string[], source: string, label: string): any | null {
-  const Lines = lines.map(clean).filter(Boolean).map((Text) => ({ Text }));
-  return Lines.length ? { Type: "Static", Lines, source, sourceDisplayName: label } : null;
-}
+const buildStatic = (lines: string[], source: string, label: string) =>
+  buildStaticLyrics(lines, { source, label });
 
-function buildLine(lines: TimedLine[], durationMs: number, source: string, label: string): any | null {
-  const sorted = lines.map((line) => ({ ...line, text: clean(line.text) })).filter((line) => line.text && Number.isFinite(line.startTimeMs)).sort((a, b) => a.startTimeMs - b.startTimeMs);
-  if (!sorted.length) return null;
-  const duration = durationMs / 1000;
-  const Content = sorted.map((line, index) => {
-    const start = Math.max(0, line.startTimeMs / 1000);
-    const fallbackEnd = sorted[index + 1]?.startTimeMs ? sorted[index + 1].startTimeMs / 1000 : Math.max(duration, start + 4);
-    return { Type: "Vocal", Text: line.text, StartTime: start, EndTime: Math.max(start, line.endTimeMs === undefined ? fallbackEnd : line.endTimeMs / 1000), OppositeAligned: false };
-  });
-  return { Type: "Line", StartTime: Content[0].StartTime, EndTime: Content.at(-1)?.EndTime, Content, source, sourceDisplayName: label };
-}
+const buildLine = (lines: TimedLine[], durationMs: number, source: string, label: string) =>
+  buildLineLyrics(lines, durationMs, { source, label });
 
-function buildSyllable(lines: TimedWordLine[], source: string, label: string): any | null {
-  const Content = lines.filter((line) => line.words.length).map((line) => ({
-    Type: "Vocal", OppositeAligned: false,
-    Lead: {
-      StartTime: line.startTimeMs / 1000, EndTime: line.endTimeMs / 1000,
-      Syllables: line.words.map((word) => ({ Text: word.text, StartTime: word.startTimeMs / 1000, EndTime: word.endTimeMs / 1000, IsPartOfWord: word.isPartOfWord })),
-    },
-  }));
-  return Content.length ? { Type: "Syllable", StartTime: Content[0].Lead.StartTime, EndTime: Content.at(-1)?.Lead.EndTime, Content, source, sourceDisplayName: label } : null;
-}
+const buildSyllable = (lines: TimedWordLine[], source: string, label: string) =>
+  buildSyllableLyrics(lines, { source, label });
 
 function stamp(lyrics: any, provider: LyricsSourceProviderId, displayName?: string, match?: LyricsMatchMetadata): ExternalLyricsResult | null {
   if (!lyrics || !["Static", "Line", "Syllable"].includes(lyrics.Type)) return null;

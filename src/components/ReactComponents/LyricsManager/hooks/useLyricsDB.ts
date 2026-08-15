@@ -9,14 +9,15 @@ import {
   getLyricsOverridePreference,
   setLyricsOverridePreference,
 } from "../../../../utils/Lyrics/LyricsOverridePreference.ts";
+import type { LocalLyricsEnvelope } from "../../../../utils/Lyrics/LocalLyricsSource.ts";
 
 export type UseLyricsDBResult = {
   uris: string[];
   loading: boolean;
   refresh: () => Promise<void>;
   remove: (uri: string) => Promise<void>;
-  put: (uri: string, ttml: string) => Promise<void>;
-  getRaw: (uri: string) => Promise<string | null>;
+  put: (uri: string, lyrics: LocalLyricsEnvelope) => Promise<void>;
+  getRaw: (uri: string) => Promise<LocalLyricsEnvelope | null>;
 };
 
 export function useLyricsDB(): UseLyricsDBResult {
@@ -57,8 +58,8 @@ export function useLyricsDB(): UseLyricsDBResult {
   );
 
   const put = useCallback(
-    async (uri: string, ttml: string) => {
-      await LocalLyricsManager.put(uri, ttml);
+    async (uri: string, lyrics: LocalLyricsEnvelope) => {
+      await LocalLyricsManager.put(uri, lyrics);
       await refresh();
     },
     [refresh]

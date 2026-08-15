@@ -66,8 +66,10 @@ test("the generic modal accepts DOM nodes instead of executable markup strings",
   assert.doesNotMatch(modalSource, /main\.innerHTML = content/u);
 });
 
-test("the TTML upload UI discloses that parsing stays on the device", () => {
-  assert.match(uploadSource, /TTML is parsed on your device/u);
+test("the local lyrics upload UI discloses accepted formats and local parsing", () => {
+  assert.match(uploadSource, /accept="\.ttml,\.lrc"/u);
+  assert.match(uploadSource, /\(\?:ttml\|lrc\)\$/u);
+  assert.match(uploadSource, /TTML and LRC are parsed on your device/u);
   assert.match(uploadSource, /without\s+sending their contents anywhere/u);
   assert.doesNotMatch(uploadSource, /ParseTTML/u);
 });
@@ -75,6 +77,13 @@ test("the TTML upload UI discloses that parsing stays on the device", () => {
 test("local lyrics actions use the unified override pipeline", () => {
   const managerSource = readFileSync(
     new URL("../src/components/ReactComponents/LyricsManager/index.tsx", import.meta.url),
+    "utf8"
+  );
+  const rowSource = readFileSync(
+    new URL(
+      "../src/components/ReactComponents/LyricsManager/components/TrackRow.tsx",
+      import.meta.url
+    ),
     "utf8"
   );
   const databaseSource = readFileSync(
@@ -98,9 +107,25 @@ test("local lyrics actions use the unified override pipeline", () => {
 
   assert.match(managerSource, /label="Upload Lyrics"/u);
   assert.match(managerSource, /label="Return to Automatic"/u);
+  assert.match(managerSource, /raw\.format === "ttml"/u);
+  assert.match(managerSource, /new Blob\(\[raw\.content\]/u);
+  assert.match(rowSource, /title="Download lyrics"/u);
+  assert.doesNotMatch(managerSource, /Could not retrieve TTML|\.ttml`/u);
   assert.match(
     databaseSource,
     /preference\?\.kind === "local" && SpotifyPlayer\.GetUri\(\) === uri/u
   );
   assert.match(databaseSource, /setLyricsOverridePreference\(automaticLyricsOverride\(uri\)\)/u);
+});
+
+test("prefetch and foreground loading both use format-aware local raw sources", () => {
+  const fetchSource = readFileSync(
+    new URL("../src/utils/Lyrics/fetchLyrics.ts", import.meta.url),
+    "utf8"
+  );
+  assert.equal(fetchSource.match(/LocalLyricsManager\.getRaw\(uri\)/gu)?.length, 2);
+  assert.match(
+    fetchSource,
+    /export async function PrefetchLyrics[\s\S]*LocalLyricsManager\.getRaw\(uri\)/u
+  );
 });

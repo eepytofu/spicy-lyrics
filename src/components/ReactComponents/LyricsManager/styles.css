@@ -260,7 +260,7 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay .sl-ldb-icon-btn {
   }
 }
 
-/* ── Upload TTML Modal ───────────────────────────────────────── */
+/* ── Upload Lyrics Modal ─────────────────────────────────────── */
 sl-generic-modal.SpicyLyricsModal .sl-modal-overlay .sl-ldb-upload-root {
   display: flex;
   flex-direction: column;

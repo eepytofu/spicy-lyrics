@@ -5,6 +5,10 @@ import { useLocalLyricsOverride } from "../../../../utils/Lyrics/fetchLyrics";
 import ApplyLyrics from "../../../../utils/Lyrics/Global/Applyer";
 import { LocalLyricsManager } from "../../../../utils/Lyrics/manager";
 import { getLyricsOverridePreference } from "../../../../utils/Lyrics/LyricsOverridePreference.ts";
+import {
+  createLocalLyricsEnvelope,
+  type LocalLyricsEnvelope,
+} from "../../../../utils/Lyrics/LocalLyricsSource.ts";
 import { IconButton } from "./IconButton";
 import { ArrowLeftIcon, UploadIcon } from "./Icons";
 
@@ -40,6 +44,10 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
       return;
     }
 
+    if (!/\.(?:ttml|lrc)$/iu.test(file.name)) {
+      toast.error("Choose a .ttml or .lrc file.", { duration: 5000 });
+      return;
+    }
     if (SpotifyPlayer.GetUri() !== uri) {
       toast.error("The playing track changed. Reopen Upload Lyrics and try again.", {
         duration: 5000,
@@ -49,17 +57,18 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
 
     setUploading(true);
     const progressToast = toast.loading("Reading and applying lyrics…");
-    let previousRaw: string | null = null;
+    let previousRaw: LocalLyricsEnvelope | null = null;
     let storedRaw = false;
     let committed = false;
     try {
-      const rawSource = await file.text();
-      if (SpotifyPlayer.GetUri() !== uri) {
-        toast.error("The playing track changed. Nothing was applied.", { duration: 5000 });
+      const content = await file.text();
+      const rawSource = createLocalLyricsEnvelope(content, SpotifyPlayer.GetDuration());
+      if (!rawSource) {
+        toast.error("Unsupported or malformed lyrics file.", { duration: 5000 });
         return;
       }
-      if (!LocalLyricsManager.parseRaw(rawSource)) {
-        toast.error("Failed to parse lyrics.", { duration: 5000 });
+      if (SpotifyPlayer.GetUri() !== uri) {
+        toast.error("The playing track changed. Nothing was applied.", { duration: 5000 });
         return;
       }
       const previousPreference = await getLyricsOverridePreference(uri);
@@ -133,13 +142,13 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
         <input
           ref={fileInputRef}
           type="file"
-          accept=".ttml"
+          accept=".ttml,.lrc"
           id="sl-ldb-file-input"
           className="sl-ldb-file-input"
           onChange={handleFileChange}
         />
         <label htmlFor="sl-ldb-file-input" className="sl-ldb-file-label">
-          {file ? file.name : "Choose .ttml file…"}
+          {file ? file.name : "Choose .ttml or .lrc file…"}
         </label>
       </div>
 
@@ -165,8 +174,8 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
       </div>
 
       <p className="sl-ldb-upload-parser-note">
-        TTML is parsed on your device. Persistent files stay in your local DB and load without
-        sending their contents anywhere.
+        TTML and LRC are parsed on your device. Persistent files stay in your local DB and load
+        without sending their contents anywhere.
       </p>
 
       <div className="sl-ldb-upload-actions">

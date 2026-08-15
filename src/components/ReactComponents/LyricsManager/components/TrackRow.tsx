@@ -90,7 +90,7 @@ export function TrackRow({ uri, track, loading, isCurrentlyPlaying, onPlay, onDo
       </div>
       <div className="sl-ldb-row__actions">
         <IconButton icon={<PlayIcon size={14} />} onClick={onPlay} title="Play" variant="default" />
-        <IconButton icon={<DownloadIcon size={14} />} onClick={onDownload} title="Download TTML" variant="default" />
+        <IconButton icon={<DownloadIcon size={14} />} onClick={onDownload} title="Download lyrics" variant="default" />
         <IconButton
           icon={<TrashIcon size={14} />}
           onClick={handleDeleteClick}

@@ -41,16 +41,20 @@ export default function LyricsDBPanel({ onUploadClick }: LyricsDBPanelProps) {
   const filtered = uris.filter(matchesQuery);
 
   async function handleDownload(uri: string) {
-    const ttml = await getRaw(uri);
-    if (!ttml) {
-      toast.error("Could not retrieve TTML for this track.", { duration: 4000 });
+    const raw = await getRaw(uri);
+    if (!raw) {
+      toast.error("Could not retrieve lyrics for this track.", { duration: 4000 });
       return;
     }
     const track = tracksByUri.get(uri);
+    const extension = raw.format;
     const filename = track
-      ? `${sanitizeFilename(track.name)}.ttml`
-      : `${sanitizeFilename(uri)}.ttml`;
-    const blob = new Blob([ttml], { type: "application/ttml+xml" });
+      ? `${sanitizeFilename(track.name)}.${extension}`
+      : `${sanitizeFilename(uri)}.${extension}`;
+    const mimeType = raw.format === "ttml"
+      ? "application/ttml+xml"
+      : "text/plain;charset=utf-8";
+    const blob = new Blob([raw.content], { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
