@@ -17,6 +17,7 @@ type UploadMode = "persistent" | "temporary";
 type LyricsFilePickerWindow = Window & {
   showOpenFilePicker?: (options: {
     multiple: false;
+    excludeAcceptAllOption: true;
     types: Array<{
       description: string;
       accept: Record<string, string[]>;
@@ -26,8 +27,8 @@ type LyricsFilePickerWindow = Window & {
 
 const LOCAL_LYRICS_FILE_TYPES = [
   {
-    description: "Lyrics files (.ttml, .lrc)",
-    accept: { "text/plain": [".ttml", ".lrc"] },
+    description: "Lyrics files",
+    accept: { "application/x-spicy-lyrics": [".ttml", ".lrc"] },
   },
 ];
 
@@ -61,6 +62,7 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
     try {
       const [handle] = await picker.call(window, {
         multiple: false,
+        excludeAcceptAllOption: true,
         types: LOCAL_LYRICS_FILE_TYPES,
       });
       if (handle) setFile(await handle.getFile());
