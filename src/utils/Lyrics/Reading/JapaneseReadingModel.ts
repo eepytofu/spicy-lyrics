@@ -11,6 +11,7 @@ import type {
 import type {
   ProviderAuthoredReadingProjection,
 } from "../Processing/Japanese/ProviderAuthoredReading.ts";
+import type { ProviderRubyReadable } from "../ProviderRuby.ts";
 
 export type FuriganaSegment = {
   start: number;
@@ -46,7 +47,7 @@ export type JapaneseRomajiTimingProjection = {
   animationEnd: number;
 };
 
-export type JapaneseReadable = {
+export type JapaneseReadable = ProviderRubyReadable & {
   Text?: string;
   TransliteratedText?: string;
   RomanizedText?: string;

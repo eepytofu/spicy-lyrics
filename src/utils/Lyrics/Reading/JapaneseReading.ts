@@ -131,7 +131,7 @@ function applyExplicitReadingOverrides(
   const explicitReadings: FuriganaSegment[] = hints.map((hint) => ({
     start: hint.displayRange.start,
     end: hint.displayRange.end,
-    reading: kataToHira(hint.reading),
+    reading: hint.reading,
     provenance: "providerExplicit",
   }));
   const KanaOnly = /^[ぁ-んァ-ンー]*$/u;
@@ -159,7 +159,7 @@ function applyExplicitReadingOverrides(
 
     first.entry.surface = lineText.slice(first.entry.start, last.entry.end);
     first.entry.end = last.entry.end;
-    first.entry.readingKana = kataToHira(`${prefix}${hint.reading}${suffix}`);
+    first.entry.readingKana = kataToHira(`${prefix}${hint.reading.normalize("NFKC")}${suffix}`);
     first.entry.readingProvenance = "providerExplicit";
     for (const item of intersecting.slice(1)) item.entry.consumed = true;
   }
@@ -257,9 +257,7 @@ export async function prepareJapaneseLineAnalysis(
   if (!JapaneseSourceTextTest.test(analysisText)) return undefined;
   const analysisHints = authoredProjection.hints.flatMap((hint) => {
     const displayRange = mapDisplayUtf16RangeToAnalysis(textProjection, hint.displayRange);
-    return displayRange
-      ? [{ ...hint, displayRange, reading: hint.reading.normalize("NFKC") }]
-      : [];
+    return displayRange ? [{ ...hint, displayRange }] : [];
   });
   const analysisOptions: JapaneseAnalysisOptions = {
     ...options,

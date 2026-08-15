@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chooserCandidateRecords } from "../src/utils/Lyrics/LyricsCandidateDisplay.ts";
+import { LYRIC_REVISION_SCHEMA_VERSION } from "../src/utils/Lyrics/LyricRevision.ts";
 
 const revision = (digit: string, providerId: string) => ({
-  schemaVersion: 1 as const,
+  schemaVersion: LYRIC_REVISION_SCHEMA_VERSION,
   trackUri: "spotify:track:fixture",
   providerId,
   candidateId: providerId,

@@ -9,6 +9,7 @@ import {
 } from "../../Reading/JapaneseReading.ts";
 import { buildCanonicalLine } from "../Canonical.ts";
 import {
+  addStructuredProviderRubyReadings,
   projectProviderAuthoredJapaneseReadings,
   projectProviderSourceOffset,
 } from "./ProviderAuthoredReading.ts";
@@ -49,7 +50,13 @@ export async function processJapanesePackageLine(
   times: Array<{ StartTime?: number; EndTime?: number }>,
   options: JapaneseAnalysisOptions = {}
 ): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[]; displayText: string }> {
-  const projection = projectProviderAuthoredJapaneseReadings(displayText, spans);
+  const projection = addStructuredProviderRubyReadings(
+    projectProviderAuthoredJapaneseReadings(displayText, spans),
+    spans.map((span) => ({
+      ...span,
+      ProviderRuby: syllables[span.index]?.ProviderRuby,
+    })),
+  );
   const projectedSpans = spans.map((span) => {
     const start = projectProviderSourceOffset(projection, span.start);
     const end = projectProviderSourceOffset(projection, span.end);

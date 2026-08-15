@@ -27,6 +27,7 @@ test("SourceLyricDocument is an immutable exact-source and timing projection", (
               StartTime: 10,
               EndTime: 20,
               IsPartOfWord: true,
+              ProviderRuby: [{ Text: "ブチコワシテ", StartTime: 10, EndTime: 20 }],
             },
             {
               Text: "shout",
@@ -65,6 +66,7 @@ test("SourceLyricDocument is an immutable exact-source and timing projection", (
       startMs: 10,
       endMs: 20,
       providerBoundaryAfter: false,
+      providerRuby: [{ Text: "ブチコワシテ", StartTime: 10, EndTime: 20 }],
     },
     {
       id: "lead:0:span:1",
@@ -78,6 +80,8 @@ test("SourceLyricDocument is an immutable exact-source and timing projection", (
   assert.equal(Object.isFrozen(document), true);
   assert.equal(Object.isFrozen(document?.lines), true);
   assert.equal(Object.isFrozen(document?.lines[0].timingOwners), true);
+  assert.equal(Object.isFrozen(document?.lines[0].timingOwners[0].providerRuby), true);
+  assert.equal(Object.isFrozen(document?.lines[0].timingOwners[0].providerRuby?.[0]), true);
 });
 
 test("provider families retain identity across normalized lyric shapes", () => {

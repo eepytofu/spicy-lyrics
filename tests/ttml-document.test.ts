@@ -22,7 +22,13 @@ test("a ruby container keeps its base text instead of dropping the whole span", 
   assert.equal(lead[2].Text, "二人");
   assert.equal(leadText(document.Content[0]), "時計が二人をhelloworld");
 
-  assert.ok(lead.every((s: any) => !("Ruby" in s) && !("JapaneseReading" in s)));
+  assert.deepEqual(lead[0].ProviderRuby, [
+    { Text: "とけい", StartTime: 1, EndTime: 2 },
+  ]);
+  assert.deepEqual(lead[2].ProviderRuby, [
+    { Text: "ふたり", StartTime: 2.4, EndTime: 3.4 },
+  ]);
+  assert.ok(lead.every((s: any) => !("JapaneseReading" in s)));
 });
 
 test("a background vocal keeps its own group, base text, and translation", () => {
@@ -30,6 +36,9 @@ test("a background vocal keeps its own group, base text, and translation", () =>
   assert.equal(line.Background.length, 1);
   const background = line.Background[0];
   assert.equal(background.Syllables.map((s: any) => s.Text).join(""), "消えない");
+  assert.deepEqual(background.Syllables[0].ProviderRuby, [
+    { Text: "き", StartTime: 4.2, EndTime: 4.6 },
+  ]);
   assert.equal(background.ProviderTranslatedText, "(不会消失)");
 });
 
@@ -139,4 +148,20 @@ test("malformed or empty documents are rejected rather than degraded", () => {
   assert.equal(parse(`<foo><bar>hello</bar></foo>`), null);
   assert.equal(parse(""), null);
   assert.equal(parse(`<tt xmlns="http://www.w3.org/ns/ttml"><body><div><p>unclosed`), null);
+});
+
+test("a long authored document retains every structured ruby annotation", () => {
+  const lines = Array.from({ length: 46 }, (_, index) => {
+    const start = index + 1;
+    const end = start + 0.5;
+    return `<p begin="${start}.000" end="${end.toFixed(3)}" ttm:agent="v1" itunes:key="L${index + 1}"><span tts:ruby="container"><span tts:ruby="base">空</span><span tts:ruby="textContainer"><span tts:ruby="text" begin="${start}.000" end="${end.toFixed(3)}">ソラ</span></span></span></p>`;
+  }).join("");
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Word"><body dur="50.000"><div>${lines}</div></body></tt>`);
+
+  assert.equal(document.Content.length, 46);
+  for (const [index, line] of document.Content.entries()) {
+    assert.deepEqual(line.Lead.Syllables[0].ProviderRuby, [
+      { Text: "ソラ", StartTime: index + 1, EndTime: index + 1.5 },
+    ]);
+  }
 });

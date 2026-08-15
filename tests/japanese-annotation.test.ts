@@ -5,7 +5,10 @@ import {
   alignJapaneseReadingUnitTexts,
   annotateJapaneseLine,
 } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnnotationProcessor.ts";
-import { buildJapanesePackageParsedLine } from "../src/utils/Lyrics/Processing/Japanese/JapanesePackageProcessor.ts";
+import {
+  buildJapanesePackageParsedLine,
+  processJapanesePackageLine,
+} from "../src/utils/Lyrics/Processing/Japanese/JapanesePackageProcessor.ts";
 import { buildRenderPlan } from "../src/utils/Lyrics/Processing/RenderPlan.ts";
 import {
   applyJapaneseReadingToSyllables,
@@ -16,6 +19,10 @@ import {
   ChineseProviderJapaneseTextProjection,
 } from "../src/utils/Lyrics/Processing/Japanese/ChineseProviderJapaneseRepair.ts";
 import { timedFuriganaGroups } from "../src/utils/Lyrics/Processing/Japanese/TimedGroupIds.ts";
+import {
+  addStructuredProviderRubyReadings,
+  projectProviderAuthoredJapaneseReadings,
+} from "../src/utils/Lyrics/Processing/Japanese/ProviderAuthoredReading.ts";
 import type {
   JapaneseAnalyzer,
   JapaneseAnalyzerToken,
@@ -370,6 +377,68 @@ test("provider-authored reading keeps source evidence and emits explicit furigan
   assert.equal(reading!.furigana.some((segment) =>
     segment.reading === "そら" && segment.provenance === "providerExplicit"
   ), true);
+});
+
+test("structured ruby overrides analyzer reading without rewriting authored Katakana", async () => {
+  const authoredReadingProjection = addStructuredProviderRubyReadings(
+    projectProviderAuthoredJapaneseReadings("空"),
+    [{
+      start: 0,
+      end: 1,
+      ProviderRuby: [{ Text: "ソラ", StartTime: 1, EndTime: 2 }],
+    }],
+  );
+  const reading = (await prepareJapaneseLineAnalysis("空", {
+    authoredReadingProjection,
+    analyzer: singleTokenAnalyzer("空", "くう"),
+    kanaRomanizer: (kana) => ({ そら: "sora", くう: "kuu" })[kana] || kana,
+  }))?.reading;
+
+  assert.equal(reading?.romaji, "sora");
+  assert.deepEqual(reading?.furigana, [
+    { start: 0, end: 1, reading: "ソラ", provenance: "providerExplicit" },
+  ]);
+});
+
+test("timed Japanese processing consumes only unambiguous structured ruby", async () => {
+  const syllables = [{
+    Text: "空",
+    StartTime: 1,
+    EndTime: 2,
+    IsPartOfWord: true,
+    ProviderRuby: [{ Text: "ソラ", StartTime: 1, EndTime: 2 }],
+  }];
+  const mapped = buildJapaneseLineTextMap(syllables);
+  const options = {
+    analyzer: singleTokenAnalyzer("空", "くう"),
+    kanaRomanizer: (kana: string) => ({ そら: "sora", くう: "kuu" })[kana] || kana,
+  };
+  const authored = await processJapanesePackageLine(
+    mapped.sourceText,
+    syllables,
+    mapped.spans,
+    syllables,
+    options,
+  );
+  assert.equal(authored.romaji, "sora");
+  assert.equal(authored.furigana[0].reading, "ソラ");
+
+  const ambiguousSyllables = [{
+    ...syllables[0],
+    ProviderRuby: [
+      { Text: "ソ", StartTime: 1, EndTime: 1.5 },
+      { Text: "ラ", StartTime: 1.5, EndTime: 2 },
+    ],
+  }];
+  const ambiguous = await processJapanesePackageLine(
+    mapped.sourceText,
+    ambiguousSyllables,
+    mapped.spans,
+    ambiguousSyllables,
+    options,
+  );
+  assert.equal(ambiguous.romaji, "kuu");
+  assert.equal(ambiguous.furigana.some((segment) => segment.provenance === "providerExplicit"), false);
 });
 
 test("Chinese-provider Japanese repair is display-only and keeps source evidence", async () => {

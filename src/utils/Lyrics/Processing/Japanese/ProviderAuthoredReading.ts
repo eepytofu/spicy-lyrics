@@ -1,3 +1,5 @@
+import type { ProviderRubyReadable } from "../../ProviderRuby.ts";
+
 export type ProviderAuthoredReadingHint = {
   /** UTF-16 range of the written kanji in the immutable source text. */
   readonly sourceRange: { readonly start: number; readonly end: number };
@@ -18,6 +20,8 @@ export type ProviderTextSpan = {
   readonly start: number;
   readonly end: number;
 };
+
+export type StructuredProviderRubySpan = ProviderTextSpan & ProviderRubyReadable;
 
 const ParentheticalReading = /([\p{Script=Han}々〆ヵヶ]{1,12})[（(]([\p{Script=Hiragana}\p{Script=Katakana}ーｰ]{1,24})[）)]/gu;
 const TrailingDecorationOnly = /^[\s\p{P}\p{S}]*$/u;
@@ -75,6 +79,37 @@ export function projectProviderAuthoredJapaneseReadings(
   if (hints.length === 0) return { sourceText, displayText: sourceText, hints };
   displayText += sourceText.slice(sourceCursor);
   return { sourceText, displayText, hints };
+}
+
+const StructuredReading = /^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]+$/u;
+const StructuredBase = /[\p{Script=Han}々〆ヵヶ]/u;
+
+export function addStructuredProviderRubyReadings(
+  projection: ProviderAuthoredReadingProjection,
+  spans: readonly StructuredProviderRubySpan[],
+): ProviderAuthoredReadingProjection {
+  let hints = [...projection.hints];
+  for (const span of spans) {
+    const tags = span.ProviderRuby;
+    if (tags?.length !== 1) continue;
+    const reading = tags[0].Text;
+    const surface = projection.sourceText.slice(span.start, span.end);
+    if (!StructuredBase.test(surface) || !StructuredReading.test(reading)) continue;
+    const displayStart = projectProviderSourceOffset(projection, span.start);
+    const displayEnd = projectProviderSourceOffset(projection, span.end);
+    if (displayEnd <= displayStart) continue;
+    hints = hints.filter((hint) =>
+      !(hint.displayRange.start < displayEnd && displayStart < hint.displayRange.end)
+    );
+    hints.push({
+      sourceRange: { start: span.start, end: span.end },
+      displayRange: { start: displayStart, end: displayEnd },
+      annotationRange: { start: span.end, end: span.end },
+      reading,
+    });
+  }
+  hints.sort((left, right) => left.displayRange.start - right.displayRange.start);
+  return { ...projection, hints };
 }
 
 export function projectProviderSourceOffset(

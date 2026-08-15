@@ -1,10 +1,12 @@
 import { TTMLParser, type LyricLine, type Syllable, type SubLyricContent } from "@applemusic-like-lyrics/ttml";
+import type { ProviderRubyTag } from "./ProviderRuby.ts";
 
 type NativeSyllable = {
   Text: string;
   StartTime: number;
   EndTime: number;
   IsPartOfWord: boolean;
+  ProviderRuby?: ProviderRubyTag[];
 };
 
 type NativeGroup = {
@@ -46,6 +48,15 @@ function toSyllables(words: readonly Syllable[]): NativeSyllable[] {
       StartTime: seconds(word.startTime),
       EndTime: seconds(word.endTime),
       IsPartOfWord: word.endsWithSpace !== true,
+      ...(word.ruby?.length
+        ? {
+            ProviderRuby: word.ruby.map((tag) => ({
+              Text: tag.text,
+              StartTime: seconds(tag.startTime),
+              EndTime: seconds(tag.endTime),
+            })),
+          }
+        : {}),
     }));
 }
 

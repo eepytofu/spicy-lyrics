@@ -1,6 +1,6 @@
 import { ensureSourceEvidence, type SourceLyricsEvidence } from "./Processing/SourceEvidence.ts";
 
-export const LYRIC_REVISION_SCHEMA_VERSION = 1;
+export const LYRIC_REVISION_SCHEMA_VERSION = 2;
 
 export type LyricRevision = {
   schemaVersion: typeof LYRIC_REVISION_SCHEMA_VERSION;
@@ -36,6 +36,7 @@ function canonicalSourceEvidence(evidence: SourceLyricsEvidence): string {
         startTime: owner.startTime,
         endTime: owner.endTime,
         isPartOfWord: owner.isPartOfWord ?? null,
+        providerRuby: owner.providerRuby ?? null,
       })),
     })),
   });

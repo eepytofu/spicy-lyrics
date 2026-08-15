@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  addStructuredProviderRubyReadings,
   projectProviderAuthoredJapaneseReadings,
   projectProviderSourceOffset,
 } from "../src/utils/Lyrics/Processing/Japanese/ProviderAuthoredReading.ts";
@@ -16,6 +17,39 @@ test("projects ASCII and fullwidth authored readings without changing source evi
       reading: hint.reading,
     })), [{ surface: "天", reading: "そら" }]);
   }
+});
+
+test("structured ruby keeps its authored script and abstains from multi-tag mapping", () => {
+  const base = projectProviderAuthoredJapaneseReadings("空を見る");
+  const projected = addStructuredProviderRubyReadings(base, [
+    {
+      start: 0,
+      end: 1,
+      ProviderRuby: [{ Text: "ソラ", StartTime: 1, EndTime: 2 }],
+    },
+  ]);
+  assert.deepEqual(projected.hints.map((hint) => hint.reading), ["ソラ"]);
+  assert.deepEqual(projected.hints[0].displayRange, { start: 0, end: 1 });
+
+  const ambiguous = addStructuredProviderRubyReadings(base, [
+    {
+      start: 0,
+      end: 1,
+      ProviderRuby: [
+        { Text: "ソ", StartTime: 1, EndTime: 1.5 },
+        { Text: "ラ", StartTime: 1.5, EndTime: 2 },
+      ],
+    },
+  ]);
+  assert.equal(ambiguous.hints.length, 0);
+
+  const heuristic = projectProviderAuthoredJapaneseReadings("空(くう)を見る");
+  const structuredWins = addStructuredProviderRubyReadings(heuristic, [{
+    start: 0,
+    end: 5,
+    ProviderRuby: [{ Text: "ソラ", StartTime: 1, EndTime: 2 }],
+  }]);
+  assert.deepEqual(structuredWins.hints.map((hint) => hint.reading), ["ソラ"]);
 });
 
 test("supports compound and repeated authored readings", () => {

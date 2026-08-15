@@ -62,3 +62,29 @@ test("derived mutations do not rewrite an established source revision", async ()
   assert.equal(isLyricsRevisionCacheCompatible(lyrics, revision.id), true);
   assert.equal(isLyricsRevisionCacheCompatible(lyrics, "another revision"), false);
 });
+
+test("structured ruby text and timing participate in revision identity", async () => {
+  const lyrics = (reading: string, start: number) => ({
+    Type: "Syllable",
+    source: "ldb",
+    Content: [{
+      Type: "Vocal",
+      Lead: {
+        StartTime: 1,
+        EndTime: 2,
+        Syllables: [{
+          Text: "空",
+          StartTime: 1,
+          EndTime: 2,
+          ProviderRuby: [{ Text: reading, StartTime: start, EndTime: 2 }],
+        }],
+      },
+    }],
+  });
+  const base = await ensureLyricRevision("spotify:track:ruby", lyrics("ソラ", 1), "ldb:ruby");
+  const text = await ensureLyricRevision("spotify:track:ruby", lyrics("クウ", 1), "ldb:ruby");
+  const timing = await ensureLyricRevision("spotify:track:ruby", lyrics("ソラ", 1.25), "ldb:ruby");
+
+  assert.notEqual(base.id, text.id);
+  assert.notEqual(base.id, timing.id);
+});

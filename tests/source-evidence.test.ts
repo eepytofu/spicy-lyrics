@@ -39,7 +39,13 @@ test("syllable evidence preserves fragments, timing owners, and background roles
         StartTime: 1,
         EndTime: 3,
         Syllables: [
-          { Text: "ぶち壊して", StartTime: 1, EndTime: 2, IsPartOfWord: true },
+          {
+            Text: "ぶち壊して",
+            StartTime: 1,
+            EndTime: 2,
+            IsPartOfWord: true,
+            ProviderRuby: [{ Text: "ブチコワシテ", StartTime: 1, EndTime: 2 }],
+          },
           { Text: "shout", StartTime: 2, EndTime: 3, IsPartOfWord: false },
         ],
       },
@@ -68,6 +74,7 @@ test("syllable evidence preserves fragments, timing owners, and background roles
       startTime: 1,
       endTime: 2,
       isPartOfWord: true,
+      providerRuby: [{ Text: "ブチコワシテ", StartTime: 1, EndTime: 2 }],
     },
     {
       id: "lead:0:span:1",
@@ -77,6 +84,8 @@ test("syllable evidence preserves fragments, timing owners, and background roles
       isPartOfWord: false,
     },
   ]);
+  assert.equal(Object.isFrozen(evidence.lines[0].timingOwners[0].providerRuby), true);
+  assert.equal(Object.isFrozen(evidence.lines[0].timingOwners[0].providerRuby?.[0]), true);
 });
 
 test("line evidence preserves background text, translation, timing, and role", () => {

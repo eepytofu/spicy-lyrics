@@ -1,4 +1,5 @@
 import { isProviderInfoKind, providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
+import type { ProviderRubyTag } from "../ProviderRuby.ts";
 
 export const SOURCE_EVIDENCE_SCHEMA_VERSION = 5;
 
@@ -8,6 +9,7 @@ export type SourceTimingOwner = {
   readonly startTime: number;
   readonly endTime: number;
   readonly isPartOfWord?: boolean;
+  readonly providerRuby?: readonly ProviderRubyTag[];
 };
 
 export type SourceEvidenceLine = {
@@ -49,12 +51,26 @@ const providerTranslation = (entry: any): string | undefined => {
   return typeof value === "string" ? value : undefined;
 };
 
+function providerRuby(entry: any): ProviderRubyTag[] | undefined {
+  if (!Array.isArray(entry?.ProviderRuby)) return undefined;
+  return entry.ProviderRuby.flatMap((tag: any) =>
+    typeof tag?.Text === "string"
+      && typeof tag?.StartTime === "number"
+      && Number.isFinite(tag.StartTime)
+      && typeof tag?.EndTime === "number"
+      && Number.isFinite(tag.EndTime)
+      ? [{ Text: tag.Text, StartTime: tag.StartTime, EndTime: tag.EndTime }]
+      : []
+  );
+}
+
 function textTimingOwner(
   id: string,
   entry: any,
   fallbackStart = 0,
   fallbackEnd = 0,
 ): SourceTimingOwner {
+  const ruby = providerRuby(entry);
   return {
     id,
     providerText: String(entry?.Text ?? ""),
@@ -63,6 +79,7 @@ function textTimingOwner(
     ...(typeof entry?.IsPartOfWord === "boolean"
       ? { isPartOfWord: entry.IsPartOfWord }
       : {}),
+    ...(ruby ? { providerRuby: ruby } : {}),
   };
 }
 
@@ -179,7 +196,11 @@ function syllableEvidence(lines: any[]): SourceEvidenceLine[] {
 
 function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidence {
   for (const line of evidence.lines) {
-    for (const owner of line.timingOwners) Object.freeze(owner);
+    for (const owner of line.timingOwners) {
+      for (const tag of owner.providerRuby || []) Object.freeze(tag);
+      if (owner.providerRuby) Object.freeze(owner.providerRuby);
+      Object.freeze(owner);
+    }
     Object.freeze(line.timingOwners);
     Object.freeze(line);
   }
@@ -195,11 +216,20 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
   const timingOwner = (entry: unknown): entry is SourceTimingOwner => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;
     const owner = entry as Record<string, unknown>;
+    const rubyTag = (tag: unknown): tag is ProviderRubyTag => {
+      if (typeof tag !== "object" || tag === null || Array.isArray(tag)) return false;
+      const ruby = tag as Record<string, unknown>;
+      return typeof ruby.Text === "string"
+        && finiteNumber(ruby.StartTime)
+        && finiteNumber(ruby.EndTime);
+    };
     return typeof owner.id === "string" && owner.id.length > 0
       && typeof owner.providerText === "string"
       && finiteNumber(owner.startTime)
       && finiteNumber(owner.endTime)
-      && (owner.isPartOfWord === undefined || typeof owner.isPartOfWord === "boolean");
+      && (owner.isPartOfWord === undefined || typeof owner.isPartOfWord === "boolean")
+      && (owner.providerRuby === undefined
+        || (Array.isArray(owner.providerRuby) && owner.providerRuby.every(rubyTag)));
   };
   const line = (entry: unknown): entry is SourceEvidenceLine => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;

@@ -4,8 +4,9 @@ import {
   type SourceLyricsEvidence,
 } from "./SourceEvidence.ts";
 import type { ProviderInfoKind } from "../ProviderInfo.ts";
+import type { ProviderRubyTag } from "../ProviderRuby.ts";
 
-export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 4;
+export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 5;
 
 export type SourceDocumentTimingOwner = {
   readonly id: string;
@@ -13,6 +14,7 @@ export type SourceDocumentTimingOwner = {
   readonly startMs: number;
   readonly endMs: number;
   readonly providerBoundaryAfter?: boolean;
+  readonly providerRuby?: readonly ProviderRubyTag[];
 };
 
 export type SourceDocumentLine = {
@@ -55,15 +57,18 @@ function documentLine(line: SourceEvidenceLine): SourceDocumentLine {
     role: line.role,
     startMs: line.startTime,
     endMs: line.endTime,
-    timingOwners: line.timingOwners.map((owner) =>
-      Object.freeze({
+    timingOwners: line.timingOwners.map((owner) => {
+      const providerRuby = owner.providerRuby?.map((tag) => Object.freeze({ ...tag }));
+      if (providerRuby) Object.freeze(providerRuby);
+      return Object.freeze({
         id: owner.id,
         exactText: owner.providerText,
         startMs: owner.startTime,
         endMs: owner.endTime,
         ...(owner.isPartOfWord !== undefined ? { providerBoundaryAfter: !owner.isPartOfWord } : {}),
-      })
-    ),
+        ...(providerRuby ? { providerRuby } : {}),
+      });
+    }),
   };
 }
 
@@ -151,6 +156,9 @@ export function compareSourceDocumentToEvidence(
         expectedOwner.isPartOfWord === undefined ? undefined : !expectedOwner.isPartOfWord;
       if (actualOwner.providerBoundaryAfter !== expectedBoundary) {
         errors.push(`${ownerPrefix}:boundary`);
+      }
+      if (JSON.stringify(actualOwner.providerRuby) !== JSON.stringify(expectedOwner.providerRuby)) {
+        errors.push(`${ownerPrefix}:provider-ruby`);
       }
     }
   }
