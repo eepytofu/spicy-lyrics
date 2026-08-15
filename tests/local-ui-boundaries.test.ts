@@ -67,7 +67,11 @@ test("the generic modal accepts DOM nodes instead of executable markup strings",
 });
 
 test("the local lyrics upload UI discloses accepted formats and local parsing", () => {
-  assert.match(uploadSource, /accept="\.ttml,\.lrc"/u);
+  assert.match(uploadSource, /description: "Lyrics files \(\.ttml, \.lrc\)"/u);
+  assert.match(uploadSource, /accept: \{ "text\/plain": \["\.ttml", "\.lrc"\] \}/u);
+  assert.match(uploadSource, /showOpenFilePicker/u);
+  assert.match(uploadSource, /fileInputRef\.current\?\.click\(\)/u);
+  assert.doesNotMatch(uploadSource, /accept="\.ttml,\.lrc"/u);
   assert.match(uploadSource, /\(\?:ttml\|lrc\)\$/u);
   assert.match(uploadSource, /TTML and LRC are parsed on your device/u);
   assert.match(uploadSource, /without\s+sending their contents anywhere/u);

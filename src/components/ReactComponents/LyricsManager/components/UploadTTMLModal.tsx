@@ -14,6 +14,23 @@ import { ArrowLeftIcon, UploadIcon } from "./Icons";
 
 type UploadMode = "persistent" | "temporary";
 
+type LyricsFilePickerWindow = Window & {
+  showOpenFilePicker?: (options: {
+    multiple: false;
+    types: Array<{
+      description: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<Array<{ getFile(): Promise<File> }>>;
+};
+
+const LOCAL_LYRICS_FILE_TYPES = [
+  {
+    description: "Lyrics files (.ttml, .lrc)",
+    accept: { "text/plain": [".ttml", ".lrc"] },
+  },
+];
+
 type UploadTTMLModalProps = {
   onBack: () => void;
   onDone: (mode: UploadMode) => void;
@@ -33,6 +50,24 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setFile(f);
+  }
+
+  async function chooseFile() {
+    const picker = (window as LyricsFilePickerWindow).showOpenFilePicker;
+    if (!picker) {
+      fileInputRef.current?.click();
+      return;
+    }
+    try {
+      const [handle] = await picker.call(window, {
+        multiple: false,
+        types: LOCAL_LYRICS_FILE_TYPES,
+      });
+      if (handle) setFile(await handle.getFile());
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      fileInputRef.current?.click();
+    }
   }
 
   async function handleUpload() {
@@ -142,14 +177,14 @@ export default function UploadTTMLModal({ onBack, onDone }: UploadTTMLModalProps
         <input
           ref={fileInputRef}
           type="file"
-          accept=".ttml,.lrc"
           id="sl-ldb-file-input"
           className="sl-ldb-file-input"
           onChange={handleFileChange}
+          aria-label="Choose a .ttml or .lrc file"
         />
-        <label htmlFor="sl-ldb-file-input" className="sl-ldb-file-label">
+        <button type="button" className="sl-ldb-file-label" onClick={() => void chooseFile()}>
           {file ? file.name : "Choose .ttml or .lrc file…"}
-        </label>
+        </button>
       </div>
 
       <div className="sl-ldb-upload-mode-section">
