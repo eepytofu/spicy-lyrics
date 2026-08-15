@@ -11,11 +11,12 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 ### Lyrics and sources
 
-- Extra sources through an optional self-hosted Worker: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. [Set up the Worker](worker/README.md).
+- Extra sources through an optional self-hosted Worker, including: AMLL TTML DB, QQ Music, KuGou, NetEase Cloud Music, and Soda Music. [Set up the Worker](worker/README.md).
 - A source manager for enabling, disabling, and ordering providers.
 - Embedded provider headers, credits, and rights notices can be hidden with **Hide Embedded Provider Info**.
-- TTML is parsed on your device, so local lyrics load without a network round trip.
-- **Choose Lyrics** ranks every candidate so you can pick a different one, and remembers the choice for that track. When Spotify metadata is romanized, localized, or wrong, search again with the original title and artist.
+- Local Lyrics now accepts LRC files, including enhanced LRC parsed into the Syllable tier.
+- Local TTML and LRC files are parsed on-device, so they load without a network round trip.
+- **Choose Lyrics** ranks all candidates so you can pick another one, and remembers the choice for that track. When Spotify metadata is romanized, localized, or wrong, search again with the original title and artist.
 
 <p align="center">
   <img src="assets/lyrics_picker.webp" alt="Choose Lyrics dialog showing manual metadata search and ranked lyric candidates" width="70%">
@@ -25,8 +26,6 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 - Japanese reading hints from the lyrics, such as `天(そら)`, become furigana and romaji, override inferred readings, and appear in amber.
 - Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, plus an option to show readings above Han characters.
-- Various quality-of-life improvements and fixes throughout.
-
 
 ## Install from source
 
@@ -57,7 +56,7 @@ Open **Settings → Sources → Lyrics Sources → Manage Sources**. Paste only 
 <details>
 <summary><strong>Custom lyric server contract</strong></summary>
 
-Custom-server support is still experimental and hasn't been fully tested end to end yet. Custom servers use the same source panel, and Spicy Lyrics sends a `GET` request to:
+Custom server support is still experimental and hasn't been fully tested end to end. Custom servers use the same source panel, and Spicy Lyrics sends a `GET` request to:
 
 ```text
 <configured-base-url>/<spotifyTrackId>?title=...&artist=...&artist_name=...&album=...&duration=...
@@ -95,7 +94,7 @@ If source changes aren't showing up, clear the current song caches under **Advan
 
 Some lyric sources use unofficial interfaces and may stop working. Lyrics and metadata may have their own terms or usage rights, so keep that in mind if you deploy, log, use, or redistribute them.
 
-The optional Worker has open CORS and no built-in authentication or rate limiting. Review the code and add whatever Cloudflare protections you need before putting it on a public or high-traffic deployment. See [SECURITY.md](SECURITY.md) and [worker/NOTICE.md](worker/NOTICE.md) for scope and attribution.
+The optional Worker has open CORS and no built-in authentication or rate limiting. Review the code and add any Cloudflare protections you need before putting it on a public or high-traffic deployment. See [SECURITY.md](SECURITY.md) and [worker/NOTICE.md](worker/NOTICE.md) for scope and attribution.
 
 <details>
 <summary><strong>Credits and references</strong></summary>
