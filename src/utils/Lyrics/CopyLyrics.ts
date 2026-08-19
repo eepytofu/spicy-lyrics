@@ -5,10 +5,9 @@ import {
   $lyricsCopyFormat,
   $showVocalistLabels,
 } from "../uiState.ts";
-import { shouldHideProviderInfoEntry } from "./ProviderInfo.ts";
+import { shouldExcludeLyricsCopyEntry } from "./LyricsSemanticPolicy.ts";
 import { isMeaningfullyDifferent } from "./TextCompare.ts";
 import { preferredCopyTranslation } from "./TranslationSidecar.ts";
-import { isVocalCueEntry } from "./VocalSemantics.ts";
 
 export type LyricsCopyFormat = "plain" | "timestamps" | "translation" | "metadata";
 
@@ -65,9 +64,10 @@ function linesFromLyrics(
 
   if (lyrics.Type === "Static") {
     return (lyrics.Lines ?? [])
-      .filter((line: any) =>
-        !shouldHideProviderInfoEntry(line, hideProviderInfo)
-        && (showVocalistLabels || !isVocalCueEntry(line)))
+      .filter((line: any) => !shouldExcludeLyricsCopyEntry(line, {
+        hideProviderInfo,
+        showVocalistLabels,
+      }))
       .map((line: any) => ({
         text: cleanText(line?.Text),
         translatedText: cleanText(preferredCopyTranslation(line)),
@@ -78,10 +78,7 @@ function linesFromLyrics(
   if (lyrics.Type === "Line") {
     const out: CopyLine[] = [];
     for (const line of lyrics.Content ?? []) {
-      if (
-        shouldHideProviderInfoEntry(line, hideProviderInfo)
-        || (!showVocalistLabels && isVocalCueEntry(line))
-      ) continue;
+      if (shouldExcludeLyricsCopyEntry(line, { hideProviderInfo, showVocalistLabels })) continue;
       const text = cleanText(line?.Text);
       if (text) {
         out.push({
@@ -107,10 +104,10 @@ function linesFromLyrics(
   if (lyrics.Type === "Syllable") {
     const out: CopyLine[] = [];
     for (const group of lyrics.Content ?? []) {
-      if (
-        shouldHideProviderInfoEntry(group?.Lead, hideProviderInfo)
-        || (!showVocalistLabels && isVocalCueEntry(group?.Lead))
-      ) continue;
+      if (shouldExcludeLyricsCopyEntry(group?.Lead, {
+        hideProviderInfo,
+        showVocalistLabels,
+      })) continue;
       const leadText = joinSyllables(group?.Lead?.Syllables);
       if (leadText) {
         out.push({

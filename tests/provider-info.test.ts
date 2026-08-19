@@ -6,18 +6,23 @@ import { convertChineseLyricsText } from "../src/utils/Lyrics/ChineseCharacterCo
 import { collectTranslationLineRefs } from "../src/utils/Lyrics/Fork/TranslationLines.ts";
 import { lyricsLineSnapshots } from "../src/utils/Lyrics/LyricsCandidateSelector.ts";
 import {
-  indexedVisibleLyricsEntries,
   isProviderInfoEntry,
-  isProviderInfoEvidence,
+  isProviderInfoMatchingEvidence,
   isProviderInfoKind,
   providerInfoKind,
-  shouldHideProviderInfoEntry,
 } from "../src/utils/Lyrics/ProviderInfo.ts";
+import {
+  indexedVisibleLyricsEntries,
+  shouldExcludeFromLyricsMatching,
+  shouldExcludeLyricsCopyEntry,
+  shouldHideLyricsDisplayEntry,
+  shouldSkipGeneratedLyricsProcessing,
+} from "../src/utils/Lyrics/LyricsSemanticPolicy.ts";
 
 const readSource = (relativePath: string): string =>
   readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), "utf8");
 
-test("provider-info markers are additive and filtering preserves source identity", () => {
+test("provider-line consumer policies keep provider info and vocal cues as separate axes", () => {
   const lines = [
     { Text: "title", ProviderInfoKind: "trackHeader" },
     { Text: "credit", ProviderInfoKind: "credit" },
@@ -33,22 +38,71 @@ test("provider-info markers are additive and filtering preserves source identity
   assert.equal(isProviderInfoKind("providerNotice"), true);
   assert.equal(isProviderInfoKind("unknown"), false);
   assert.equal(isProviderInfoEntry(lines[4]), true);
-  assert.equal(shouldHideProviderInfoEntry(lines[0], false), false);
-  assert.equal(shouldHideProviderInfoEntry(lines[5], false), true);
+  assert.equal(shouldSkipGeneratedLyricsProcessing(lines[0]), true);
+  assert.equal(shouldExcludeFromLyricsMatching(lines[0], lines[0].Text), true);
+  assert.equal(shouldHideLyricsDisplayEntry(lines[0], {
+    hideProviderInfo: false,
+    showVocalistLabels: true,
+  }), false);
+  assert.equal(shouldExcludeLyricsCopyEntry(lines[5], {
+    hideProviderInfo: false,
+    showVocalistLabels: true,
+  }), true);
+
+  const cue = { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } };
+  assert.equal(isProviderInfoEntry(cue), false);
+  assert.equal(shouldSkipGeneratedLyricsProcessing(cue), true);
+  assert.equal(shouldExcludeFromLyricsMatching(cue, cue.Text), true);
+  assert.equal(shouldHideLyricsDisplayEntry(cue, {
+    hideProviderInfo: false,
+    showVocalistLabels: true,
+  }), false);
+  assert.equal(shouldExcludeLyricsCopyEntry(cue, {
+    hideProviderInfo: true,
+    showVocalistLabels: false,
+  }), true);
+
+  const ttmlLine = { Text: "ordinary", VocalAgentId: "duet", SongPart: "Chorus" };
+  assert.equal(shouldSkipGeneratedLyricsProcessing(ttmlLine), false);
+  assert.equal(shouldExcludeFromLyricsMatching(ttmlLine, ttmlLine.Text), false);
+  assert.equal(shouldHideLyricsDisplayEntry(ttmlLine, {
+    hideProviderInfo: true,
+    showVocalistLabels: false,
+  }), false);
+  assert.equal(shouldExcludeLyricsCopyEntry(ttmlLine, {
+    hideProviderInfo: true,
+    showVocalistLabels: false,
+  }), false);
+});
+
+test("display filtering preserves source identity and source indices", () => {
+  const lines = [
+    { Text: "title", ProviderInfoKind: "trackHeader" },
+    { Text: "credit", ProviderInfoKind: "credit" },
+    { Text: "lyric" },
+    { Text: "holder", ProviderInfoKind: "rightsHolder" },
+    { Text: "rights", ProviderInfoKind: "rightsNotice" },
+    { Text: "campaign", ProviderInfoKind: "providerNotice" },
+  ];
   assert.deepEqual(
-    indexedVisibleLyricsEntries(lines, (line) => line, true),
+    indexedVisibleLyricsEntries(lines, (line) => line, {
+      hideProviderInfo: true,
+      showVocalistLabels: true,
+    }),
     [{ entry: lines[2], sourceIndex: 2 }],
   );
   assert.deepEqual(
-    indexedVisibleLyricsEntries(lines, (line) => line, false).map(({ sourceIndex }) => sourceIndex),
+    indexedVisibleLyricsEntries(lines, (line) => line, {
+      hideProviderInfo: false,
+      showVocalistLabels: true,
+    }).map(({ sourceIndex }) => sourceIndex),
     [0, 1, 2, 3, 4],
   );
   assert.deepEqual(
     indexedVisibleLyricsEntries(
       [...lines, { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } }],
       (line) => line,
-      false,
-      (line) => "VocalCue" in line,
+      { hideProviderInfo: false, showVocalistLabels: false },
     ).map(({ sourceIndex }) => sourceIndex),
     [0, 1, 2, 3, 4],
   );
@@ -66,9 +120,9 @@ test("marked rows and the frozen legacy fallback do not contribute Smart Match e
   };
 
   assert.deepEqual(lyricsLineSnapshots(lyrics).map(({ text }) => text), ["普通歌词"]);
-  assert.equal(isProviderInfoEvidence({}, "composer: legacy"), true);
-  assert.equal(isProviderInfoEvidence({}, "喧笑："), false);
-  assert.equal(isProviderInfoEvidence({}, "water: falling"), false);
+  assert.equal(isProviderInfoMatchingEvidence({}, "composer: legacy"), true);
+  assert.equal(isProviderInfoMatchingEvidence({}, "喧笑："), false);
+  assert.equal(isProviderInfoMatchingEvidence({}, "water: falling"), false);
 });
 
 test("provider-info rows are excluded from Han conversion and translation inputs", () => {
@@ -122,9 +176,9 @@ test("line-timed backgrounds remain translation inputs", () => {
 
 test("processing skips provider-info and vocal-cue rows before cleanup or readings", () => {
   const source = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
-  assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(isNonLyricSemanticEntry\(line\)\) continue;\s*const textProjection = projectLyricsText/u);
-  assert.match(source, /for \(const vocalGroup of lyrics\.Content\) \{\s*if \(isNonLyricSemanticEntry\(vocalGroup\)\) continue;/u);
-  assert.match(source, /if \(isNonLyricSemanticEntry\(vocalGroup\.Lead\)\) continue;/u);
+  assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(shouldSkipGeneratedLyricsProcessing\(line\)\) continue;\s*const textProjection = projectLyricsText/u);
+  assert.match(source, /for \(const vocalGroup of lyrics\.Content\) \{\s*if \(shouldSkipGeneratedLyricsProcessing\(vocalGroup\)\) continue;/u);
+  assert.match(source, /if \(shouldSkipGeneratedLyricsProcessing\(vocalGroup\.Lead\)\) continue;/u);
 });
 
 test("all native renderers filter complete marked rows and keep source indices", () => {
@@ -135,20 +189,19 @@ test("all native renderers filter complete marked rows and keep source indices",
   ]) {
     const source = readSource(relativePath);
     assert.match(source, /indexedVisibleLyricsEntries/u, relativePath);
+    assert.match(source, /shouldSkipGeneratedLyricsProcessing/u, relativePath);
     assert.match(source, /\$hideEmbeddedProviderInfo\.get\(\)/u, relativePath);
     assert.match(source, /\$showVocalistLabels\.get\(\)/u, relativePath);
-    assert.match(source, /isVocalCueEntry/u, relativePath);
     assert.match(source, /spicyLyricsLineId = `lead:\$\{sourceIndex\}`/u, relativePath);
     assert.match(source, /visibleLines\.map\(\(\{ entry \}\) => entry\)/u, relativePath);
   }
 });
 
-test("copy filtering covers Static, Line, and Syllable shapes before formatting", () => {
+test("copy filtering keeps its Static, Line, and Syllable assembly paths", () => {
   const source = readSource("../src/utils/Lyrics/CopyLyrics.ts");
-  assert.match(source, /lyrics\.Type === "Static"[\s\S]*?!shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
-  assert.match(source, /lyrics\.Type === "Line"[\s\S]*?shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
-  assert.match(source, /lyrics\.Type === "Syllable"[\s\S]*?shouldHideProviderInfoEntry\(group\?\.Lead, hideProviderInfo\)/u);
+  assert.match(source, /lyrics\.Type === "Static"[\s\S]*?!shouldExcludeLyricsCopyEntry\(line/u);
+  assert.match(source, /lyrics\.Type === "Line"[\s\S]*?shouldExcludeLyricsCopyEntry\(line/u);
+  assert.match(source, /lyrics\.Type === "Syllable"[\s\S]*?shouldExcludeLyricsCopyEntry\(group\?\.Lead/u);
   assert.match(source, /hideProviderInfo = \$hideEmbeddedProviderInfo\.get\(\)/u);
   assert.match(source, /showVocalistLabels = \$showVocalistLabels\.get\(\)/u);
-  assert.match(source, /isVocalCueEntry/u);
 });

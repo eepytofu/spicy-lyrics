@@ -51,8 +51,10 @@ import {
   $showSongSections,
   $showVocalistLabels,
 } from "../../../uiState.ts";
-import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
-import { isNonLyricSemanticEntry, isVocalCueEntry } from "../../VocalSemantics.ts";
+import {
+  indexedVisibleLyricsEntries,
+  shouldSkipGeneratedLyricsProcessing,
+} from "../../LyricsSemanticPolicy.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for syllable lyrics
@@ -418,8 +420,10 @@ export function ApplySyllableLyrics(
   const visibleLines = indexedVisibleLyricsEntries(
     data.Content,
     (line) => line.Lead,
-    $hideEmbeddedProviderInfo.get(),
-    (line) => !showVocalistLabels && isVocalCueEntry(line.Lead),
+    {
+      hideProviderInfo: $hideEmbeddedProviderInfo.get(),
+      showVocalistLabels,
+    },
   );
   const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
   const hasRtlLines = visibleLines.some(
@@ -452,7 +456,7 @@ export function ApplySyllableLyrics(
     );
   const vocalPresentationState: VocalPresentationState = {};
   visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
-    const nonLyricSemantic = isNonLyricSemanticEntry(line.Lead);
+    const skipGeneratedProcessing = shouldSkipGeneratedLyricsProcessing(line.Lead);
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
     const lineWindow = {
@@ -472,16 +476,16 @@ export function ApplySyllableLyrics(
     applyVocalPresentation(
       lineElem,
       data,
-      nonLyricSemantic ? line.Lead : line,
+      skipGeneratedProcessing ? line.Lead : line,
       vocalPresentationState,
       { showSongSections, showVocalistLabels },
     );
     const lineRenderOptions = {
-      useRomanized: nonLyricSemantic ? false : UseRomanized,
-      romanizationPending: nonLyricSemantic ? false : romanizationPending,
+      useRomanized: skipGeneratedProcessing ? false : UseRomanized,
+      romanizationPending: skipGeneratedProcessing ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: nonLyricSemantic ? false : translationPending,
-      showProviderTranslations: nonLyricSemantic ? false : ShowProviderTranslations,
+      translationPending: skipGeneratedProcessing ? false : translationPending,
+      showProviderTranslations: skipGeneratedProcessing ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,

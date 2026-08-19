@@ -1,5 +1,5 @@
 import { convertChineseText } from "./ChineseCharacterConversion.ts";
-import { isNonLyricSemanticEvidence } from "./VocalSemantics.ts";
+import { shouldExcludeFromLyricsMatching } from "./LyricsSemanticPolicy.ts";
 
 export type LyricsSelectionMode = "smart" | "syncType" | "strict";
 
@@ -107,13 +107,13 @@ export function lyricsLineSnapshots(lyrics: any): LineSnapshot[] {
   if (lyrics?.Type === "Static") {
     return (lyrics.Lines ?? []).flatMap((line: any): LineSnapshot[] => {
       const text = String(line?.Text ?? "").trim();
-      return text && !isNonLyricSemanticEvidence(line, text) ? [{ text, normalized: normalizeLyricsComparisonText(text) }] : [];
+      return text && !shouldExcludeFromLyricsMatching(line, text) ? [{ text, normalized: normalizeLyricsComparisonText(text) }] : [];
     });
   }
   if (lyrics?.Type === "Line") {
     return (lyrics.Content ?? []).flatMap((line: any): LineSnapshot[] => {
       const text = String(line?.Text ?? "").trim();
-      if (!text || isNonLyricSemanticEvidence(line, text)) return [];
+      if (!text || shouldExcludeFromLyricsMatching(line, text)) return [];
       return [{ text, normalized: normalizeLyricsComparisonText(text), start: finite(line?.StartTime), end: finite(line?.EndTime) }];
     });
   }
@@ -121,7 +121,7 @@ export function lyricsLineSnapshots(lyrics: any): LineSnapshot[] {
     return (lyrics.Content ?? []).flatMap((vocal: any): LineSnapshot[] => {
       const lead = vocal?.Lead;
       const text = syllableText(Array.isArray(lead?.Syllables) ? lead.Syllables : []).trim();
-      if (!text || isNonLyricSemanticEvidence(lead, text)) return [];
+      if (!text || shouldExcludeFromLyricsMatching(lead, text)) return [];
       return [{ text, normalized: normalizeLyricsComparisonText(text), start: finite(lead?.StartTime), end: finite(lead?.EndTime) }];
     });
   }

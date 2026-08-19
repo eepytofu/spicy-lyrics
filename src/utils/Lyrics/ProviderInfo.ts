@@ -25,28 +25,6 @@ export function isProviderInfoEntry(entry: any): boolean {
   return providerInfoKind(entry) !== undefined;
 }
 
-export function shouldHideProviderInfoEntry(entry: any, hideProviderInfo: boolean): boolean {
-  const kind = providerInfoKind(entry);
-  return kind === "providerNotice" || (hideProviderInfo && kind !== undefined);
-}
-
-export function isProviderInfoEvidence(entry: any, text: string): boolean {
+export function isProviderInfoMatchingEvidence(entry: any, text: string): boolean {
   return isProviderInfoEntry(entry) || LEGACY_CREDIT_LINE.test(text);
-}
-
-export type IndexedLyricsEntry<T> = {
-  entry: T;
-  sourceIndex: number;
-};
-
-export function indexedVisibleLyricsEntries<T>(
-  entries: readonly T[],
-  infoEntry: (entry: T) => any,
-  hideProviderInfo: boolean,
-  shouldHideEntry: (entry: T) => boolean = () => false,
-): IndexedLyricsEntry<T>[] {
-  return entries.flatMap((entry, sourceIndex) =>
-    shouldHideProviderInfoEntry(infoEntry(entry), hideProviderInfo) || shouldHideEntry(entry)
-      ? []
-      : [{ entry, sourceIndex }]);
 }

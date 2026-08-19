@@ -18,8 +18,10 @@ import {
   $showSongSections,
   $showVocalistLabels,
 } from "../../../uiState.ts";
-import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
-import { isNonLyricSemanticEntry, isVocalCueEntry } from "../../VocalSemantics.ts";
+import {
+  indexedVisibleLyricsEntries,
+  shouldSkipGeneratedLyricsProcessing,
+} from "../../LyricsSemanticPolicy.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for lyrics
@@ -69,8 +71,10 @@ export function ApplyLineLyrics(
   const visibleLines = indexedVisibleLyricsEntries(
     data.Content,
     (line) => line,
-    $hideEmbeddedProviderInfo.get(),
-    (line) => !showVocalistLabels && isVocalCueEntry(line),
+    {
+      hideProviderInfo: $hideEmbeddedProviderInfo.get(),
+      showVocalistLabels,
+    },
   );
   const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
   const hasRtlLines = visibleLines.some(({ entry }) =>
@@ -101,7 +105,7 @@ export function ApplyLineLyrics(
   const vocalPresentationState: VocalPresentationState = {};
 
   visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
-    const nonLyricSemantic = isNonLyricSemanticEntry(line);
+    const skipGeneratedProcessing = shouldSkipGeneratedLyricsProcessing(line);
     const lineElem = document.createElement("div");
     lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
@@ -117,11 +121,11 @@ export function ApplyLineLyrics(
       showVocalistLabels,
     });
     const renderOptions = {
-      useRomanized: nonLyricSemantic ? false : UseRomanized,
-      romanizationPending: nonLyricSemantic ? false : romanizationPending,
+      useRomanized: skipGeneratedProcessing ? false : UseRomanized,
+      romanizationPending: skipGeneratedProcessing ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: nonLyricSemantic ? false : translationPending,
-      showProviderTranslations: nonLyricSemantic ? false : ShowProviderTranslations,
+      translationPending: skipGeneratedProcessing ? false : translationPending,
+      showProviderTranslations: skipGeneratedProcessing ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,

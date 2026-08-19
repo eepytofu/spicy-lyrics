@@ -14,8 +14,10 @@ import {
   $showSongSections,
   $showVocalistLabels,
 } from "../../uiState.ts";
-import { indexedVisibleLyricsEntries } from "../ProviderInfo.ts";
-import { isNonLyricSemanticEntry, isVocalCueEntry } from "../VocalSemantics.ts";
+import {
+  indexedVisibleLyricsEntries,
+  shouldSkipGeneratedLyricsProcessing,
+} from "../LyricsSemanticPolicy.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "./VocalPresentation.ts";
 
 /**
@@ -47,8 +49,10 @@ export function ApplyStaticLyrics(
   const visibleLines = indexedVisibleLyricsEntries(
     data.Lines,
     (line) => line,
-    $hideEmbeddedProviderInfo.get(),
-    (line) => !showVocalistLabels && isVocalCueEntry(line),
+    {
+      hideProviderInfo: $hideEmbeddedProviderInfo.get(),
+      showVocalistLabels,
+    },
   );
   const hasRtlLines = visibleLines.some(({ entry }) => isRtl(entry.Text));
   const applyContext = beginLyricsApply(
@@ -69,7 +73,7 @@ export function ApplyStaticLyrics(
   const vocalPresentationState: VocalPresentationState = {};
 
   visibleLines.forEach(({ entry: line, sourceIndex }) => {
-    const nonLyricSemantic = isNonLyricSemanticEntry(line);
+    const skipGeneratedProcessing = shouldSkipGeneratedLyricsProcessing(line);
     const lineElem = document.createElement("div");
     lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
@@ -85,11 +89,11 @@ export function ApplyStaticLyrics(
       showVocalistLabels,
     });
     const renderOptions = {
-      useRomanized: nonLyricSemantic ? false : UseRomanized,
-      romanizationPending: nonLyricSemantic ? false : romanizationPending,
+      useRomanized: skipGeneratedProcessing ? false : UseRomanized,
+      romanizationPending: skipGeneratedProcessing ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: nonLyricSemantic ? false : translationPending,
-      showProviderTranslations: nonLyricSemantic ? false : ShowProviderTranslations,
+      translationPending: skipGeneratedProcessing ? false : translationPending,
+      showProviderTranslations: skipGeneratedProcessing ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       hanLanguageContext,
     };

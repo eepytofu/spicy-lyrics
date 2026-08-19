@@ -1,4 +1,4 @@
-import { isNonLyricSemanticEntry } from "../VocalSemantics.ts";
+import { shouldSkipGeneratedLyricsProcessing } from "../LyricsSemanticPolicy.ts";
 
 export type TranslationLineRef = {
   obj: any;
@@ -29,12 +29,12 @@ export function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
 
   if (lyrics?.Type === "Static") {
     for (const line of lyrics.Lines || []) {
-      if (isNonLyricSemanticEntry(line)) continue;
+      if (shouldSkipGeneratedLyricsProcessing(line)) continue;
       refs.push({ obj: line, sourceText: line?.Text || "", field: "TranslatedText" });
     }
   } else if (lyrics?.Type === "Line") {
     for (const group of lyrics.Content || []) {
-      if (isNonLyricSemanticEntry(group)) continue;
+      if (shouldSkipGeneratedLyricsProcessing(group)) continue;
       if (group?.Text) {
         refs.push({ obj: group, sourceText: group.Text, field: "TranslatedText" });
       }
@@ -49,7 +49,7 @@ export function collectTranslationLineRefs(lyrics: any): TranslationLineRef[] {
   } else if (lyrics?.Type === "Syllable") {
     for (const group of lyrics.Content || []) {
       if (!isVocalGroup(group) || !group?.Lead) continue;
-      if (isNonLyricSemanticEntry(group.Lead)) continue;
+      if (shouldSkipGeneratedLyricsProcessing(group.Lead)) continue;
       refs.push({
         obj: group.Lead,
         sourceText: joinSyllableText(group.Lead.Syllables),

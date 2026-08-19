@@ -1,15 +1,15 @@
 import { resolveCjkDocumentBranch } from "./CjkLanguageRouting.ts";
-import { isNonLyricSemanticEntry } from "../VocalSemantics.ts";
+import { shouldSkipGeneratedLyricsProcessing } from "../LyricsSemanticPolicy.ts";
 
 function lyricLineTexts(lyrics: any): string[] {
   if (lyrics?.Type === "Static") {
     return (lyrics.Lines || [])
-      .filter((line: any) => !isNonLyricSemanticEntry(line))
+      .filter((line: any) => !shouldSkipGeneratedLyricsProcessing(line))
       .map((line: any) => line.Text || "");
   }
   if (lyrics?.Type === "Line") {
     return (lyrics.Content || []).flatMap((line: any) =>
-      isNonLyricSemanticEntry(line)
+      shouldSkipGeneratedLyricsProcessing(line)
         ? []
         : [
             line.Text || "",
@@ -19,7 +19,7 @@ function lyricLineTexts(lyrics: any): string[] {
   }
   if (lyrics?.Type === "Syllable") {
     return (lyrics.Content || []).flatMap((group: any) =>
-      isNonLyricSemanticEntry(group.Lead)
+      shouldSkipGeneratedLyricsProcessing(group.Lead)
         ? []
         : [
             (group.Lead?.Syllables || []).map((syllable: any) => syllable.Text || "").join(""),

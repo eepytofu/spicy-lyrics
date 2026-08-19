@@ -1,5 +1,3 @@
-import { isProviderInfoEntry, isProviderInfoEvidence } from "./ProviderInfo.ts";
-
 export type VocalCueForm = "labelColon" | "bracketedLabel";
 export type VocalCue = {
   Label: string;
@@ -33,12 +31,4 @@ export function vocalAgentId(entry: any): string | undefined {
 
 export function isVocalCueEntry(entry: any): boolean {
   return vocalCue(entry) !== undefined;
-}
-
-export function isNonLyricSemanticEntry(entry: any): boolean {
-  return isProviderInfoEntry(entry) || isVocalCueEntry(entry);
-}
-
-export function isNonLyricSemanticEvidence(entry: any, text: string): boolean {
-  return isProviderInfoEvidence(entry, text) || isVocalCueEntry(entry);
 }

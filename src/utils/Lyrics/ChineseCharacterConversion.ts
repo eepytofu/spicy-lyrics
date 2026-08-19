@@ -2,7 +2,7 @@ import { ConverterBuilder } from "opencc-js/core";
 import * as CnToTraditionalPreset from "opencc-js/preset/cn2t";
 import * as TraditionalToCnPreset from "opencc-js/preset/t2cn";
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
-import { isNonLyricSemanticEntry } from "./VocalSemantics.ts";
+import { shouldSkipGeneratedLyricsProcessing } from "./LyricsSemanticPolicy.ts";
 
 export type ChineseCharacterForm = "original" | "simplified" | "traditional";
 export type DetectedChineseCharacterForm = Exclude<ChineseCharacterForm, "original"> | "ambiguous";
@@ -117,11 +117,11 @@ export function convertChineseLyricsText(
 ): void {
   if (form === "original") return;
   const convertTextEntry = (entry: any) => {
-    if (isNonLyricSemanticEntry(entry)) return;
+    if (shouldSkipGeneratedLyricsProcessing(entry)) return;
     if (typeof entry?.Text === "string" && shouldConvert(entry.Text)) entry.Text = convertChineseText(entry.Text, form);
   };
   const convertTimedGroup = (group: any) => {
-    if (isNonLyricSemanticEntry(group)) return;
+    if (shouldSkipGeneratedLyricsProcessing(group)) return;
     const units = group?.Syllables;
     if (!Array.isArray(units) || units.length === 0) return;
     const lineText = units.reduce((text: string, unit: TimedTextUnit, index: number) =>
@@ -139,7 +139,7 @@ export function convertChineseLyricsText(
     }
   } else if (lyrics?.Type === "Syllable") {
     for (const vocal of lyrics.Content || []) {
-      if (isNonLyricSemanticEntry(vocal?.Lead)) continue;
+      if (shouldSkipGeneratedLyricsProcessing(vocal?.Lead)) continue;
       convertTimedGroup(vocal?.Lead);
       for (const background of vocal?.Background || []) convertTimedGroup(background);
     }
