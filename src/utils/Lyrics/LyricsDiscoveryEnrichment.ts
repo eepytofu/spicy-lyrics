@@ -133,7 +133,7 @@ type NativeTitleRetryWindow = {
 
 function createNativeTitleRetryWindow(
   parentSignal: AbortSignal | undefined,
-  budgetMs: number,
+  remainingBudgetMs: number,
 ): NativeTitleRetryWindow {
   const controller = new AbortController();
   let resolveAbort!: () => void;
@@ -144,7 +144,7 @@ function createNativeTitleRetryWindow(
   parentSignal?.addEventListener("abort", onParentAbort, { once: true });
   const timer = setTimeout(
     () => controller.abort(new DOMException("Native-title enrichment budget expired", "TimeoutError")),
-    budgetMs,
+    remainingBudgetMs,
   );
 
   return {
@@ -168,6 +168,7 @@ export async function acquireWithNativeTitleEnrichment<Result extends Enrichable
   options: NativeTitleEnrichmentOptions = {},
 ): Promise<Array<ProviderAcquisitionRecord<LyricsSourceProviderId, Result>>> {
   const { signal, budgetMs = NATIVE_TITLE_ENRICHMENT_BUDGET_MS } = options;
+  const enrichmentDeadline = performance.now() + Math.max(0, budgetMs);
   const basePromises = order.map(async (provider, orderIndex) => ({
     provider,
     orderIndex,
@@ -181,7 +182,9 @@ export async function acquireWithNativeTitleEnrichment<Result extends Enrichable
   const hint = nativeTitleHint(originalTitle, neteaseRecord.outcome.result);
   if (!hint || signal?.aborted) return Promise.all(basePromises);
 
-  const retryWindow = createNativeTitleRetryWindow(signal, budgetMs);
+  const remainingBudgetMs = enrichmentDeadline - performance.now();
+  if (remainingBudgetMs <= 0) return Promise.all(basePromises);
+  const retryWindow = createNativeTitleRetryWindow(signal, remainingBudgetMs);
   try {
     const retryPromises = order.map(async (provider, orderIndex) => {
       if (!nativeTitleRetryProvider(provider)) return null;

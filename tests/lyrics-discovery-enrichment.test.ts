@@ -414,6 +414,34 @@ test("does not start a retry when its base no-match settles after the shared win
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
 });
 
+test("counts NetEase hint discovery against the shared enrichment budget", async () => {
+  let retryCalls = 0;
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "qq"],
+    "Shojo Rei",
+    async (provider, hint) => {
+      if (hint) {
+        retryCalls += 1;
+        return { kind: "lyrics", result: syllableResult(match("少女レイ"), provider) };
+      }
+      if (provider === "netease") {
+        await new Promise((resolve) => setTimeout(resolve, 45));
+        return {
+          kind: "lyrics",
+          result: lyricsResult(match("少女レイ", {
+            evidence: { ...match("少女レイ").evidence!, title: 0 },
+          })),
+        };
+      }
+      return { kind: "no-match" };
+    },
+    { budgetMs: 20 },
+  );
+
+  assert.equal(retryCalls, 0);
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
+});
+
 test("parent cancellation aborts an active native-title retry", async () => {
   const controller = new AbortController();
   const retryStarted = deferred<void>();
