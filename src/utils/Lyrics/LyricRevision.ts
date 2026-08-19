@@ -1,6 +1,6 @@
 import { ensureSourceEvidence, type SourceLyricsEvidence } from "./Processing/SourceEvidence.ts";
 
-export const LYRIC_REVISION_SCHEMA_VERSION = 3;
+export const LYRIC_REVISION_SCHEMA_VERSION = 4;
 
 export type LyricRevision = {
   schemaVersion: typeof LYRIC_REVISION_SCHEMA_VERSION;
@@ -22,11 +22,17 @@ function canonicalSourceEvidence(evidence: SourceLyricsEvidence): string {
   return JSON.stringify({
     schemaVersion: evidence.schemaVersion,
     lyricsType: evidence.lyricsType,
+    providerLanguage: evidence.providerLanguage ?? null,
     vocalAgents: evidence.vocalAgents ?? null,
     lines: evidence.lines.map((line) => ({
       id: line.id,
       providerText: line.providerText,
       providerTranslation: line.providerTranslation ?? null,
+      providerTranslations: line.providerTranslations ?? null,
+      providerRomanizations: line.providerRomanizations ?? null,
+      providerLineId: line.providerLineId ?? null,
+      songPart: line.songPart ?? null,
+      songPartBlockIndex: line.songPartBlockIndex ?? null,
       providerInfoKind: line.providerInfoKind ?? null,
       vocalCue: line.vocalCue ?? null,
       vocalAgentId: line.vocalAgentId ?? null,

@@ -146,7 +146,7 @@ test("interop preserves Chinese word grouping and full-line contextual pinyin", 
   assert.equal(snapshot?.lines[0]?.readingText, "yīn yuè");
 });
 
-test("interop v5 retains provider-info rows and classification", () => {
+test("interop v6 retains provider-info rows and classification", () => {
   const snapshot = buildLyricsInteropSnapshot({
     Type: "Static",
     uri: "spotify:track:provider-info",
@@ -158,7 +158,7 @@ test("interop v5 retains provider-info rows and classification", () => {
     ],
   });
 
-  assert.equal(snapshot?.version, 5);
+  assert.equal(snapshot?.version, 6);
   assert.deepEqual(snapshot?.lines.map(({ originalText, providerInfoKind }) => ({
     originalText,
     providerInfoKind,
@@ -169,7 +169,7 @@ test("interop v5 retains provider-info rows and classification", () => {
   ]);
 });
 
-test("interop v5 publishes provider cues and AMLL agents without resolving anonymous IDs", () => {
+test("interop v6 publishes provider cues and AMLL agents without resolving anonymous IDs", () => {
   const providerSnapshot = buildLyricsInteropSnapshot({
     Type: "Line",
     source: "qq",

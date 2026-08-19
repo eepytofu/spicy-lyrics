@@ -1,6 +1,11 @@
 import { isProviderInfoKind, providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
 import {
+  cloneProviderSidecars,
+  isProviderSidecars,
+  type ProviderSidecar,
+} from "../TtmlSemantics.ts";
+import {
   isVocalCue,
   vocalAgentId,
   vocalCue,
@@ -8,7 +13,7 @@ import {
   type VocalCue,
 } from "../VocalSemantics.ts";
 
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 6;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 7;
 
 export type SourceTimingOwner = {
   readonly id: string;
@@ -23,6 +28,11 @@ export type SourceEvidenceLine = {
   readonly id: string;
   readonly providerText: string;
   readonly providerTranslation?: string;
+  readonly providerTranslations?: readonly ProviderSidecar[];
+  readonly providerRomanizations?: readonly ProviderSidecar[];
+  readonly providerLineId?: string;
+  readonly songPart?: string;
+  readonly songPartBlockIndex?: number;
   readonly providerInfoKind?: ProviderInfoKind;
   readonly vocalCue?: VocalCue;
   readonly vocalAgentId?: string;
@@ -37,6 +47,7 @@ export type SourceLyricsEvidence = {
   readonly lyricsType: "Static" | "Line" | "Syllable";
   readonly providerId?: string;
   readonly providerName?: string;
+  readonly providerLanguage?: string;
   readonly vocalAgents?: Readonly<VocalAgents>;
   readonly lines: readonly SourceEvidenceLine[];
 };
@@ -49,6 +60,7 @@ type EvidenceLyrics = {
   Lines?: any[];
   Content?: any[];
   VocalAgents?: VocalAgents;
+  ProviderLanguage?: string;
   SourceEvidence?: SourceLyricsEvidence;
 };
 
@@ -60,6 +72,36 @@ const numberOrZero = (value: unknown): number => {
 const providerTranslation = (entry: any): string | undefined => {
   const value = entry?.ProviderTranslatedText ?? entry?.TranslatedText;
   return typeof value === "string" ? value : undefined;
+};
+
+const sidecars = (
+  entry: any,
+  field: "ProviderTranslations" | "ProviderRomanizations",
+): ProviderSidecar[] | undefined => cloneProviderSidecars(entry?.[field]);
+
+const lineSemantics = (entry: any): Pick<
+  SourceEvidenceLine,
+  "providerLineId" | "songPart" | "songPartBlockIndex"
+> => ({
+  ...(typeof entry?.ProviderLineId === "string"
+    ? { providerLineId: entry.ProviderLineId }
+    : {}),
+  ...(typeof entry?.SongPart === "string" ? { songPart: entry.SongPart } : {}),
+  ...(typeof entry?.SongPartBlockIndex === "number" && Number.isFinite(entry.SongPartBlockIndex)
+    ? { songPartBlockIndex: entry.SongPartBlockIndex }
+    : {}),
+});
+
+const sidecarSemantics = (entry: any): Pick<
+  SourceEvidenceLine,
+  "providerTranslations" | "providerRomanizations"
+> => {
+  const providerTranslations = sidecars(entry, "ProviderTranslations");
+  const providerRomanizations = sidecars(entry, "ProviderRomanizations");
+  return {
+    ...(providerTranslations ? { providerTranslations } : {}),
+    ...(providerRomanizations ? { providerRomanizations } : {}),
+  };
 };
 
 function providerRuby(entry: any): ProviderRubyTag[] | undefined {
@@ -103,6 +145,8 @@ function staticEvidence(lines: any[]): SourceEvidenceLine[] {
       ...(providerTranslation(line) !== undefined
         ? { providerTranslation: providerTranslation(line) }
         : {}),
+      ...sidecarSemantics(line),
+      ...lineSemantics(line),
       ...(providerInfoKind(line) ? { providerInfoKind: providerInfoKind(line) } : {}),
       ...(vocalCue(line) ? { vocalCue: vocalCue(line) } : {}),
       ...(vocalAgentId(line) ? { vocalAgentId: vocalAgentId(line) } : {}),
@@ -130,6 +174,8 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
       ...(providerTranslation(lead) !== undefined
         ? { providerTranslation: providerTranslation(lead) }
         : {}),
+      ...sidecarSemantics(lead),
+      ...lineSemantics(line),
       ...(providerInfoKind(lead) ? { providerInfoKind: providerInfoKind(lead) } : {}),
       ...(vocalCue(lead) ? { vocalCue: vocalCue(lead) } : {}),
       ...(vocalAgentId(line) || vocalAgentId(lead)
@@ -153,6 +199,7 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
         ...(providerTranslation(background) !== undefined
           ? { providerTranslation: providerTranslation(background) }
           : {}),
+        ...sidecarSemantics(background),
         ...(providerInfoKind(background)
           ? { providerInfoKind: providerInfoKind(background) }
           : {}),
@@ -171,6 +218,7 @@ function syllableGroupEvidence(
   group: any,
   role: SourceEvidenceLine["role"],
   agentId?: string,
+  line?: any,
 ): SourceEvidenceLine {
   const syllables = Array.isArray(group?.Syllables) ? group.Syllables : [];
   const timingOwners = syllables.map((syllable: any, index: number) =>
@@ -187,6 +235,8 @@ function syllableGroupEvidence(
     ...(providerTranslation(group) !== undefined
       ? { providerTranslation: providerTranslation(group) }
       : {}),
+    ...sidecarSemantics(group),
+    ...(role === "lead" ? lineSemantics(line ?? group) : {}),
     ...(providerInfoKind(group) ? { providerInfoKind: providerInfoKind(group) } : {}),
     ...(vocalCue(group) ? { vocalCue: vocalCue(group) } : {}),
     ...(agentId || vocalAgentId(group)
@@ -203,7 +253,7 @@ function syllableEvidence(lines: any[]): SourceEvidenceLine[] {
   return lines.flatMap((line, index) => {
     if (line?.Type === "Instrumental") return [];
     const evidence: SourceEvidenceLine[] = [
-      syllableGroupEvidence(`lead:${index}`, line?.Lead, "lead", vocalAgentId(line)),
+      syllableGroupEvidence(`lead:${index}`, line?.Lead, "lead", vocalAgentId(line), line),
     ];
     for (const [backgroundIndex, background] of (line?.Background || []).entries()) {
       evidence.push(syllableGroupEvidence(
@@ -233,6 +283,16 @@ function cloneVocalAgents(value: unknown): VocalAgents | undefined {
 
 function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidence {
   for (const line of evidence.lines) {
+    for (const sidecar of [
+      ...(line.providerTranslations || []),
+      ...(line.providerRomanizations || []),
+    ]) {
+      for (const word of sidecar.Words || []) Object.freeze(word);
+      if (sidecar.Words) Object.freeze(sidecar.Words);
+      Object.freeze(sidecar);
+    }
+    if (line.providerTranslations) Object.freeze(line.providerTranslations);
+    if (line.providerRomanizations) Object.freeze(line.providerRomanizations);
     for (const owner of line.timingOwners) {
       for (const tag of owner.providerRuby || []) Object.freeze(tag);
       if (owner.providerRuby) Object.freeze(owner.providerRuby);
@@ -293,6 +353,14 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
     return typeof candidate.id === "string" && candidate.id.length > 0
       && typeof candidate.providerText === "string"
       && optionalString(candidate.providerTranslation)
+      && (candidate.providerTranslations === undefined
+        || isProviderSidecars(candidate.providerTranslations))
+      && (candidate.providerRomanizations === undefined
+        || isProviderSidecars(candidate.providerRomanizations))
+      && optionalString(candidate.providerLineId)
+      && optionalString(candidate.songPart)
+      && (candidate.songPartBlockIndex === undefined
+        || finiteNumber(candidate.songPartBlockIndex))
       && (candidate.providerInfoKind === undefined || isProviderInfoKind(candidate.providerInfoKind))
       && (candidate.vocalCue === undefined || isVocalCue(candidate.vocalCue))
       && !(candidate.providerInfoKind !== undefined && candidate.vocalCue !== undefined)
@@ -307,6 +375,7 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
     && ["Static", "Line", "Syllable"].includes(String(evidence.lyricsType))
     && optionalString(evidence.providerId)
     && optionalString(evidence.providerName)
+    && optionalString(evidence.providerLanguage)
     && vocalAgents(evidence.vocalAgents)
     && Array.isArray(evidence.lines)
     && evidence.lines.every(line);
@@ -335,6 +404,9 @@ export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEviden
       : {}),
     ...(lyrics.sourceDisplayName
       ? { providerName: String(lyrics.sourceDisplayName) }
+      : {}),
+    ...(typeof lyrics.ProviderLanguage === "string"
+      ? { providerLanguage: lyrics.ProviderLanguage }
       : {}),
     ...(vocalAgents ? { vocalAgents } : {}),
     lines,

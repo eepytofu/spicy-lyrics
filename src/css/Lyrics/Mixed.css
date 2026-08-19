@@ -335,6 +335,16 @@
   margin-right: 0.32ch;
 }
 
+/* Keep the source-authored TTML boundary for timing/copy while avoiding a
+   synthetic visual word gap between adjacent Japanese CJK spans. */
+#SpicyLyricsPage.SpicyRenderer
+  .LyricsContainer
+  .LyricsContent
+  .line
+  :is(.word, .letterGroup).TtmlJapaneseCjkBoundary::after {
+  margin-right: 0;
+}
+
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.NotSung .word,
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.NotSung .letter {
   --text-shadow-blur-radius: 4px !important;

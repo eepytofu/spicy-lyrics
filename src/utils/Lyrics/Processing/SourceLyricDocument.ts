@@ -5,9 +5,10 @@ import {
 } from "./SourceEvidence.ts";
 import type { ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
+import type { ProviderSidecar } from "../TtmlSemantics.ts";
 import type { VocalAgents, VocalCue } from "../VocalSemantics.ts";
 
-export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 6;
+export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 7;
 
 export type SourceDocumentTimingOwner = {
   readonly id: string;
@@ -22,6 +23,11 @@ export type SourceDocumentLine = {
   readonly id: string;
   readonly exactText: string;
   readonly providerTranslation?: string;
+  readonly providerTranslations?: readonly ProviderSidecar[];
+  readonly providerRomanizations?: readonly ProviderSidecar[];
+  readonly providerLineId?: string;
+  readonly songPart?: string;
+  readonly songPartBlockIndex?: number;
   readonly providerInfoKind?: ProviderInfoKind;
   readonly vocalCue?: VocalCue;
   readonly vocalAgentId?: string;
@@ -38,6 +44,7 @@ export type SourceLyricDocument = {
     readonly id?: string;
     readonly name?: string;
   };
+  readonly providerLanguage?: string;
   readonly vocalAgents?: Readonly<VocalAgents>;
   readonly lines: readonly SourceDocumentLine[];
   readonly provenance: "sourceEvidenceAdapter";
@@ -50,12 +57,35 @@ export type SourceDocumentParity = {
 
 const runtimeDocuments = new WeakMap<object, SourceLyricDocument>();
 
+function frozenSidecars(sidecars: readonly ProviderSidecar[] | undefined): readonly ProviderSidecar[] | undefined {
+  if (!sidecars) return undefined;
+  return Object.freeze(sidecars.map((sidecar) => {
+    const Words = sidecar.Words
+      ? Object.freeze(sidecar.Words.map((word) => Object.freeze({ ...word })))
+      : undefined;
+    return Object.freeze({
+      Text: sidecar.Text,
+      ...(sidecar.Language ? { Language: sidecar.Language } : {}),
+      ...(Words ? { Words } : {}),
+    });
+  }));
+}
+
 function documentLine(line: SourceEvidenceLine): SourceDocumentLine {
+  const providerTranslations = frozenSidecars(line.providerTranslations);
+  const providerRomanizations = frozenSidecars(line.providerRomanizations);
   return {
     id: line.id,
     exactText: line.providerText,
     ...(line.providerTranslation !== undefined
       ? { providerTranslation: line.providerTranslation }
+      : {}),
+    ...(providerTranslations ? { providerTranslations } : {}),
+    ...(providerRomanizations ? { providerRomanizations } : {}),
+    ...(line.providerLineId ? { providerLineId: line.providerLineId } : {}),
+    ...(line.songPart ? { songPart: line.songPart } : {}),
+    ...(line.songPartBlockIndex !== undefined
+      ? { songPartBlockIndex: line.songPartBlockIndex }
       : {}),
     ...(line.providerInfoKind ? { providerInfoKind: line.providerInfoKind } : {}),
     ...(line.vocalCue ? { vocalCue: { ...line.vocalCue } } : {}),
@@ -108,6 +138,7 @@ export function sourceLyricDocumentFromEvidence(
     schemaVersion: SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION,
     normalizedShape: evidence.lyricsType,
     ...(provider ? { provider } : {}),
+    ...(evidence.providerLanguage ? { providerLanguage: evidence.providerLanguage } : {}),
     ...(vocalAgents ? { vocalAgents } : {}),
     lines,
     provenance: "sourceEvidenceAdapter",
@@ -128,6 +159,9 @@ export function compareSourceDocumentToEvidence(
   if (document.provider?.name !== evidence.providerName) {
     errors.push(`provider:name:${document.provider?.name ?? ""}!=${evidence.providerName ?? ""}`);
   }
+  if (document.providerLanguage !== evidence.providerLanguage) {
+    errors.push(`provider:language:${document.providerLanguage ?? ""}!=${evidence.providerLanguage ?? ""}`);
+  }
   if (JSON.stringify(document.vocalAgents) !== JSON.stringify(evidence.vocalAgents)) {
     errors.push("vocal-agents");
   }
@@ -144,6 +178,19 @@ export function compareSourceDocumentToEvidence(
     if (actual.exactText !== expected.providerText) errors.push(`${prefix}:text`);
     if (actual.providerTranslation !== expected.providerTranslation) {
       errors.push(`${prefix}:translation`);
+    }
+    if (JSON.stringify(actual.providerTranslations) !== JSON.stringify(expected.providerTranslations)) {
+      errors.push(`${prefix}:translations`);
+    }
+    if (JSON.stringify(actual.providerRomanizations) !== JSON.stringify(expected.providerRomanizations)) {
+      errors.push(`${prefix}:romanizations`);
+    }
+    if (actual.providerLineId !== expected.providerLineId) {
+      errors.push(`${prefix}:provider-line-id`);
+    }
+    if (actual.songPart !== expected.songPart) errors.push(`${prefix}:song-part`);
+    if (actual.songPartBlockIndex !== expected.songPartBlockIndex) {
+      errors.push(`${prefix}:song-part-block-index`);
     }
     if (actual.providerInfoKind !== expected.providerInfoKind) {
       errors.push(`${prefix}:provider-info-kind`);

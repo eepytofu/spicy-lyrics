@@ -1,5 +1,6 @@
 import { TTMLParser, type LyricLine, type Syllable, type SubLyricContent } from "@applemusic-like-lyrics/ttml";
 import type { ProviderRubyTag } from "./ProviderRuby.ts";
+import type { ProviderLineSemantics, ProviderSidecar } from "./TtmlSemantics.ts";
 import type { VocalAgents } from "./VocalSemantics.ts";
 
 type NativeSyllable = {
@@ -10,7 +11,7 @@ type NativeSyllable = {
   ProviderRuby?: ProviderRubyTag[];
 };
 
-type NativeGroup = {
+type NativeGroup = ProviderLineSemantics & {
   StartTime: number;
   EndTime: number;
   Syllables: NativeSyllable[];
@@ -21,7 +22,7 @@ type NativeGroup = {
   TransliteratedText?: string;
 };
 
-type NativeLine = {
+type NativeLine = ProviderLineSemantics & {
   Type: "Vocal";
   Text: string;
   StartTime: number;
@@ -39,6 +40,23 @@ const seconds = (ms: number): number => ms / 1000;
 
 function preferred(contents: readonly SubLyricContent[] | undefined): SubLyricContent | undefined {
   return contents?.find((entry) => entry.text.trim()) ?? undefined;
+}
+
+function toSidecar(contents: readonly SubLyricContent[] | undefined): ProviderSidecar[] | undefined {
+  if (!contents?.length) return undefined;
+  return contents.map((entry) => {
+    const Words = entry.words?.filter((word) => word.text).map((word) => ({
+      Text: word.text,
+      StartTime: seconds(word.startTime),
+      EndTime: seconds(word.endTime),
+      IsPartOfWord: word.endsWithSpace !== true,
+    }));
+    return {
+      Text: entry.text,
+      ...(entry.language ? { Language: entry.language } : {}),
+      ...(Words?.length ? { Words } : {}),
+    };
+  });
 }
 
 function toSyllables(words: readonly Syllable[]): NativeSyllable[] {
@@ -62,16 +80,32 @@ function toSyllables(words: readonly Syllable[]): NativeSyllable[] {
 }
 
 function applySidecars(target: Record<string, unknown>, line: { translations?: SubLyricContent[]; romanizations?: SubLyricContent[] }): void {
+  const translations = toSidecar(line.translations);
+  if (translations) target.ProviderTranslations = translations;
   const translation = preferred(line.translations);
   if (translation) {
     target.ProviderTranslatedText = translation.text;
     if (translation.language) target.ProviderTranslationLanguage = translation.language;
   }
+  const romanizations = toSidecar(line.romanizations);
+  if (romanizations) target.ProviderRomanizations = romanizations;
   const romanization = preferred(line.romanizations);
   if (romanization) {
     target.ProviderRomanizedText = romanization.text;
     target.RomanizedText = romanization.text;
     target.TransliteratedText = romanization.text;
+  }
+}
+
+function applyLineSemantics(
+  target: Record<string, unknown>,
+  line: LyricLine,
+  syntheticLineIds: ReadonlySet<string>,
+): void {
+  if (line.id && !syntheticLineIds.has(line.id)) target.ProviderLineId = line.id;
+  if (line.songPart) target.SongPart = line.songPart;
+  if (typeof line.blockIndex === "number" && Number.isFinite(line.blockIndex)) {
+    target.SongPartBlockIndex = line.blockIndex;
   }
 }
 
@@ -105,7 +139,11 @@ function oppositeAlignment(lines: readonly LyricLine[], agents: Record<string, {
   });
 }
 
-function syllableContent(lines: readonly LyricLine[], alignments: readonly boolean[]): Record<string, unknown>[] {
+function syllableContent(
+  lines: readonly LyricLine[],
+  alignments: readonly boolean[],
+  syntheticLineIds: ReadonlySet<string>,
+): Record<string, unknown>[] {
   const content: Record<string, unknown>[] = [];
   lines.forEach((line, index) => {
     const Lead = toGroup(line);
@@ -115,6 +153,7 @@ function syllableContent(lines: readonly LyricLine[], alignments: readonly boole
       OppositeAligned: alignments[index],
       Lead,
     };
+    applyLineSemantics(entry, line, syntheticLineIds);
     if (line.agentId) entry.VocalAgentId = line.agentId;
     const background = line.backgroundVocal ? toGroup(line.backgroundVocal) : undefined;
     if (background) entry.Background = [background];
@@ -136,11 +175,16 @@ function toLine(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): Na
   return entry;
 }
 
-function lineContent(lines: readonly LyricLine[], alignments: readonly boolean[]): NativeLine[] {
+function lineContent(
+  lines: readonly LyricLine[],
+  alignments: readonly boolean[],
+  syntheticLineIds: ReadonlySet<string>,
+): NativeLine[] {
   const content: NativeLine[] = [];
   lines.forEach((line, index) => {
     const entry = toLine(line);
     if (!entry) return;
+    applyLineSemantics(entry as unknown as Record<string, unknown>, line, syntheticLineIds);
     entry.OppositeAligned = alignments[index];
     if (line.agentId) entry.VocalAgentId = line.agentId;
     const background = line.backgroundVocal ? toLine(line.backgroundVocal) : undefined;
@@ -162,15 +206,17 @@ function carries(entries: Record<string, unknown>[], field: string): boolean {
 
 const ITUNES_NS = 'xmlns:itunes="http://music.apple.com/lyric-ttml-internal"';
 
-function withLineKeys(ttml: string): string {
+function withLineKeys(ttml: string): { source: string; syntheticLineIds: Set<string> } {
   const used = new Set(
     [...ttml.matchAll(/\situnes:key\s*=\s*(["'])(.*?)\1/giu)].map((match) => match[2]),
   );
   let index = 1;
+  const syntheticLineIds = new Set<string>();
   const nextKey = (): string => {
     let key = `spicy-local-${index++}`;
     while (used.has(key)) key = `spicy-local-${index++}`;
     used.add(key);
+    syntheticLineIds.add(key);
     return key;
   };
   const keyed = ttml.replace(/<p(\s[^>]*)?>/gu, (tag, attributes = "") => {
@@ -178,7 +224,12 @@ function withLineKeys(ttml: string): string {
       ? tag
       : `<p${attributes} itunes:key="${nextKey()}">`;
   });
-  return /xmlns:itunes\s*=/u.test(keyed) ? keyed : keyed.replace(/<tt(\s|>)/u, `<tt ${ITUNES_NS}$1`);
+  return {
+    source: /xmlns:itunes\s*=/u.test(keyed)
+      ? keyed
+      : keyed.replace(/<tt(\s|>)/u, `<tt ${ITUNES_NS}$1`),
+    syntheticLineIds,
+  };
 }
 
 function hasUnkeyedLines(ttml: string): boolean {
@@ -228,7 +279,10 @@ export function parseTtmlDocument(
     }
   };
 
-  const source = hasUnkeyedLines(ttml) ? withLineKeys(ttml) : ttml;
+  const keyed = hasUnkeyedLines(ttml)
+    ? withLineKeys(ttml)
+    : { source: ttml, syntheticLineIds: new Set<string>() };
+  const source = keyed.source;
   const result = read(source);
   if (!result) return null;
   const VocalAgents = extractVocalAgents(source, domParser);
@@ -238,8 +292,8 @@ export function parseTtmlDocument(
   const isLineTimed = result.metadata.timingMode === "Line"
     || lines.every((line) => !(line.words ?? []).length);
   const Content = isLineTimed
-    ? lineContent(lines, alignments)
-    : syllableContent(lines, alignments);
+    ? lineContent(lines, alignments, keyed.syntheticLineIds)
+    : syllableContent(lines, alignments, keyed.syntheticLineIds);
   if (!Content.length) return null;
 
   const includesTranslation = carries(Content, "ProviderTranslatedText");
@@ -256,6 +310,7 @@ export function parseTtmlDocument(
     HasTransliterations: includesRomanization,
   };
   if (result.metadata.songwriters?.length) document.SongWriters = result.metadata.songwriters;
+  if (result.metadata.language) document.ProviderLanguage = result.metadata.language;
   if (VocalAgents) document.VocalAgents = VocalAgents;
   return document;
 }

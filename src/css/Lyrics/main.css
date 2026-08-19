@@ -167,6 +167,23 @@ body:has(.Root:not(.global-nav))
   text-shadow: none;
 }
 
+/* TTML song parts are typed document structure, not lyric rows. Show only the
+   first line of each parser-provided block and keep the source label exact. */
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line .TtmlSongPartLabel {
+  display: block;
+  flex: 0 0 100%;
+  width: 100%;
+  margin-block-end: 0.16em;
+  color: rgba(255, 255, 255, 0.54);
+  font-size: 0.31em;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  line-height: 1.1;
+  -webkit-text-fill-color: currentColor;
+  background: none;
+  text-shadow: none;
+}
+
 #SpicyLyricsPage .LyricsContainer .LyricsContent .line.HasExtras {
   display: block;
 }

@@ -67,11 +67,24 @@ test("an authored trailing space becomes a boundary flag, never literal text", (
 
 test("head-sidecar translations and romanizations survive", () => {
   const document = fixture("b-head-sidecar");
+  assert.equal(document.ProviderLanguage, "ja");
   assert.equal(document.IncludesTranslation, true);
   assert.equal(document.IncludesRomanization, true);
   assert.equal(document.Content[0].Lead.ProviderTranslatedText, "时钟将两人");
   assert.equal(document.Content[0].Lead.ProviderTranslationLanguage, "zh-Hans");
   assert.equal(document.Content[0].Lead.ProviderRomanizedText, "tokei ga futari wo");
+  assert.deepEqual(document.Content[0].Lead.ProviderTranslations, [
+    { Text: "时钟将两人", Language: "zh-Hans" },
+  ]);
+  assert.deepEqual(document.Content[0].Lead.ProviderRomanizations, [
+    { Text: "tokei ga futari wo", Language: "ja-Latn" },
+  ]);
+  assert.equal(document.Content[0].ProviderLineId, "L1");
+  assert.equal(document.Content[0].SongPart, "Verse");
+  assert.equal(document.Content[0].SongPartBlockIndex, 1);
+  assert.equal(document.Content[1].ProviderLineId, "L2");
+  assert.equal(document.Content[1].SongPart, "Chorus");
+  assert.equal(document.Content[1].SongPartBlockIndex, 2);
 });
 
 test("word-level romanization still yields the line-level sidecar fields", () => {
@@ -81,6 +94,34 @@ test("word-level romanization still yields the line-level sidecar fields", () =>
   assert.equal(lead.ProviderRomanizedText, "tokei ga");
   assert.equal(lead.RomanizedText, lead.ProviderRomanizedText);
   assert.equal(lead.TransliteratedText, lead.ProviderRomanizedText);
+  assert.deepEqual(lead.ProviderTranslations, [{
+    Text: "时钟",
+    Language: "zh-Hans",
+    Words: [{ Text: "时钟", StartTime: 1, EndTime: 2.4, IsPartOfWord: true }],
+  }]);
+  assert.deepEqual(lead.ProviderRomanizations, [{
+    Text: "tokei ga",
+    Language: "ja-Latn",
+    Words: [
+      { Text: "tokei", StartTime: 1, EndTime: 2, IsPartOfWord: false },
+      { Text: "ga", StartTime: 2, EndTime: 2.4, IsPartOfWord: true },
+    ],
+  }]);
+});
+
+test("ordered sidecar alternatives remain additive while the first nonempty display fields stay stable", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" xml:lang="ja" itunes:timing="Line"><head><metadata><iTunesMetadata xmlns="http://music.apple.com/lyric-ttml-internal"><translations><translation xml:lang="zh-Hans"><text for="L1">第一</text></translation><translation xml:lang="en"><text for="L1">first</text></translation></translations><transliterations><transliteration xml:lang="ja-Latn"><text for="L1">dai ichi</text></transliteration><transliteration xml:lang="en-Latn"><text for="L1">alternate</text></transliteration></transliterations></iTunesMetadata></metadata></head><body><div itunes:songPart="Verse"><p begin="1s" end="2s" itunes:key="L1">第一</p></div></body></tt>`);
+  const line = document.Content[0];
+  assert.equal(line.ProviderTranslatedText, "第一");
+  assert.equal(line.ProviderRomanizedText, "dai ichi");
+  assert.deepEqual(line.ProviderTranslations, [
+    { Text: "第一", Language: "zh-Hans" },
+    { Text: "first", Language: "en" },
+  ]);
+  assert.deepEqual(line.ProviderRomanizations, [
+    { Text: "dai ichi", Language: "ja-Latn" },
+    { Text: "alternate", Language: "en-Latn" },
+  ]);
 });
 
 test("a line-timed document keeps bare text nodes and its duet side", () => {
@@ -110,11 +151,17 @@ test("lines without itunes:key are still read", () => {
   assert.equal(document.Content.length, 2);
   assert.equal(document.Content[0].Text ?? leadText(document.Content[0]), "ああ...");
   assert.equal(document.Content[1].OppositeAligned, true);
+  assert.deepEqual(document.Content.map((line: any) => line.ProviderLineId), [undefined, undefined]);
 });
 
 test("mixed keyed and unkeyed lines keep every line without key collisions", () => {
   const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><body><div><p begin="1s" end="2s" itunes:key="spicy-local-1">first</p><p begin="2s" end="3s">second</p><p begin="3s" end="4s" itunes:key="L3">third</p></div></body></tt>`);
   assert.deepEqual(document.Content.map((line: any) => line.Text), ["first", "second", "third"]);
+  assert.deepEqual(document.Content.map((line: any) => line.ProviderLineId), [
+    "spicy-local-1",
+    undefined,
+    "L3",
+  ]);
 });
 
 test("arbitrary agent identifiers retain stable alternating alignment", () => {

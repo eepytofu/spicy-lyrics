@@ -1,10 +1,18 @@
 import { needsSyllableSpaceBefore } from "./Processing/SyllableBoundaries.ts";
 import {
+  isJapaneseProviderLanguage,
+  needsTtmlDisplaySpaceBefore,
+} from "./Processing/TtmlDisplaySemantics.ts";
+import {
   formatMixedScriptReadingForDisplay,
   projectMixedScriptReadability,
 } from "./Processing/MixedScriptReadability.ts";
-import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
+import {
+  ensureSourceLyricDocument,
+  type SourceDocumentLine,
+} from "./Processing/SourceLyricDocument.ts";
 import { providerInfoKind, type ProviderInfoKind } from "./ProviderInfo.ts";
+import type { ProviderSidecar } from "./TtmlSemantics.ts";
 import {
   vocalAgentId,
   vocalCue,
@@ -12,7 +20,13 @@ import {
   type VocalCue,
 } from "./VocalSemantics.ts";
 
-export const SPICY_LYRICS_INTEROP_VERSION = 5;
+export const SPICY_LYRICS_INTEROP_VERSION = 6;
+
+export type SpicyLyricsInteropSidecar = {
+  text: string;
+  language?: string;
+  words?: SpicyLyricsInteropWord[];
+};
 
 export type SpicyLyricsInteropWord = {
   text: string;
@@ -30,6 +44,11 @@ export type SpicyLyricsInteropLine = {
   providerText: string;
   displayText: string;
   readingText?: string;
+  providerTranslations?: SpicyLyricsInteropSidecar[];
+  providerRomanizations?: SpicyLyricsInteropSidecar[];
+  providerLineId?: string;
+  songPart?: string;
+  songPartBlockIndex?: number;
   providerInfoKind?: ProviderInfoKind;
   vocalCue?: VocalCue;
   vocalAgentId?: string;
@@ -45,6 +64,7 @@ export type SpicyLyricsInteropSnapshot = {
   lyricsType: "Static" | "Line" | "Syllable";
   language?: string;
   languageISO2?: string;
+  providerLanguage?: string;
   vocalAgents?: Readonly<VocalAgents>;
   lines: SpicyLyricsInteropLine[];
 };
@@ -84,6 +104,42 @@ function readingText(entry: ReadingEntry | null | undefined): string | undefined
   );
   const readable = clean(formatMixedScriptReadingForDisplay(source, reading));
   return readable && readable !== source ? readable : undefined;
+}
+
+function interopSidecars(
+  sidecars: readonly ProviderSidecar[] | undefined,
+): SpicyLyricsInteropSidecar[] | undefined {
+  if (!sidecars) return undefined;
+  return sidecars.map((sidecar) => ({
+    text: sidecar.Text,
+    ...(sidecar.Language ? { language: sidecar.Language } : {}),
+    ...(sidecar.Words
+      ? {
+          words: sidecar.Words.map((word) => ({
+            text: clean(word.Text),
+            providerText: word.Text,
+            displayText: readableDisplay(word.Text),
+            startTime: word.StartTime,
+            endTime: word.EndTime,
+            isPartOfWord: word.IsPartOfWord,
+          })),
+        }
+      : {}),
+  }));
+}
+
+function sourceLineSemantics(line: SourceDocumentLine | undefined): Partial<SpicyLyricsInteropLine> {
+  const providerTranslations = interopSidecars(line?.providerTranslations);
+  const providerRomanizations = interopSidecars(line?.providerRomanizations);
+  return {
+    ...(providerTranslations ? { providerTranslations } : {}),
+    ...(providerRomanizations ? { providerRomanizations } : {}),
+    ...(line?.providerLineId ? { providerLineId: line.providerLineId } : {}),
+    ...(line?.songPart ? { songPart: line.songPart } : {}),
+    ...(line?.songPartBlockIndex !== undefined
+      ? { songPartBlockIndex: line.songPartBlockIndex }
+      : {}),
+  };
 }
 
 function joinSyllableText(syllables: any[]): string {
@@ -129,11 +185,11 @@ function syllableReading(group: any, syllables: any[]): string | undefined {
   return clean(formatMixedScriptReadingForDisplay(sourceText, reading)) || undefined;
 }
 
-function joinSyllableDisplayText(syllables: any[]): string {
+function joinSyllableDisplayText(syllables: any[], providerLanguage?: string): string {
   const joined = syllables.reduce((result, syllable, index) => {
     const text = syllable?.JapaneseReading?.displayText ?? syllable?.Text ?? "";
     if (index === 0) return text;
-    return `${result}${needsSyllableSpaceBefore(syllables, index) ? " " : ""}${text}`;
+    return `${result}${needsTtmlDisplaySpaceBefore(syllables, index, providerLanguage) ? " " : ""}${text}`;
   }, "");
   return readableDisplay(joined);
 }
@@ -164,6 +220,7 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         providerText,
         displayText: readableDisplay(line?.JapaneseReading?.displayText ?? line?.Text),
         readingText: readingText(line),
+        ...sourceLineSemantics(sourceLines.get(id)),
         ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(line)
           ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(line) }
           : {}),
@@ -190,6 +247,7 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         providerText,
         displayText: readableDisplay(entry?.JapaneseReading?.displayText ?? entry?.Text),
         readingText: readingText(entry),
+        ...sourceLineSemantics(sourceLines.get(id)),
         ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(entry)
           ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(entry) }
           : {}),
@@ -226,9 +284,11 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         originalText,
         providerText,
         displayText: lead?.JapaneseReading?.displayText
+            && !isJapaneseProviderLanguage(lyrics.ProviderLanguage)
           ? readableDisplay(lead.JapaneseReading.displayText)
-          : joinSyllableDisplayText(syllables),
+          : joinSyllableDisplayText(syllables, lyrics.ProviderLanguage),
         readingText: syllableReading(lead, syllables),
+        ...sourceLineSemantics(evidence),
         ...(evidence?.providerInfoKind || providerInfoKind(lead)
           ? { providerInfoKind: evidence?.providerInfoKind ?? providerInfoKind(lead) }
           : {}),
@@ -272,6 +332,9 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
     lyricsType: lyrics.Type,
     language: clean(lyrics.Language) || undefined,
     languageISO2: clean(lyrics.LanguageISO2) || undefined,
+    ...(sourceDocument?.providerLanguage
+      ? { providerLanguage: sourceDocument.providerLanguage }
+      : {}),
     ...(sourceDocument?.vocalAgents ? { vocalAgents: sourceDocument.vocalAgents } : {}),
     lines,
   };

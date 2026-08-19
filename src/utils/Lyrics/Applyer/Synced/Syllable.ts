@@ -31,6 +31,7 @@ import {
 import type { ReadingRenderOptions, ReadingRowPresentation } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
 import { needsSyllableSpaceBefore } from "../../Processing/SyllableBoundaries.ts";
+import { suppressJapaneseCjkProviderGapAfter } from "../../Processing/TtmlDisplaySemantics.ts";
 import { needsMixedScriptReadabilityGapBefore } from "../../Processing/MixedScriptReadability.ts";
 import {
   timedAboveReadingGroups,
@@ -60,6 +61,9 @@ interface LineData {
   Background?: BackgroundData[];
   OppositeAligned?: boolean;
   VocalAgentId?: string;
+  ProviderLineId?: string;
+  SongPart?: string;
+  SongPartBlockIndex?: number;
 }
 
 interface LyricsData {
@@ -71,6 +75,7 @@ interface LyricsData {
   classes?: string;
   styles?: Record<string, string>;
   VocalAgents?: Record<string, { Type?: string; Names: string[] }>;
+  ProviderLanguage?: string;
 }
 
 const appendInterludeLine = (
@@ -107,7 +112,8 @@ const applyWordPositionClasses = (
   element: HTMLElement,
   syllable: SyllableData,
   index: number,
-  all: SyllableData[]
+  all: SyllableData[],
+  providerLanguage?: string,
 ): void => {
   if (index === all.length - 1) {
     element.classList.add("LastWordInLine");
@@ -116,6 +122,9 @@ const applyWordPositionClasses = (
   }
   if (needsMixedScriptReadabilityGapBefore(all, index)) {
     element.classList.add("MixedScriptReadabilityGapBefore");
+  }
+  if (suppressJapaneseCjkProviderGapAfter(all, index, providerLanguage)) {
+    element.classList.add("TtmlJapaneseCjkBoundary");
   }
 };
 
@@ -143,6 +152,7 @@ const registerSyllableWord = (
 interface SyllableWordPresentation {
   isBackground?: boolean;
   timedFuriganaBaseSweepRange?: { start: number; end: number };
+  providerLanguage?: string;
 }
 
 const renderedEmphasisUnits = (word: HTMLElement) =>
@@ -193,7 +203,7 @@ const createSyllableWord = (
     } else {
       Emphasize(syllable.Text.split(""), word, syllable, isBackground);
     }
-    applyWordPositionClasses(word, syllable, index, all);
+    applyWordPositionClasses(word, syllable, index, all, presentation.providerLanguage);
 
     if (!$simpleLyricsMode.get()) {
       word.style.setProperty("--text-shadow-opacity", `0%`);
@@ -221,7 +231,7 @@ const createSyllableWord = (
 
   if (isBackground) word.classList.add("bg-word");
   word.classList.add("word");
-  applyWordPositionClasses(word, syllable, index, all);
+  applyWordPositionClasses(word, syllable, index, all, presentation.providerLanguage);
   registerSyllableWord(word, syllable, totalDuration, isBackground);
   return word;
 };
@@ -549,6 +559,7 @@ export function ApplySyllableLyrics(
           ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
           : wordRenderOptions,
         {
+          providerLanguage: data.ProviderLanguage,
           timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(iL)),
         }
       );
@@ -697,6 +708,7 @@ export function ApplySyllableLyrics(
               : wordRenderOptions,
             {
               isBackground: true,
+              providerLanguage: data.ProviderLanguage,
               timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(bI)),
             }
           );
