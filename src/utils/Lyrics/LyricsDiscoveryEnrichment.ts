@@ -12,7 +12,7 @@ const METADATA_WORKER_PROVIDERS = new Set<LyricsSourceProviderId>([
   "soda",
 ]);
 
-export const NATIVE_TITLE_ENRICHMENT_BUDGET_MS = 8_000;
+export const NATIVE_TITLE_ENRICHMENT_BUDGET_MS = 12_000;
 
 export type NativeTitleEnrichmentOptions = {
   signal?: AbortSignal;

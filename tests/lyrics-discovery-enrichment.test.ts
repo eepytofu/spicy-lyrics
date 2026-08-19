@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   acquireWithNativeTitleEnrichment,
   isAcceptedNativeTitleResult,
+  NATIVE_TITLE_ENRICHMENT_BUDGET_MS,
   nativeTitleHint,
   nativeTitleRetryInfo,
   type NativeTitleHint,
@@ -118,6 +119,41 @@ function deferred<T>() {
   const promise = new Promise<T>((next) => { resolve = next; });
   return { promise, resolve };
 }
+
+test("native-title recovery retries every salvageable no-match provider", async () => {
+  const retries: LyricsSourceProviderId[] = [];
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "amlldb", "qq", "kugou", "soda"],
+    "Shojo Rei",
+    async (provider, hint) => {
+      if (hint) {
+        retries.push(provider);
+        return { kind: "lyrics", result: syllableResult(match("少女レイ"), provider) };
+      }
+      if (provider === "netease") {
+        return {
+          kind: "lyrics",
+          result: lyricsResult(match("少女レイ", {
+            evidence: { ...match("少女レイ").evidence!, title: 0 },
+          })),
+        };
+      }
+      return { kind: "no-match" };
+    },
+  );
+
+  assert.deepEqual(retries, ["amlldb", "qq", "kugou", "soda"]);
+  assert.deepEqual(
+    records.map(({ provider, outcome }) => [provider, outcome.kind]),
+    [
+      ["netease", "lyrics"],
+      ["amlldb", "lyrics"],
+      ["qq", "lyrics"],
+      ["kugou", "lyrics"],
+      ["soda", "lyrics"],
+    ],
+  );
+});
 
 test("derives a trusted CJK title hint without replacing Spotify metadata", () => {
   const hint = nativeTitleHint(
@@ -373,13 +409,40 @@ test("shared enrichment budget keeps completed retries and abandons slow retries
         signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
       });
     },
-    { budgetMs: 20 },
+    { budgetMs: 500 },
   );
 
   assert.equal(completedRetrySignal, slowRetrySignal);
   assert.equal(slowRetrySignal?.aborted, true);
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "lyrics");
   assert.equal(records.find(({ provider }) => provider === "kugou")?.outcome.kind, "no-match");
+});
+
+test("retains a Shojo-shaped retry that completes inside the total transaction budget", async () => {
+  assert.equal(NATIVE_TITLE_ENRICHMENT_BUDGET_MS, 12_000);
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "qq"],
+    "Shojo Rei",
+    async (provider, hint) => {
+      if (hint) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return { kind: "lyrics", result: syllableResult(match("少女レイ"), provider) };
+      }
+      if (provider === "netease") {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return {
+          kind: "lyrics",
+          result: lyricsResult(match("少女レイ", {
+            evidence: { ...match("少女レイ").evidence!, title: 0 },
+          })),
+        };
+      }
+      return { kind: "no-match" };
+    },
+    { budgetMs: 500 },
+  );
+
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "lyrics");
 });
 
 test("does not start a retry when its base no-match settles after the shared window", async () => {
@@ -425,7 +488,7 @@ test("counts NetEase hint discovery against the shared enrichment budget", async
         return { kind: "lyrics", result: syllableResult(match("少女レイ"), provider) };
       }
       if (provider === "netease") {
-        await new Promise((resolve) => setTimeout(resolve, 45));
+        await new Promise((resolve) => setTimeout(resolve, 300));
         return {
           kind: "lyrics",
           result: lyricsResult(match("少女レイ", {
@@ -435,7 +498,7 @@ test("counts NetEase hint discovery against the shared enrichment budget", async
       }
       return { kind: "no-match" };
     },
-    { budgetMs: 20 },
+    { budgetMs: 100 },
   );
 
   assert.equal(retryCalls, 0);
