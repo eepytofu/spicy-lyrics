@@ -197,6 +197,29 @@ test("all native renderers filter complete marked rows and keep source indices",
   }
 });
 
+test("format-specific render traversal preserves timing, backgrounds, and seek topology", () => {
+  const staticSource = readSource("../src/utils/Lyrics/Applyer/Static.ts");
+  assert.match(staticSource, /indexedVisibleLyricsEntries\(\s*data\.Lines,/u);
+  assert.doesNotMatch(staticSource, /appendInterludeLine/u);
+
+  const lineSource = readSource("../src/utils/Lyrics/Applyer/Synced/Line.ts");
+  assert.match(lineSource, /indexedVisibleLyricsEntries\(\s*data\.Content,/u);
+  assert.match(lineSource, /arr\[index \+ 1\]\?\.entry\.StartTime/u);
+  assert.match(lineSource, /line\.Background\?\.forEach\(\(background, backgroundIndex\)/u);
+  assert.match(
+    lineSource,
+    /spicyLyricsLineId = `background:\$\{sourceIndex\}:\$\{backgroundIndex\}`/u,
+  );
+  assert.match(lineSource, /appendInterludeLine\([\s\S]*?arr\[index \+ 1\]\.entry\.StartTime/u);
+
+  const syllableSource = readSource("../src/utils/Lyrics/Applyer/Synced/Syllable.ts");
+  assert.match(syllableSource, /indexedVisibleLyricsEntries\(\s*data\.Content,/u);
+  assert.match(syllableSource, /arr\[index \+ 1\]\?\.entry\.Lead\.StartTime/u);
+  assert.match(syllableSource, /line\.Background\.forEach\(\(bg\)/u);
+  assert.match(syllableSource, /StartTime: ConvertTime\(bg\.StartTime\)/u);
+  assert.match(syllableSource, /appendInterludeLine\([\s\S]*?nextLineStartTime/u);
+});
+
 test("copy filtering keeps its Static, Line, and Syllable assembly paths", () => {
   const source = readSource("../src/utils/Lyrics/CopyLyrics.ts");
   assert.match(source, /lyrics\.Type === "Static"[\s\S]*?!shouldExcludeLyricsCopyEntry\(line/u);
@@ -204,4 +227,6 @@ test("copy filtering keeps its Static, Line, and Syllable assembly paths", () =>
   assert.match(source, /lyrics\.Type === "Syllable"[\s\S]*?shouldExcludeLyricsCopyEntry\(group\?\.Lead/u);
   assert.match(source, /hideProviderInfo = \$hideEmbeddedProviderInfo\.get\(\)/u);
   assert.match(source, /showVocalistLabels = \$showVocalistLabels\.get\(\)/u);
+  assert.match(source, /for \(const background of line\?\.Background \?\? \[\]\)/u);
+  assert.match(source, /for \(const bg of group\?\.Background \?\? \[\]\)/u);
 });
