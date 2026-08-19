@@ -1,22 +1,33 @@
 import { resolveCjkDocumentBranch } from "./CjkLanguageRouting.ts";
+import { isNonLyricSemanticEntry } from "../VocalSemantics.ts";
 
 function lyricLineTexts(lyrics: any): string[] {
   if (lyrics?.Type === "Static") {
-    return (lyrics.Lines || []).map((line: any) => line.Text || "");
+    return (lyrics.Lines || [])
+      .filter((line: any) => !isNonLyricSemanticEntry(line))
+      .map((line: any) => line.Text || "");
   }
   if (lyrics?.Type === "Line") {
-    return (lyrics.Content || []).flatMap((line: any) => [
-      line.Text || "",
-      ...(line.Background || []).map((background: any) => background.Text || ""),
-    ]);
+    return (lyrics.Content || []).flatMap((line: any) =>
+      isNonLyricSemanticEntry(line)
+        ? []
+        : [
+            line.Text || "",
+            ...(line.Background || []).map((background: any) => background.Text || ""),
+          ]
+    );
   }
   if (lyrics?.Type === "Syllable") {
-    return (lyrics.Content || []).flatMap((group: any) => [
-      (group.Lead?.Syllables || []).map((syllable: any) => syllable.Text || "").join(""),
-      ...(group.Background || []).map((background: any) =>
-        (background.Syllables || []).map((syllable: any) => syllable.Text || "").join("")
-      ),
-    ]);
+    return (lyrics.Content || []).flatMap((group: any) =>
+      isNonLyricSemanticEntry(group.Lead)
+        ? []
+        : [
+            (group.Lead?.Syllables || []).map((syllable: any) => syllable.Text || "").join(""),
+            ...(group.Background || []).map((background: any) =>
+              (background.Syllables || []).map((syllable: any) => syllable.Text || "").join("")
+            ),
+          ]
+    );
   }
   return [];
 }

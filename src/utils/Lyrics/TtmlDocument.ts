@@ -1,5 +1,6 @@
 import { TTMLParser, type LyricLine, type Syllable, type SubLyricContent } from "@applemusic-like-lyrics/ttml";
 import type { ProviderRubyTag } from "./ProviderRuby.ts";
+import type { VocalAgents } from "./VocalSemantics.ts";
 
 type NativeSyllable = {
   Text: string;
@@ -114,6 +115,7 @@ function syllableContent(lines: readonly LyricLine[], alignments: readonly boole
       OppositeAligned: alignments[index],
       Lead,
     };
+    if (line.agentId) entry.VocalAgentId = line.agentId;
     const background = line.backgroundVocal ? toGroup(line.backgroundVocal) : undefined;
     if (background) entry.Background = [background];
     content.push(entry);
@@ -140,6 +142,7 @@ function lineContent(lines: readonly LyricLine[], alignments: readonly boolean[]
     const entry = toLine(line);
     if (!entry) return;
     entry.OppositeAligned = alignments[index];
+    if (line.agentId) entry.VocalAgentId = line.agentId;
     const background = line.backgroundVocal ? toLine(line.backgroundVocal) : undefined;
     if (background) entry.Background = [background];
     content.push(entry);
@@ -182,6 +185,32 @@ function hasUnkeyedLines(ttml: string): boolean {
   return [...ttml.matchAll(/<p(?:\s[^>]*)?>/gu)].some((match) => !/\situnes:key\s*=/u.test(match[0]));
 }
 
+const TTM_NS = "http://www.w3.org/ns/ttml#metadata";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+
+function extractVocalAgents(
+  ttml: string,
+  domParser?: ConstructorParameters<typeof TTMLParser>[0] extends { domParser?: infer P } ? P : never,
+): VocalAgents | undefined {
+  const parser = domParser ?? (typeof DOMParser !== "undefined" ? new DOMParser() : undefined);
+  if (!parser) return undefined;
+  const document = parser.parseFromString(ttml, "application/xml");
+  const agents: VocalAgents = {};
+  for (const element of Array.from(document.getElementsByTagNameNS(TTM_NS, "agent"))) {
+    const id = element.getAttributeNS(XML_NS, "id") || element.getAttribute("xml:id") || "";
+    if (!id) continue;
+    const type = element.getAttribute("type") || element.getAttributeNS(TTM_NS, "type") || undefined;
+    const Names = Array.from(element.getElementsByTagNameNS(TTM_NS, "name"))
+      .map((name) => name.textContent?.trim() ?? "")
+      .filter(Boolean);
+    agents[id] = {
+      ...(type ? { Type: type } : {}),
+      Names,
+    };
+  }
+  return Object.keys(agents).length ? agents : undefined;
+}
+
 /**
  * Converts a TTML document into the native lyric model, or `null` when it carries no
  * usable lines. A malformed document is a rejected candidate, never a degraded one.
@@ -199,8 +228,10 @@ export function parseTtmlDocument(
     }
   };
 
-  const result = read(hasUnkeyedLines(ttml) ? withLineKeys(ttml) : ttml);
+  const source = hasUnkeyedLines(ttml) ? withLineKeys(ttml) : ttml;
+  const result = read(source);
   if (!result) return null;
+  const VocalAgents = extractVocalAgents(source, domParser);
 
   const lines = result.lines ?? [];
   const alignments = oppositeAlignment(lines, result.metadata.agents);
@@ -225,5 +256,6 @@ export function parseTtmlDocument(
     HasTransliterations: includesRomanization,
   };
   if (result.metadata.songwriters?.length) document.SongWriters = result.metadata.songwriters;
+  if (VocalAgents) document.VocalAgents = VocalAgents;
   return document;
 }

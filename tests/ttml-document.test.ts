@@ -127,6 +127,24 @@ test("an agent typed other starts on the opposite side", () => {
   assert.deepEqual(document.Content.map((line: any) => line.OppositeAligned), [true, false]);
 });
 
+test("named AMLL agents preserve every ordered name and resolve on their source lines", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><head><metadata><ttm:agent type="person" xml:id="solo"><ttm:name>奏</ttm:name></ttm:agent><ttm:agent type="group" xml:id="duet"><ttm:name>初音ミク</ttm:name><ttm:name>重音テト</ttm:name></ttm:agent><ttm:agent type="person" xml:id="v1"/></metadata></head><body><div><p begin="1s" end="2s" itunes:key="L1" ttm:agent="solo">one<span ttm:role="x-translation" xml:lang="zh">【奏】一</span></p><p begin="2s" end="3s" itunes:key="L2" ttm:agent="duet">two</p><p begin="3s" end="4s" itunes:key="L3" ttm:agent="v1">three</p></div></body></tt>`);
+
+  assert.deepEqual(document.VocalAgents, {
+    solo: { Type: "person", Names: ["奏"] },
+    duet: { Type: "group", Names: ["初音ミク", "重音テト"] },
+    v1: { Type: "person", Names: [] },
+  });
+  assert.deepEqual(document.Content.map((line: any) => line.VocalAgentId), ["solo", "duet", "v1"]);
+  assert.deepEqual(document.Content.map((line: any) => [line.Text, line.StartTime, line.EndTime]), [
+    ["one", 1, 2],
+    ["two", 2, 3],
+    ["three", 3, 4],
+  ]);
+  assert.equal(document.Content[0].ProviderTranslatedText, "【奏】一");
+  assert.equal(Object.keys(document.VocalAgents).length, 3);
+});
+
 test("line-timed background vocals retain their native line tier", () => {
   const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="Line"><body><div><p begin="1s" end="4s" itunes:key="L1">lead<span ttm:role="x-bg" begin="2s" end="3s">background<span ttm:role="x-translation" xml:lang="en">translated</span></span></p></div></body></tt>`);
   assert.equal(document.Type, "Line");

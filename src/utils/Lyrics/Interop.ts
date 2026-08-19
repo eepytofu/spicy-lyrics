@@ -5,8 +5,14 @@ import {
 } from "./Processing/MixedScriptReadability.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
 import { providerInfoKind, type ProviderInfoKind } from "./ProviderInfo.ts";
+import {
+  vocalAgentId,
+  vocalCue,
+  type VocalAgents,
+  type VocalCue,
+} from "./VocalSemantics.ts";
 
-export const SPICY_LYRICS_INTEROP_VERSION = 4;
+export const SPICY_LYRICS_INTEROP_VERSION = 5;
 
 export type SpicyLyricsInteropWord = {
   text: string;
@@ -25,6 +31,8 @@ export type SpicyLyricsInteropLine = {
   displayText: string;
   readingText?: string;
   providerInfoKind?: ProviderInfoKind;
+  vocalCue?: VocalCue;
+  vocalAgentId?: string;
   startTime: number;
   endTime: number;
   words?: SpicyLyricsInteropWord[];
@@ -37,6 +45,7 @@ export type SpicyLyricsInteropSnapshot = {
   lyricsType: "Static" | "Line" | "Syllable";
   language?: string;
   languageISO2?: string;
+  vocalAgents?: Readonly<VocalAgents>;
   lines: SpicyLyricsInteropLine[];
 };
 
@@ -158,6 +167,12 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(line)
           ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(line) }
           : {}),
+        ...(sourceLines.get(id)?.vocalCue || vocalCue(line)
+          ? { vocalCue: sourceLines.get(id)?.vocalCue ?? vocalCue(line) }
+          : {}),
+        ...(sourceLines.get(id)?.vocalAgentId || vocalAgentId(line)
+          ? { vocalAgentId: sourceLines.get(id)?.vocalAgentId ?? vocalAgentId(line) }
+          : {}),
         startTime: 0,
         endTime: 0,
       });
@@ -177,6 +192,12 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         readingText: readingText(entry),
         ...(sourceLines.get(id)?.providerInfoKind || providerInfoKind(entry)
           ? { providerInfoKind: sourceLines.get(id)?.providerInfoKind ?? providerInfoKind(entry) }
+          : {}),
+        ...(sourceLines.get(id)?.vocalCue || vocalCue(entry)
+          ? { vocalCue: sourceLines.get(id)?.vocalCue ?? vocalCue(entry) }
+          : {}),
+        ...(sourceLines.get(id)?.vocalAgentId || vocalAgentId(line) || vocalAgentId(entry)
+          ? { vocalAgentId: sourceLines.get(id)?.vocalAgentId ?? vocalAgentId(line) ?? vocalAgentId(entry) }
           : {}),
         startTime: Number(line?.StartTime ?? line?.Lead?.StartTime ?? 0),
         endTime: Number(line?.EndTime ?? line?.Lead?.EndTime ?? 0),
@@ -210,6 +231,12 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         readingText: syllableReading(lead, syllables),
         ...(evidence?.providerInfoKind || providerInfoKind(lead)
           ? { providerInfoKind: evidence?.providerInfoKind ?? providerInfoKind(lead) }
+          : {}),
+        ...(evidence?.vocalCue || vocalCue(lead)
+          ? { vocalCue: evidence?.vocalCue ?? vocalCue(lead) }
+          : {}),
+        ...(evidence?.vocalAgentId || vocalAgentId(group)
+          ? { vocalAgentId: evidence?.vocalAgentId ?? vocalAgentId(group) }
           : {}),
         startTime: Number(lead?.StartTime ?? group?.StartTime ?? 0),
         endTime: Number(lead?.EndTime ?? group?.EndTime ?? 0),
@@ -245,6 +272,7 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
     lyricsType: lyrics.Type,
     language: clean(lyrics.Language) || undefined,
     languageISO2: clean(lyrics.LanguageISO2) || undefined,
+    ...(sourceDocument?.vocalAgents ? { vocalAgents: sourceDocument.vocalAgents } : {}),
     lines,
   };
 }

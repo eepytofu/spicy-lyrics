@@ -87,7 +87,7 @@ import {
 } from "./Processing/ReadingPrecedence.ts";
 import type { AboveReadingSegment, ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
-import { isProviderInfoEntry } from "./ProviderInfo.ts";
+import { isNonLyricSemanticEntry } from "./VocalSemantics.ts";
 import {
   buildTextAnalysisProjection,
   mapAnalysisCodePointRangeToDisplay,
@@ -262,7 +262,7 @@ const gatherText = (
 
   if (lyrics.Type === "Static") {
     for (const line of lyrics.Lines) {
-      if (isProviderInfoEntry(line)) continue;
+      if (isNonLyricSemanticEntry(line)) continue;
       const textProjection = projectLyricsText(line);
       const lineText = textProjection.analysisText;
       entries.push({ target: line, line, lineText, textProjection });
@@ -270,7 +270,7 @@ const gatherText = (
     }
   } else if (lyrics.Type === "Line") {
     for (const vocalGroup of lyrics.Content) {
-      if (isProviderInfoEntry(vocalGroup)) continue;
+      if (isNonLyricSemanticEntry(vocalGroup)) continue;
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
         const textProjection = projectLyricsText(vocalGroup);
         const lineText = textProjection.analysisText;
@@ -287,7 +287,7 @@ const gatherText = (
   } else if (lyrics.Type === "Syllable") {
     for (const vocalGroup of lyrics.Content) {
       if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
-      if (isProviderInfoEntry(vocalGroup.Lead)) continue;
+      if (isNonLyricSemanticEntry(vocalGroup.Lead)) continue;
 
       const syllables = vocalGroup.Lead.Syllables;
       if (syllables.length > 0) {
@@ -361,7 +361,7 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Lines?.some(
         (line: any) =>
-          !isProviderInfoEntry(line) && (
+          !isNonLyricSemanticEntry(line) && (
             hasTransliteration(line) ||
             typeof line.RomanizedText === "string" ||
             line.ReadingRenderPlan != null
@@ -373,7 +373,7 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Content?.some(
         (line: any) =>
-          !isProviderInfoEntry(line) && (
+          !isNonLyricSemanticEntry(line) && (
             hasTransliteration(line) ||
             typeof line.RomanizedText === "string" ||
             line.ReadingRenderPlan != null ||
@@ -391,7 +391,7 @@ const lyricsHaveAnyTransliteration = (lyrics: any): boolean => {
     return (
       lyrics.Content?.some(
         (group: any) =>
-          !isProviderInfoEntry(group.Lead) && (
+          !isNonLyricSemanticEntry(group.Lead) && (
             hasTransliteration(group.Lead) ||
             typeof group.Lead?.RomanizedText === "string" ||
             group.Lead?.Syllables?.some(
@@ -466,7 +466,7 @@ const postProcessSyllableRomanization = async (
 
   for (const vocalGroup of lyrics.Content || []) {
     if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
-    if (isProviderInfoEntry(vocalGroup.Lead)) continue;
+    if (isNonLyricSemanticEntry(vocalGroup.Lead)) continue;
 
     const processGroup = async (group: any) => {
       const syllables = group?.Syllables;

@@ -9,7 +9,7 @@ import { createWorkerHandler, parseTrackMetadata } from "../src/http/handler";
 import { ProviderRateLimitError, ProviderUpstreamError } from "../src/http/fetch";
 
 const trackQuery =
-  "?request_version=19&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
+  "?request_version=20&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
 
 function adapters(
   provider: WorkerProviderId,
@@ -64,12 +64,12 @@ describe("Worker HTTP boundary", () => {
         )
       ).status,
     ).toBe(400);
-    expect((await handler(request("qq", "?request_version=19&title=Song&duration=240"))).status).toBe(400);
+    expect((await handler(request("qq", "?request_version=20&title=Song&duration=240"))).status).toBe(400);
   });
 
   it("rejects stale request contracts and oversized metadata", async () => {
     const handler = createWorkerHandler();
-    expect((await handler(request("qq", trackQuery.replace("request_version=19", "request_version=18")))).status).toBe(426);
+    expect((await handler(request("qq", trackQuery.replace("request_version=20", "request_version=19")))).status).toBe(426);
     expect((await handler(request("qq", `${trackQuery}&artist_name=${"x".repeat(257)}`))).status).toBe(400);
   });
 
@@ -99,7 +99,10 @@ describe("Worker HTTP boundary", () => {
       format: "json",
       lyrics: {
         Type: "Static",
-        Lines: [{ Text: "作词：Writer", ProviderInfoKind: "credit" }],
+        Lines: [
+          { Text: "作词：Writer", ProviderInfoKind: "credit" },
+          { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+        ],
         source: "qq",
         fetchProvider: "qq",
         sourceDisplayName: "QQ Music",
@@ -113,12 +116,15 @@ describe("Worker HTTP boundary", () => {
     expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("public, max-age=3600, stale-if-error=86400");
-    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v19");
+    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v20");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(await response.json()).toMatchObject({
       Type: "Static",
       source: "qq",
-      Lines: [{ Text: "作词：Writer", ProviderInfoKind: "credit" }],
+      Lines: [
+        { Text: "作词：Writer", ProviderInfoKind: "credit" },
+        { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+      ],
     });
   });
 
@@ -226,6 +232,40 @@ describe("Worker HTTP boundary", () => {
       })),
     )(request());
     expect(invalidMarker.status).toBe(502);
+
+    const invalidCue = await createWorkerHandler(
+      adapters("qq", async () => ({
+        format: "json",
+        lyrics: {
+          Type: "Line",
+          Content: [{ Text: "合：", StartTime: 1, EndTime: 2, VocalCue: { Label: "", Form: "labelColon" } }],
+          source: "qq",
+          fetchProvider: "qq",
+          sourceDisplayName: "QQ Music",
+        } as any,
+      })),
+    )(request());
+    expect(invalidCue.status).toBe(502);
+
+    const overlappingSemantics = await createWorkerHandler(
+      adapters("qq", async () => ({
+        format: "json",
+        lyrics: {
+          Type: "Line",
+          Content: [{
+            Text: "合：",
+            StartTime: 1,
+            EndTime: 2,
+            ProviderInfoKind: "credit",
+            VocalCue: { Label: "合", Form: "labelColon" },
+          }],
+          source: "qq",
+          fetchProvider: "qq",
+          sourceDisplayName: "QQ Music",
+        } as any,
+      })),
+    )(request());
+    expect(overlappingSemantics.status).toBe(502);
     consoleError.mockRestore();
   });
 

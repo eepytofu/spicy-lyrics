@@ -41,6 +41,8 @@ type ProviderInfoEntry = {
 type ParsedMetadataRow = {
   anchorCount: number;
   directCredit: boolean;
+  label: string;
+  value: string;
 };
 
 const METADATA_ROW = /^\s*(?:\d{1,3}\s*[.．、)]\s*)?([^\r\n:：]{1,48})\s*[:：]\s*(\S[^\r\n]{0,239})\s*$/u;
@@ -110,7 +112,35 @@ function parseMetadataRow(text: string): ParsedMetadataRow | undefined {
     directCredit: combinedWriterComposer
       || DIRECT_CJK_CREDIT_LABEL.test(compactLabel)
       || DIRECT_LATIN_CREDIT_LABEL.test(normalized.replace(/\s+/gu, " ")),
+    label: match[1].trim(),
+    value: match[2].trim(),
   };
+}
+
+function contextArtistValues(context: ProviderInfoContext): string[] {
+  return [
+    ...context.reference.artists,
+    ...(context.selected?.artists ?? []),
+    ...(context.selected?.artistAliases ?? []),
+  ];
+}
+
+function isBoundedPerformanceCredit(text: string, context: ProviderInfoContext): boolean {
+  const parsed = parseMetadataRow(text);
+  if (!parsed || compact(parsed.label) !== compact("歌")) return false;
+  const value = compact(parsed.value);
+  return Boolean(value) && contextArtistValues(context).some((artist) => compact(artist) === value);
+}
+
+function markBoundedPerformanceCredits(
+  entries: ProviderInfoEntry[],
+  context: ProviderInfoContext,
+): void {
+  for (const entry of entries) {
+    if (!entry.kind && isBoundedPerformanceCredit(entry.text, context)) {
+      entry.setKind("credit");
+    }
+  }
 }
 
 function entriesForLyrics(lyrics: NativeLyrics): ProviderInfoEntry[] {
@@ -530,6 +560,7 @@ export function markEmbeddedProviderInfo(
 
   markProviderNotices(entries, provider);
   markRights(entries, provider);
+  markBoundedPerformanceCredits(entries, context);
 
   const hasHeader = !entries[0].kind && matchesTrackHeader(entries[0].text, context);
   const boundedHeader = !hasHeader && !entries[0].kind

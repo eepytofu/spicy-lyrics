@@ -5,8 +5,9 @@ import {
 } from "./SourceEvidence.ts";
 import type { ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
+import type { VocalAgents, VocalCue } from "../VocalSemantics.ts";
 
-export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 5;
+export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 6;
 
 export type SourceDocumentTimingOwner = {
   readonly id: string;
@@ -22,6 +23,8 @@ export type SourceDocumentLine = {
   readonly exactText: string;
   readonly providerTranslation?: string;
   readonly providerInfoKind?: ProviderInfoKind;
+  readonly vocalCue?: VocalCue;
+  readonly vocalAgentId?: string;
   readonly role: "lead" | "background";
   readonly startMs: number;
   readonly endMs: number;
@@ -35,6 +38,7 @@ export type SourceLyricDocument = {
     readonly id?: string;
     readonly name?: string;
   };
+  readonly vocalAgents?: Readonly<VocalAgents>;
   readonly lines: readonly SourceDocumentLine[];
   readonly provenance: "sourceEvidenceAdapter";
 };
@@ -54,6 +58,8 @@ function documentLine(line: SourceEvidenceLine): SourceDocumentLine {
       ? { providerTranslation: line.providerTranslation }
       : {}),
     ...(line.providerInfoKind ? { providerInfoKind: line.providerInfoKind } : {}),
+    ...(line.vocalCue ? { vocalCue: { ...line.vocalCue } } : {}),
+    ...(line.vocalAgentId ? { vocalAgentId: line.vocalAgentId } : {}),
     role: line.role,
     startMs: line.startTime,
     endMs: line.endTime,
@@ -77,6 +83,7 @@ export function sourceLyricDocumentFromEvidence(
 ): SourceLyricDocument {
   const lines = evidence.lines.map((line) => {
     const adapted = documentLine(line);
+    if (adapted.vocalCue) Object.freeze(adapted.vocalCue);
     Object.freeze(adapted.timingOwners);
     return Object.freeze(adapted);
   });
@@ -90,10 +97,18 @@ export function sourceLyricDocumentFromEvidence(
         })
       : undefined;
 
+  const vocalAgents = evidence.vocalAgents
+    ? Object.freeze(Object.fromEntries(Object.entries(evidence.vocalAgents).map(([id, agent]) => {
+        const Names = Object.freeze([...agent.Names]);
+        return [id, Object.freeze({ ...(agent.Type ? { Type: agent.Type } : {}), Names })];
+      }))) as Readonly<VocalAgents>
+    : undefined;
+
   return Object.freeze({
     schemaVersion: SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION,
     normalizedShape: evidence.lyricsType,
     ...(provider ? { provider } : {}),
+    ...(vocalAgents ? { vocalAgents } : {}),
     lines,
     provenance: "sourceEvidenceAdapter",
   });
@@ -113,6 +128,9 @@ export function compareSourceDocumentToEvidence(
   if (document.provider?.name !== evidence.providerName) {
     errors.push(`provider:name:${document.provider?.name ?? ""}!=${evidence.providerName ?? ""}`);
   }
+  if (JSON.stringify(document.vocalAgents) !== JSON.stringify(evidence.vocalAgents)) {
+    errors.push("vocal-agents");
+  }
   if (document.lines.length !== evidence.lines.length) {
     errors.push(`lines:length:${document.lines.length}!=${evidence.lines.length}`);
   }
@@ -129,6 +147,12 @@ export function compareSourceDocumentToEvidence(
     }
     if (actual.providerInfoKind !== expected.providerInfoKind) {
       errors.push(`${prefix}:provider-info-kind`);
+    }
+    if (JSON.stringify(actual.vocalCue) !== JSON.stringify(expected.vocalCue)) {
+      errors.push(`${prefix}:vocal-cue`);
+    }
+    if (actual.vocalAgentId !== expected.vocalAgentId) {
+      errors.push(`${prefix}:vocal-agent-id`);
     }
     if (actual.role !== expected.role) errors.push(`${prefix}:role`);
     if (actual.startMs !== expected.startTime) errors.push(`${prefix}:start`);

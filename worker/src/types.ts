@@ -1,5 +1,10 @@
 export type ProviderId = "qq" | "kugou" | "netease" | "soda";
 export type ProviderInfoKind = "trackHeader" | "credit" | "rightsHolder" | "rightsNotice" | "providerNotice";
+export type VocalCueForm = "labelColon" | "bracketedLabel";
+export type VocalCue = {
+  Label: string;
+  Form: VocalCueForm;
+};
 
 const PROVIDER_INFO_KINDS = new Set<ProviderInfoKind>([
   "trackHeader",
@@ -11,6 +16,14 @@ const PROVIDER_INFO_KINDS = new Set<ProviderInfoKind>([
 
 export function isProviderInfoKind(value: unknown): value is ProviderInfoKind {
   return PROVIDER_INFO_KINDS.has(value as ProviderInfoKind);
+}
+
+export function isVocalCue(value: unknown): value is VocalCue {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const cue = value as Record<string, unknown>;
+  return typeof cue.Label === "string"
+    && cue.Label.length > 0
+    && (cue.Form === "labelColon" || cue.Form === "bracketedLabel");
 }
 
 export type ProviderCreditRole = "syncedLyrics" | "lyrics" | "translation" | "romanization" | "credit";

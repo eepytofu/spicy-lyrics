@@ -206,3 +206,43 @@ test("source document keeps provider-info markers without removing source rows",
   assert.equal(document?.lines[0].providerInfoKind, "rightsHolder");
   assert.equal(document?.lines[0].exactText, "A Few Good Kids Records");
 });
+
+test("source document keeps provider cues and AMLL agents in immutable parity", () => {
+  const providerLyrics = {
+    Type: "Line",
+    source: "qq",
+    Content: [{
+      Text: "合：",
+      StartTime: 1,
+      EndTime: 2,
+      VocalCue: { Label: "合", Form: "labelColon" },
+    }],
+  };
+  const providerEvidence = ensureSourceEvidence(providerLyrics)!;
+  const providerDocument = sourceLyricDocumentFromEvidence(providerEvidence);
+  assert.equal(compareSourceDocumentToEvidence(providerDocument, providerEvidence).valid, true);
+  assert.deepEqual(providerDocument.lines[0].vocalCue, { Label: "合", Form: "labelColon" });
+
+  const amllLyrics = {
+    Type: "Line",
+    source: "aml",
+    VocalAgents: { duet: { Type: "group", Names: ["A", "B"] } },
+    Content: [{
+      Text: "line",
+      StartTime: 1,
+      EndTime: 2,
+      VocalAgentId: "duet",
+    }],
+  };
+
+  const evidence = ensureSourceEvidence(amllLyrics)!;
+  const document = sourceLyricDocumentFromEvidence(evidence);
+  assert.equal(compareSourceDocumentToEvidence(document, evidence).valid, true);
+  assert.deepEqual(document.vocalAgents, amllLyrics.VocalAgents);
+  assert.equal(document.lines[0].vocalAgentId, "duet");
+  assert.equal(document.lines[0].vocalCue, undefined);
+  assert.equal(Object.isFrozen(document.vocalAgents?.duet.Names), true);
+
+  const drifted = { ...document, vocalAgents: { duet: { Type: "group", Names: ["A"] } } };
+  assert.deepEqual(compareSourceDocumentToEvidence(drifted, evidence).errors, ["vocal-agents"]);
+});

@@ -62,6 +62,7 @@ import {
 import { ensureLyricRevision } from "./LyricRevision.ts";
 import { isLyricsRevisionCacheCompatible, LyricsRevisionStore } from "./LyricsRevisionCache.ts";
 import type { CompleteLyricsSearchOverrides } from "./ManualLyricsSearch.ts";
+import { isNonLyricSemanticEntry } from "./VocalSemantics.ts";
 import {
   automaticLyricsOverride,
   candidateLyricsOverride,
@@ -228,14 +229,18 @@ const NonAsciiLatinQuickTest = /[À-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 function collectLyricsText(lyrics: any): string[] {
   const parts: string[] = [];
   if (lyrics?.Type === "Static") {
-    for (const line of lyrics.Lines || []) parts.push(line.Text || "");
+    for (const line of lyrics.Lines || []) {
+      if (!isNonLyricSemanticEntry(line)) parts.push(line.Text || "");
+    }
   } else if (lyrics?.Type === "Line") {
     for (const line of lyrics.Content || []) {
+      if (isNonLyricSemanticEntry(line)) continue;
       parts.push(line.Text || "");
       for (const background of line.Background || []) parts.push(background.Text || "");
     }
   } else if (lyrics?.Type === "Syllable") {
     for (const group of lyrics.Content || []) {
+      if (isNonLyricSemanticEntry(group.Lead)) continue;
       for (const syl of group.Lead?.Syllables || []) parts.push(syl.Text || "");
       for (const bg of group.Background || []) {
         for (const syl of bg.Syllables || []) parts.push(syl.Text || "");

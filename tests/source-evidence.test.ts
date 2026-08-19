@@ -197,3 +197,38 @@ test("source evidence preserves embedded provider-info classification", () => {
   assert.equal(evidence.lines[0].providerInfoKind, "credit");
   assert.equal(evidence.lines[0].providerText, "作词：作者");
 });
+
+test("source evidence preserves typed provider vocal cues", () => {
+  const lyrics = {
+    Type: "Line",
+    source: "qq",
+    Content: [
+      { Text: "合：", StartTime: 1, EndTime: 2, VocalCue: { Label: "合", Form: "labelColon" } },
+    ],
+  };
+
+  const evidence = ensureSourceEvidence(lyrics)!;
+  assert.deepEqual(evidence.lines[0].vocalCue, { Label: "合", Form: "labelColon" });
+});
+
+test("source evidence preserves AMLL agent metadata without cue classification", () => {
+  const lyrics = {
+    Type: "Line",
+    source: "aml",
+    VocalAgents: {
+      duet: { Type: "group", Names: ["初音ミク", "重音テト"] },
+      v1: { Type: "person", Names: [] },
+    },
+    Content: [
+      { Text: "歌", StartTime: 2, EndTime: 3, VocalAgentId: "duet" },
+      { Text: "匿名", StartTime: 3, EndTime: 4, VocalAgentId: "v1" },
+    ],
+  };
+
+  const evidence = ensureSourceEvidence(lyrics)!;
+  assert.deepEqual(evidence.vocalAgents, lyrics.VocalAgents);
+  assert.equal(evidence.lines[0].vocalAgentId, "duet");
+  assert.equal(evidence.lines[1].vocalAgentId, "v1");
+  assert.equal(evidence.lines.some((line) => line.vocalCue), false);
+  assert.equal(Object.isFrozen(evidence.vocalAgents?.duet.Names), true);
+});

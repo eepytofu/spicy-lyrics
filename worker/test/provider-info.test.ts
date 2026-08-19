@@ -810,6 +810,52 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
+  it.each(["qq", "kugou"] as const)(
+    "classifies an exact artist-valued 歌 row as a bounded performance credit for %s",
+    (provider) => {
+      const context: ProviderInfoContext = {
+        reference: {
+          id: "spotify-whale",
+          title: "クーネル・エンゲイザー",
+          artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
+          album: "クーネル・エンゲイザー",
+          durationMs: 240_000,
+        },
+        selected: {
+          title: "クーネル・エンゲイザー",
+          artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
+        },
+      };
+      const result = markEmbeddedProviderInfo(lineLyrics([
+        "first lyric",
+        "歌：電ǂ鯨",
+        "second lyric",
+      ], provider), provider, context);
+
+      expect(kinds(result)).toEqual([undefined, "credit", undefined]);
+    },
+  );
+
+  it.each([
+    "歌：歌",
+    "歌：別人",
+    "歌：電ǂ鯨と琴葉茜",
+    "この歌：電ǂ鯨",
+  ])("keeps an unproven 歌-shaped row visible: %s", (text) => {
+    const context: ProviderInfoContext = {
+      reference: {
+        id: "spotify-whale",
+        title: "クーネル・エンゲイザー",
+        artists: ["電ǂ鯨"],
+        album: "クーネル・エンゲイザー",
+        durationMs: 240_000,
+      },
+      selected: { title: "クーネル・エンゲイザー", artists: ["電ǂ鯨"] },
+    };
+    const result = markEmbeddedProviderInfo(lineLyrics([text]), "netease", context);
+    expect(kinds(result)).toEqual([undefined]);
+  });
+
   it("classifies a validated obscure-label island without an exact direct-label seed", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "第一句歌词",

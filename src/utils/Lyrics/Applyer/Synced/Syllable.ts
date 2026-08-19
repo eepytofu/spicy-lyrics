@@ -46,7 +46,9 @@ import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
 import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
-import { indexedVisibleLyricsEntries, isProviderInfoEntry } from "../../ProviderInfo.ts";
+import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
+import { isNonLyricSemanticEntry } from "../../VocalSemantics.ts";
+import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for syllable lyrics
 type SyllableData = TimedSyllableEntry;
@@ -57,6 +59,7 @@ interface LineData {
   Lead: LeadData;
   Background?: BackgroundData[];
   OppositeAligned?: boolean;
+  VocalAgentId?: string;
 }
 
 interface LyricsData {
@@ -67,6 +70,7 @@ interface LyricsData {
   source?: "spt" | "spl" | "aml";
   classes?: string;
   styles?: Record<string, string>;
+  VocalAgents?: Record<string, { Type?: string; Names: string[] }>;
 }
 
 const appendInterludeLine = (
@@ -413,8 +417,9 @@ export function ApplySyllableLyrics(
         entry.Lead.Syllables.some((s) => isJapaneseEntry(s)) ||
         entry.Background?.some((bg) => bg.Syllables.some((s) => isJapaneseEntry(s))) === true
     );
+  const vocalPresentationState: VocalPresentationState = {};
   visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
-    const providerInfo = isProviderInfoEntry(line.Lead);
+    const nonLyricSemantic = isNonLyricSemanticEntry(line.Lead);
     const lineElem = document.createElement("div");
     lineElem.classList.add("line");
     const lineWindow = {
@@ -431,12 +436,18 @@ export function ApplySyllableLyrics(
       fixHanGlyphVariants
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
+    applyVocalPresentation(
+      lineElem,
+      data,
+      nonLyricSemantic ? line.Lead : line,
+      vocalPresentationState,
+    );
     const lineRenderOptions = {
-      useRomanized: providerInfo ? false : UseRomanized,
-      romanizationPending: providerInfo ? false : romanizationPending,
+      useRomanized: nonLyricSemantic ? false : UseRomanized,
+      romanizationPending: nonLyricSemantic ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: providerInfo ? false : translationPending,
-      showProviderTranslations: providerInfo ? false : ShowProviderTranslations,
+      translationPending: nonLyricSemantic ? false : translationPending,
+      showProviderTranslations: nonLyricSemantic ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,

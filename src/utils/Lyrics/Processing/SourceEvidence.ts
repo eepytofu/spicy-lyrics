@@ -1,7 +1,14 @@
 import { isProviderInfoKind, providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
+import {
+  isVocalCue,
+  vocalAgentId,
+  vocalCue,
+  type VocalAgents,
+  type VocalCue,
+} from "../VocalSemantics.ts";
 
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 5;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 6;
 
 export type SourceTimingOwner = {
   readonly id: string;
@@ -17,6 +24,8 @@ export type SourceEvidenceLine = {
   readonly providerText: string;
   readonly providerTranslation?: string;
   readonly providerInfoKind?: ProviderInfoKind;
+  readonly vocalCue?: VocalCue;
+  readonly vocalAgentId?: string;
   readonly startTime: number;
   readonly endTime: number;
   readonly role: "lead" | "background";
@@ -28,6 +37,7 @@ export type SourceLyricsEvidence = {
   readonly lyricsType: "Static" | "Line" | "Syllable";
   readonly providerId?: string;
   readonly providerName?: string;
+  readonly vocalAgents?: Readonly<VocalAgents>;
   readonly lines: readonly SourceEvidenceLine[];
 };
 
@@ -38,6 +48,7 @@ type EvidenceLyrics = {
   sourceDisplayName?: string;
   Lines?: any[];
   Content?: any[];
+  VocalAgents?: VocalAgents;
   SourceEvidence?: SourceLyricsEvidence;
 };
 
@@ -93,6 +104,8 @@ function staticEvidence(lines: any[]): SourceEvidenceLine[] {
         ? { providerTranslation: providerTranslation(line) }
         : {}),
       ...(providerInfoKind(line) ? { providerInfoKind: providerInfoKind(line) } : {}),
+      ...(vocalCue(line) ? { vocalCue: vocalCue(line) } : {}),
+      ...(vocalAgentId(line) ? { vocalAgentId: vocalAgentId(line) } : {}),
       startTime: 0,
       endTime: 0,
       role: "lead",
@@ -118,6 +131,10 @@ function lineEvidence(lines: any[]): SourceEvidenceLine[] {
         ? { providerTranslation: providerTranslation(lead) }
         : {}),
       ...(providerInfoKind(lead) ? { providerInfoKind: providerInfoKind(lead) } : {}),
+      ...(vocalCue(lead) ? { vocalCue: vocalCue(lead) } : {}),
+      ...(vocalAgentId(line) || vocalAgentId(lead)
+        ? { vocalAgentId: vocalAgentId(line) ?? vocalAgentId(lead) }
+        : {}),
       startTime: owner.startTime,
       endTime: owner.endTime,
       role: "lead" as const,
@@ -153,6 +170,7 @@ function syllableGroupEvidence(
   id: string,
   group: any,
   role: SourceEvidenceLine["role"],
+  agentId?: string,
 ): SourceEvidenceLine {
   const syllables = Array.isArray(group?.Syllables) ? group.Syllables : [];
   const timingOwners = syllables.map((syllable: any, index: number) =>
@@ -170,6 +188,10 @@ function syllableGroupEvidence(
       ? { providerTranslation: providerTranslation(group) }
       : {}),
     ...(providerInfoKind(group) ? { providerInfoKind: providerInfoKind(group) } : {}),
+    ...(vocalCue(group) ? { vocalCue: vocalCue(group) } : {}),
+    ...(agentId || vocalAgentId(group)
+      ? { vocalAgentId: agentId ?? vocalAgentId(group) }
+      : {}),
     startTime: numberOrZero(group?.StartTime),
     endTime: numberOrZero(group?.EndTime),
     role,
@@ -181,7 +203,7 @@ function syllableEvidence(lines: any[]): SourceEvidenceLine[] {
   return lines.flatMap((line, index) => {
     if (line?.Type === "Instrumental") return [];
     const evidence: SourceEvidenceLine[] = [
-      syllableGroupEvidence(`lead:${index}`, line?.Lead, "lead"),
+      syllableGroupEvidence(`lead:${index}`, line?.Lead, "lead", vocalAgentId(line)),
     ];
     for (const [backgroundIndex, background] of (line?.Background || []).entries()) {
       evidence.push(syllableGroupEvidence(
@@ -194,6 +216,21 @@ function syllableEvidence(lines: any[]): SourceEvidenceLine[] {
   });
 }
 
+function cloneVocalAgents(value: unknown): VocalAgents | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const output: VocalAgents = {};
+  for (const [id, raw] of Object.entries(value)) {
+    if (!id || !raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const agent = raw as Record<string, unknown>;
+    if (!Array.isArray(agent.Names) || !agent.Names.every((name) => typeof name === "string")) continue;
+    output[id] = {
+      ...(typeof agent.Type === "string" ? { Type: agent.Type } : {}),
+      Names: [...agent.Names],
+    };
+  }
+  return Object.keys(output).length ? output : undefined;
+}
+
 function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidence {
   for (const line of evidence.lines) {
     for (const owner of line.timingOwners) {
@@ -201,8 +238,16 @@ function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidenc
       if (owner.providerRuby) Object.freeze(owner.providerRuby);
       Object.freeze(owner);
     }
+    if (line.vocalCue) Object.freeze(line.vocalCue);
     Object.freeze(line.timingOwners);
     Object.freeze(line);
+  }
+  if (evidence.vocalAgents) {
+    for (const agent of Object.values(evidence.vocalAgents)) {
+      Object.freeze(agent.Names);
+      Object.freeze(agent);
+    }
+    Object.freeze(evidence.vocalAgents);
   }
   Object.freeze(evidence.lines);
   return Object.freeze(evidence);
@@ -213,6 +258,17 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
   const evidence = value as Record<string, unknown>;
   const optionalString = (entry: unknown) => entry === undefined || typeof entry === "string";
   const finiteNumber = (entry: unknown) => typeof entry === "number" && Number.isFinite(entry);
+  const vocalAgents = (entry: unknown): boolean => {
+    if (entry === undefined) return true;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    return Object.entries(entry).every(([id, raw]) => {
+      if (!id || !raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+      const agent = raw as Record<string, unknown>;
+      return (agent.Type === undefined || typeof agent.Type === "string")
+        && Array.isArray(agent.Names)
+        && agent.Names.every((name) => typeof name === "string");
+    });
+  };
   const timingOwner = (entry: unknown): entry is SourceTimingOwner => {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return false;
     const owner = entry as Record<string, unknown>;
@@ -238,6 +294,9 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
       && typeof candidate.providerText === "string"
       && optionalString(candidate.providerTranslation)
       && (candidate.providerInfoKind === undefined || isProviderInfoKind(candidate.providerInfoKind))
+      && (candidate.vocalCue === undefined || isVocalCue(candidate.vocalCue))
+      && !(candidate.providerInfoKind !== undefined && candidate.vocalCue !== undefined)
+      && optionalString(candidate.vocalAgentId)
       && finiteNumber(candidate.startTime)
       && finiteNumber(candidate.endTime)
       && (candidate.role === "lead" || candidate.role === "background")
@@ -248,6 +307,7 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
     && ["Static", "Line", "Syllable"].includes(String(evidence.lyricsType))
     && optionalString(evidence.providerId)
     && optionalString(evidence.providerName)
+    && vocalAgents(evidence.vocalAgents)
     && Array.isArray(evidence.lines)
     && evidence.lines.every(line);
 }
@@ -266,6 +326,7 @@ export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEviden
     : lyricsType === "Line"
       ? lineEvidence(lyrics.Content || [])
       : syllableEvidence(lyrics.Content || []);
+  const vocalAgents = cloneVocalAgents(lyrics.VocalAgents);
   const evidence: SourceLyricsEvidence = {
     schemaVersion: SOURCE_EVIDENCE_SCHEMA_VERSION,
     lyricsType,
@@ -275,6 +336,7 @@ export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEviden
     ...(lyrics.sourceDisplayName
       ? { providerName: String(lyrics.sourceDisplayName) }
       : {}),
+    ...(vocalAgents ? { vocalAgents } : {}),
     lines,
   };
   lyrics.SourceEvidence = deepFreezeEvidence(evidence);

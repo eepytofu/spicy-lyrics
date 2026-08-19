@@ -146,7 +146,7 @@ test("interop preserves Chinese word grouping and full-line contextual pinyin", 
   assert.equal(snapshot?.lines[0]?.readingText, "yīn yuè");
 });
 
-test("interop v4 retains provider-info rows and classification", () => {
+test("interop v5 retains provider-info rows and classification", () => {
   const snapshot = buildLyricsInteropSnapshot({
     Type: "Static",
     uri: "spotify:track:provider-info",
@@ -158,7 +158,7 @@ test("interop v4 retains provider-info rows and classification", () => {
     ],
   });
 
-  assert.equal(snapshot?.version, 4);
+  assert.equal(snapshot?.version, 5);
   assert.deepEqual(snapshot?.lines.map(({ originalText, providerInfoKind }) => ({
     originalText,
     providerInfoKind,
@@ -167,4 +167,40 @@ test("interop v4 retains provider-info rows and classification", () => {
     { originalText: "酷狗国潮音乐企划", providerInfoKind: "providerNotice" },
     { originalText: "普通歌词", providerInfoKind: undefined },
   ]);
+});
+
+test("interop v5 publishes provider cues and AMLL agents without resolving anonymous IDs", () => {
+  const providerSnapshot = buildLyricsInteropSnapshot({
+    Type: "Line",
+    source: "qq",
+    uri: "spotify:track:vocal-cue",
+    id: "vocal-cue",
+    Content: [
+      { Text: "A：", StartTime: 1, EndTime: 2, VocalCue: { Label: "A", Form: "labelColon" } },
+    ],
+  });
+  assert.deepEqual(providerSnapshot?.lines[0].vocalCue, { Label: "A", Form: "labelColon" });
+
+  const amllSnapshot = buildLyricsInteropSnapshot({
+    Type: "Line",
+    source: "aml",
+    uri: "spotify:track:vocal-semantics",
+    id: "vocal-semantics",
+    VocalAgents: {
+      duet: { Type: "group", Names: ["A", "B"] },
+      v1: { Type: "person", Names: [] },
+    },
+    Content: [
+      { Text: "line", StartTime: 2, EndTime: 3, VocalAgentId: "duet" },
+      { Text: "anonymous", StartTime: 3, EndTime: 4, VocalAgentId: "v1" },
+    ],
+  });
+
+  assert.deepEqual(amllSnapshot?.vocalAgents, {
+    duet: { Type: "group", Names: ["A", "B"] },
+    v1: { Type: "person", Names: [] },
+  });
+  assert.equal(amllSnapshot?.lines[0].vocalAgentId, "duet");
+  assert.equal(amllSnapshot?.lines[1].vocalAgentId, "v1");
+  assert.equal(amllSnapshot?.lines.some((line) => line.vocalCue), false);
 });

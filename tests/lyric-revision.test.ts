@@ -88,3 +88,29 @@ test("structured ruby text and timing participate in revision identity", async (
   assert.notEqual(base.id, text.id);
   assert.notEqual(base.id, timing.id);
 });
+
+test("vocal cue and AMLL agent semantics participate in revision identity", async () => {
+  const providerLyrics = (label: string) => ({
+    Type: "Line",
+    source: "qq",
+    Content: [{
+      Text: `${label}：`,
+      StartTime: 1,
+      EndTime: 2,
+      VocalCue: { Label: label, Form: "labelColon" },
+    }],
+  });
+  const amllLyrics = (name: string) => ({
+    Type: "Line",
+    source: "aml",
+    VocalAgents: { solo: { Type: "person", Names: [name] } },
+    Content: [{ Text: "line", StartTime: 1, EndTime: 2, VocalAgentId: "solo" }],
+  });
+  const baseCue = await ensureLyricRevision("spotify:track:vocal", providerLyrics("合"), "qq:vocal");
+  const cue = await ensureLyricRevision("spotify:track:vocal", providerLyrics("女合"), "qq:vocal");
+  const baseAgent = await ensureLyricRevision("spotify:track:agent", amllLyrics("A"), "aml:agent");
+  const agent = await ensureLyricRevision("spotify:track:agent", amllLyrics("B"), "aml:agent");
+
+  assert.notEqual(baseCue.id, cue.id);
+  assert.notEqual(baseAgent.id, agent.id);
+});

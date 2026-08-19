@@ -1,5 +1,6 @@
 import { isProviderInfoKind, type NativeLyrics, type ProviderId, type ProviderInfoKind, type TimedLine, type TimedWord } from "./types";
-import { markEmbeddedProviderInfo, type ProviderInfoContext } from "./provider-info";
+import type { ProviderInfoContext } from "./provider-info";
+import { markProviderLineSemantics } from "./provider-line-semantics";
 
 const labels: Record<ProviderId, string> = {
   qq: "QQ Music",
@@ -32,7 +33,7 @@ function finalizeProviderInfo(
   provider: ProviderId,
   providerInfo?: ProviderInfoContext,
 ): NativeLyrics | undefined {
-  const marked = providerInfo ? markEmbeddedProviderInfo(result, provider, providerInfo) : result;
+  const marked = providerInfo ? markProviderLineSemantics(result, provider, providerInfo) : result;
   const entries = marked.Type === "Static"
     ? ((marked.Lines as Array<{ ProviderInfoKind?: unknown }> | undefined) ?? [])
     : ((marked.Content as Array<Record<string, any>> | undefined) ?? []).map((line) =>

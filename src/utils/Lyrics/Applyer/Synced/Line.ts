@@ -14,7 +14,9 @@ import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
 import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
-import { indexedVisibleLyricsEntries, isProviderInfoEntry } from "../../ProviderInfo.ts";
+import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
+import { isNonLyricSemanticEntry } from "../../VocalSemantics.ts";
+import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for lyrics
 type LyricsLineData = TimedTextEntry & { Background?: TimedTextEntry[] };
@@ -27,6 +29,7 @@ interface LyricsData {
   source?: "spt" | "spl" | "aml";
   classes?: string;
   styles?: Record<string, string>;
+  VocalAgents?: Record<string, { Type?: string; Names: string[] }>;
 }
 
 const appendInterludeLine = (
@@ -88,9 +91,10 @@ export function ApplyLineLyrics(
     || visibleLines.some(({ entry }) =>
       isJapaneseEntry(entry) || entry.Background?.some((background) => isJapaneseEntry(background))
     );
+  const vocalPresentationState: VocalPresentationState = {};
 
   visibleLines.forEach(({ entry: line, sourceIndex }, index, arr) => {
-    const providerInfo = isProviderInfoEntry(line);
+    const nonLyricSemantic = isNonLyricSemanticEntry(line);
     const lineElem = document.createElement("div");
     lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = line.Text || "";
@@ -101,12 +105,13 @@ export function ApplyLineLyrics(
       line.ReadingPrimaryScript,
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
+    applyVocalPresentation(lineElem, data, line, vocalPresentationState);
     const renderOptions = {
-      useRomanized: providerInfo ? false : UseRomanized,
-      romanizationPending: providerInfo ? false : romanizationPending,
+      useRomanized: nonLyricSemantic ? false : UseRomanized,
+      romanizationPending: nonLyricSemantic ? false : romanizationPending,
       chineseDocument: (data as any).DetectedChinese === true,
-      translationPending: providerInfo ? false : translationPending,
-      showProviderTranslations: providerInfo ? false : ShowProviderTranslations,
+      translationPending: nonLyricSemantic ? false : translationPending,
+      showProviderTranslations: nonLyricSemantic ? false : ShowProviderTranslations,
       isJapaneseLyrics,
       oppositeAligned: line.OppositeAligned,
       hanLanguageContext,

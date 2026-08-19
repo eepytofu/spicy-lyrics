@@ -1,4 +1,4 @@
-export const EXTERNAL_WORKER_REQUEST_VERSION = 19;
+export const EXTERNAL_WORKER_REQUEST_VERSION = 20;
 
 export type ExternalSourceRequestInfo = {
   id: string;
