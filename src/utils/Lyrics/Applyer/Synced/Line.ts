@@ -13,9 +13,13 @@ import type { TimedTextEntry } from "../../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
-import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
+import {
+  $hideEmbeddedProviderInfo,
+  $showSongSections,
+  $showVocalistLabels,
+} from "../../../uiState.ts";
 import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
-import { isNonLyricSemanticEntry } from "../../VocalSemantics.ts";
+import { isNonLyricSemanticEntry, isVocalCueEntry } from "../../VocalSemantics.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for lyrics
@@ -60,10 +64,13 @@ export function ApplyLineLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
+  const showVocalistLabels = $showVocalistLabels.get();
+  const showSongSections = $showSongSections.get();
   const visibleLines = indexedVisibleLyricsEntries(
     data.Content,
     (line) => line,
     $hideEmbeddedProviderInfo.get(),
+    (line) => !showVocalistLabels && isVocalCueEntry(line),
   );
   const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
   const hasRtlLines = visibleLines.some(({ entry }) =>
@@ -105,7 +112,10 @@ export function ApplyLineLyrics(
       line.ReadingPrimaryScript,
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
-    applyVocalPresentation(lineElem, data, line, vocalPresentationState);
+    applyVocalPresentation(lineElem, data, line, vocalPresentationState, {
+      showSongSections,
+      showVocalistLabels,
+    });
     const renderOptions = {
       useRomanized: nonLyricSemantic ? false : UseRomanized,
       romanizationPending: nonLyricSemantic ? false : romanizationPending,

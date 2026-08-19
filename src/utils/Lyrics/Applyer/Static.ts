@@ -9,9 +9,13 @@ import { appendLineExtras, forceStackedLine, isJapaneseEntry, renderFullLineBase
 import type { ProcessedTextEntry } from "../Reading/JapaneseReading.ts";
 import { applyHanLanguageTag, createHanLanguageContext } from "../HanLanguage.ts";
 import { beginLyricsApply, finishLyricsApply } from "./ApplyLifecycle.ts";
-import { $hideEmbeddedProviderInfo } from "../../uiState.ts";
+import {
+  $hideEmbeddedProviderInfo,
+  $showSongSections,
+  $showVocalistLabels,
+} from "../../uiState.ts";
 import { indexedVisibleLyricsEntries } from "../ProviderInfo.ts";
-import { isNonLyricSemanticEntry } from "../VocalSemantics.ts";
+import { isNonLyricSemanticEntry, isVocalCueEntry } from "../VocalSemantics.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "./VocalPresentation.ts";
 
 /**
@@ -38,10 +42,13 @@ export function ApplyStaticLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
+  const showVocalistLabels = $showVocalistLabels.get();
+  const showSongSections = $showSongSections.get();
   const visibleLines = indexedVisibleLyricsEntries(
     data.Lines,
     (line) => line,
     $hideEmbeddedProviderInfo.get(),
+    (line) => !showVocalistLabels && isVocalCueEntry(line),
   );
   const hasRtlLines = visibleLines.some(({ entry }) => isRtl(entry.Text));
   const applyContext = beginLyricsApply(
@@ -73,7 +80,10 @@ export function ApplyStaticLyrics(
       line.ReadingPrimaryScript,
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
-    applyVocalPresentation(lineElem, data, line, vocalPresentationState);
+    applyVocalPresentation(lineElem, data, line, vocalPresentationState, {
+      showSongSections,
+      showVocalistLabels,
+    });
     const renderOptions = {
       useRomanized: nonLyricSemantic ? false : UseRomanized,
       romanizationPending: nonLyricSemantic ? false : romanizationPending,

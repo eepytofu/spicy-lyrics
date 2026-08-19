@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  applyVocalPresentation,
   resolveTtmlLinePresentation,
   resolveVocalAgentPresentation,
 } from "../src/utils/Lyrics/Applyer/VocalPresentation.ts";
@@ -66,4 +67,76 @@ test("TTML song parts display only when the parser-provided block changes", () =
   assert.deepEqual(resolveTtmlLinePresentation({ ProviderLineId: "L3" }, verse.key), {
     ProviderLineId: "L3",
   });
+});
+
+class FakeElement {
+  classNames: string[] = [];
+  children: FakeElement[] = [];
+  dataset: Record<string, string> = {};
+  textContent = "";
+  classList = { add: (...values: string[]) => this.classNames.push(...values) };
+
+  appendChild(child: FakeElement): FakeElement {
+    this.children.push(child);
+    return child;
+  }
+}
+
+test("presentation toggles hide labels while preserving TTML and agent datasets", () => {
+  const originalDocument = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { createElement: () => new FakeElement() },
+  });
+  try {
+    const line = new FakeElement();
+    const state = {};
+    applyVocalPresentation(
+      line as unknown as HTMLElement,
+      document,
+      {
+        ProviderLineId: "L1",
+        SongPart: "Chorus",
+        SongPartBlockIndex: 2,
+        VocalAgentId: "duet",
+      },
+      state,
+      { showSongSections: false, showVocalistLabels: false },
+    );
+
+    assert.deepEqual(line.dataset, {
+      ttmlLineId: "L1",
+      ttmlSongPart: "Chorus",
+      ttmlSongPartBlock: "2",
+      vocalAgentId: "duet",
+      vocalAgentType: "group",
+    });
+    assert.deepEqual(line.children, []);
+    assert.deepEqual(state, { previousNamedAgentId: "duet", previousSongPartKey: "2\u0000Chorus" });
+  } finally {
+    Object.defineProperty(globalThis, "document", { configurable: true, value: originalDocument });
+  }
+});
+
+test("presentation defaults show independent section and named-agent labels", () => {
+  const originalDocument = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { createElement: () => new FakeElement() },
+  });
+  try {
+    const line = new FakeElement();
+    applyVocalPresentation(
+      line as unknown as HTMLElement,
+      document,
+      { SongPart: "Verse", SongPartBlockIndex: 4, VocalAgentId: "solo" },
+      {},
+    );
+    assert.deepEqual(line.children.map((child) => [child.classNames, child.textContent]), [
+      [["TtmlSongPartLabel"], "Verse"],
+      [["VocalAgentLabel"], "奏"],
+    ]);
+  } finally {
+    Object.defineProperty(globalThis, "document", { configurable: true, value: originalDocument });
+  }
 });

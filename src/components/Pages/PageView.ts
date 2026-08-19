@@ -21,6 +21,8 @@ import {
   $pinyinPlacement,
   $showBuiltInTranslationButton,
   $showChineseTranslitButton,
+  $showSongSections,
+  $showVocalistLabels,
   $translationEnabled,
   $translationTargetLang,
   $providerTranslationsEnabled,
@@ -1114,6 +1116,12 @@ $providerTranslationsEnabled.listen(() => {
   queueDisplaySettingsRefresh();
 });
 $hideEmbeddedProviderInfo.listen(() => {
+  queueDisplaySettingsRefresh();
+});
+$showVocalistLabels.listen(() => {
+  queueDisplaySettingsRefresh();
+});
+$showSongSections.listen(() => {
   queueDisplaySettingsRefresh();
 });
 $translationTargetLang.listen(() => {

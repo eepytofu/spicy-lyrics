@@ -43,9 +43,10 @@ export function indexedVisibleLyricsEntries<T>(
   entries: readonly T[],
   infoEntry: (entry: T) => any,
   hideProviderInfo: boolean,
+  shouldHideEntry: (entry: T) => boolean = () => false,
 ): IndexedLyricsEntry<T>[] {
   return entries.flatMap((entry, sourceIndex) =>
-    shouldHideProviderInfoEntry(infoEntry(entry), hideProviderInfo)
+    shouldHideProviderInfoEntry(infoEntry(entry), hideProviderInfo) || shouldHideEntry(entry)
       ? []
       : [{ entry, sourceIndex }]);
 }

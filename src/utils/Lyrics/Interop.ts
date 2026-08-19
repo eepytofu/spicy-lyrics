@@ -185,11 +185,15 @@ function syllableReading(group: any, syllables: any[]): string | undefined {
   return clean(formatMixedScriptReadingForDisplay(sourceText, reading)) || undefined;
 }
 
-function joinSyllableDisplayText(syllables: any[], providerLanguage?: string): string {
+function joinSyllableDisplayText(
+  syllables: any[],
+  providerLanguage?: string,
+  source?: string,
+): string {
   const joined = syllables.reduce((result, syllable, index) => {
     const text = syllable?.JapaneseReading?.displayText ?? syllable?.Text ?? "";
     if (index === 0) return text;
-    return `${result}${needsTtmlDisplaySpaceBefore(syllables, index, providerLanguage) ? " " : ""}${text}`;
+    return `${result}${needsTtmlDisplaySpaceBefore(syllables, index, providerLanguage, source) ? " " : ""}${text}`;
   }, "");
   return readableDisplay(joined);
 }
@@ -286,7 +290,7 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
         displayText: lead?.JapaneseReading?.displayText
             && !isJapaneseProviderLanguage(lyrics.ProviderLanguage)
           ? readableDisplay(lead.JapaneseReading.displayText)
-          : joinSyllableDisplayText(syllables, lyrics.ProviderLanguage),
+          : joinSyllableDisplayText(syllables, lyrics.ProviderLanguage, lyrics.source),
         readingText: syllableReading(lead, syllables),
         ...sourceLineSemantics(evidence),
         ...(evidence?.providerInfoKind || providerInfoKind(lead)

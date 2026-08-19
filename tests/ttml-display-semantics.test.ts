@@ -11,18 +11,22 @@ const syllables = (left: string, right: string) => [
   { Text: right, IsPartOfWord: true },
 ];
 
-test("Japanese TTML CJK timing boundaries stay in source semantics but not visual spacing", () => {
+test("AMLL DB Japanese CJK timing boundaries stay in source semantics but not visual spacing", () => {
   const units = syllables("夢", "見て");
   assert.equal(needsSyllableSpaceBefore(units, 1), true);
-  assert.equal(suppressJapaneseCjkProviderGapAfter(units, 0, "ja"), true);
-  assert.equal(needsTtmlDisplaySpaceBefore(units, 1, "ja"), false);
+  assert.equal(suppressJapaneseCjkProviderGapAfter(units, 0, "ja", "amlldb"), true);
+  assert.equal(needsTtmlDisplaySpaceBefore(units, 1, "ja", "amlldb"), false);
 });
 
-test("the display projection abstains for unknown, Chinese, Latin, punctuation, and joined boundaries", () => {
-  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "見て"), 0, undefined), false);
-  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "見て"), 0, "zh-Hans"), false);
-  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("hello", "world"), 0, "ja"), false);
-  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "!"), 0, "ja"), false);
+test("the display projection abstains outside AMLL DB and for unsupported boundaries", () => {
+  for (const source of [undefined, "local", "custom-server", "qq"]) {
+    assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "見て"), 0, "ja", source), false);
+    assert.equal(needsTtmlDisplaySpaceBefore(syllables("夢", "見て"), 1, "ja", source), true);
+  }
+  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "見て"), 0, undefined, "amlldb"), false);
+  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "見て"), 0, "zh-Hans", "amlldb"), false);
+  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("hello", "world"), 0, "ja", "amlldb"), false);
+  assert.equal(suppressJapaneseCjkProviderGapAfter(syllables("夢", "!"), 0, "ja", "amlldb"), false);
   assert.equal(
     suppressJapaneseCjkProviderGapAfter(
       [
@@ -30,9 +34,10 @@ test("the display projection abstains for unknown, Chinese, Latin, punctuation, 
         { Text: "見て", IsPartOfWord: true },
       ],
       0,
-      "ja"
+      "ja",
+      "amlldb",
     ),
     false
   );
-  assert.equal(needsTtmlDisplaySpaceBefore(syllables("hello", "world"), 1, "ja"), true);
+  assert.equal(needsTtmlDisplaySpaceBefore(syllables("hello", "world"), 1, "ja", "amlldb"), true);
 });

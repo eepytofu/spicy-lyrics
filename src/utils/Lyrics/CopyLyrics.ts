@@ -1,9 +1,14 @@
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import { $currentLyricsData } from "../stores.ts";
-import { $hideEmbeddedProviderInfo, $lyricsCopyFormat } from "../uiState.ts";
+import {
+  $hideEmbeddedProviderInfo,
+  $lyricsCopyFormat,
+  $showVocalistLabels,
+} from "../uiState.ts";
 import { shouldHideProviderInfoEntry } from "./ProviderInfo.ts";
 import { isMeaningfullyDifferent } from "./TextCompare.ts";
 import { preferredCopyTranslation } from "./TranslationSidecar.ts";
+import { isVocalCueEntry } from "./VocalSemantics.ts";
 
 export type LyricsCopyFormat = "plain" | "timestamps" | "translation" | "metadata";
 
@@ -51,12 +56,18 @@ const formatTime = (seconds: unknown): string => {
   return `${minutes.toString().padStart(2, "0")}:${secs.toFixed(2).padStart(5, "0")}`;
 };
 
-function linesFromLyrics(lyrics: any, hideProviderInfo: boolean): CopyLine[] {
+function linesFromLyrics(
+  lyrics: any,
+  hideProviderInfo: boolean,
+  showVocalistLabels: boolean,
+): CopyLine[] {
   if (!lyrics || typeof lyrics !== "object") return [];
 
   if (lyrics.Type === "Static") {
     return (lyrics.Lines ?? [])
-      .filter((line: any) => !shouldHideProviderInfoEntry(line, hideProviderInfo))
+      .filter((line: any) =>
+        !shouldHideProviderInfoEntry(line, hideProviderInfo)
+        && (showVocalistLabels || !isVocalCueEntry(line)))
       .map((line: any) => ({
         text: cleanText(line?.Text),
         translatedText: cleanText(preferredCopyTranslation(line)),
@@ -67,7 +78,10 @@ function linesFromLyrics(lyrics: any, hideProviderInfo: boolean): CopyLine[] {
   if (lyrics.Type === "Line") {
     const out: CopyLine[] = [];
     for (const line of lyrics.Content ?? []) {
-      if (shouldHideProviderInfoEntry(line, hideProviderInfo)) continue;
+      if (
+        shouldHideProviderInfoEntry(line, hideProviderInfo)
+        || (!showVocalistLabels && isVocalCueEntry(line))
+      ) continue;
       const text = cleanText(line?.Text);
       if (text) {
         out.push({
@@ -93,7 +107,10 @@ function linesFromLyrics(lyrics: any, hideProviderInfo: boolean): CopyLine[] {
   if (lyrics.Type === "Syllable") {
     const out: CopyLine[] = [];
     for (const group of lyrics.Content ?? []) {
-      if (shouldHideProviderInfoEntry(group?.Lead, hideProviderInfo)) continue;
+      if (
+        shouldHideProviderInfoEntry(group?.Lead, hideProviderInfo)
+        || (!showVocalistLabels && isVocalCueEntry(group?.Lead))
+      ) continue;
       const leadText = joinSyllables(group?.Lead?.Syllables);
       if (leadText) {
         out.push({
@@ -134,8 +151,9 @@ export function formatLyricsForCopy(
   lyrics: any,
   format: LyricsCopyFormat,
   hideProviderInfo = $hideEmbeddedProviderInfo.get(),
+  showVocalistLabels = $showVocalistLabels.get(),
 ): string {
-  const lines = linesFromLyrics(lyrics, hideProviderInfo);
+  const lines = linesFromLyrics(lyrics, hideProviderInfo, showVocalistLabels);
   const body = lines
     .map((line) => {
       const prefix = format === "timestamps" && typeof line.startTime === "number"

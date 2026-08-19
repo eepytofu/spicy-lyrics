@@ -18,9 +18,15 @@ export function isJapaneseProviderLanguage(language: unknown): boolean {
 export function suppressJapaneseCjkProviderGapAfter(
   syllables: readonly BoundarySyllable[],
   index: number,
-  providerLanguage: unknown
+  providerLanguage: unknown,
+  source: unknown,
 ): boolean {
-  if (!isJapaneseProviderLanguage(providerLanguage) || index < 0 || index >= syllables.length - 1) {
+  if (
+    source !== "amlldb"
+    || !isJapaneseProviderLanguage(providerLanguage)
+    || index < 0
+    || index >= syllables.length - 1
+  ) {
     return false;
   }
   const current = syllables[index];
@@ -34,10 +40,11 @@ export function suppressJapaneseCjkProviderGapAfter(
 export function needsTtmlDisplaySpaceBefore(
   syllables: readonly BoundarySyllable[],
   index: number,
-  providerLanguage: unknown
+  providerLanguage: unknown,
+  source: unknown,
 ): boolean {
   return (
     needsSyllableSpaceBefore(syllables, index) &&
-    !suppressJapaneseCjkProviderGapAfter(syllables, index - 1, providerLanguage)
+    !suppressJapaneseCjkProviderGapAfter(syllables, index - 1, providerLanguage, source)
   );
 }

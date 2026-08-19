@@ -46,9 +46,13 @@ import {
 import { applyHanLanguageTag, createHanLanguageContext } from "../../HanLanguage.ts";
 import { createInterludeLine } from "./Interlude.ts";
 import { beginLyricsApply, finishLyricsApply } from "../ApplyLifecycle.ts";
-import { $hideEmbeddedProviderInfo } from "../../../uiState.ts";
+import {
+  $hideEmbeddedProviderInfo,
+  $showSongSections,
+  $showVocalistLabels,
+} from "../../../uiState.ts";
 import { indexedVisibleLyricsEntries } from "../../ProviderInfo.ts";
-import { isNonLyricSemanticEntry } from "../../VocalSemantics.ts";
+import { isNonLyricSemanticEntry, isVocalCueEntry } from "../../VocalSemantics.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for syllable lyrics
@@ -71,7 +75,7 @@ interface LyricsData {
   Content: LineData[];
   StartTime: number;
   SongWriters?: string[];
-  source?: "spt" | "spl" | "aml";
+  source?: string;
   classes?: string;
   styles?: Record<string, string>;
   VocalAgents?: Record<string, { Type?: string; Names: string[] }>;
@@ -114,6 +118,7 @@ const applyWordPositionClasses = (
   index: number,
   all: SyllableData[],
   providerLanguage?: string,
+  source?: string,
 ): void => {
   if (index === all.length - 1) {
     element.classList.add("LastWordInLine");
@@ -123,7 +128,7 @@ const applyWordPositionClasses = (
   if (needsMixedScriptReadabilityGapBefore(all, index)) {
     element.classList.add("MixedScriptReadabilityGapBefore");
   }
-  if (suppressJapaneseCjkProviderGapAfter(all, index, providerLanguage)) {
+  if (suppressJapaneseCjkProviderGapAfter(all, index, providerLanguage, source)) {
     element.classList.add("TtmlJapaneseCjkBoundary");
   }
 };
@@ -153,6 +158,7 @@ interface SyllableWordPresentation {
   isBackground?: boolean;
   timedFuriganaBaseSweepRange?: { start: number; end: number };
   providerLanguage?: string;
+  source?: string;
 }
 
 const renderedEmphasisUnits = (word: HTMLElement) =>
@@ -203,7 +209,14 @@ const createSyllableWord = (
     } else {
       Emphasize(syllable.Text.split(""), word, syllable, isBackground);
     }
-    applyWordPositionClasses(word, syllable, index, all, presentation.providerLanguage);
+    applyWordPositionClasses(
+      word,
+      syllable,
+      index,
+      all,
+      presentation.providerLanguage,
+      presentation.source,
+    );
 
     if (!$simpleLyricsMode.get()) {
       word.style.setProperty("--text-shadow-opacity", `0%`);
@@ -231,7 +244,14 @@ const createSyllableWord = (
 
   if (isBackground) word.classList.add("bg-word");
   word.classList.add("word");
-  applyWordPositionClasses(word, syllable, index, all, presentation.providerLanguage);
+  applyWordPositionClasses(
+    word,
+    syllable,
+    index,
+    all,
+    presentation.providerLanguage,
+    presentation.source,
+  );
   registerSyllableWord(word, syllable, totalDuration, isBackground);
   return word;
 };
@@ -393,10 +413,13 @@ export function ApplySyllableLyrics(
 ): void {
   if (!$lyricsContainerExists.get()) return;
 
+  const showVocalistLabels = $showVocalistLabels.get();
+  const showSongSections = $showSongSections.get();
   const visibleLines = indexedVisibleLyricsEntries(
     data.Content,
     (line) => line.Lead,
     $hideEmbeddedProviderInfo.get(),
+    (line) => !showVocalistLabels && isVocalCueEntry(line.Lead),
   );
   const hasOppositeAligned = visibleLines.some(({ entry }) => entry.OppositeAligned === true);
   const hasRtlLines = visibleLines.some(
@@ -451,6 +474,7 @@ export function ApplySyllableLyrics(
       data,
       nonLyricSemantic ? line.Lead : line,
       vocalPresentationState,
+      { showSongSections, showVocalistLabels },
     );
     const lineRenderOptions = {
       useRomanized: nonLyricSemantic ? false : UseRomanized,
@@ -560,6 +584,7 @@ export function ApplySyllableLyrics(
           : wordRenderOptions,
         {
           providerLanguage: data.ProviderLanguage,
+          source: data.source,
           timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(iL)),
         }
       );
@@ -709,6 +734,7 @@ export function ApplySyllableLyrics(
             {
               isBackground: true,
               providerLanguage: data.ProviderLanguage,
+              source: data.source,
               timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(bI)),
             }
           );

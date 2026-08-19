@@ -13,6 +13,11 @@ export type VocalPresentationState = {
   previousSongPartKey?: string;
 };
 
+export type VocalPresentationOptions = {
+  showSongSections?: boolean;
+  showVocalistLabels?: boolean;
+};
+
 export type VocalAgentPresentation = {
   agentId?: string;
   label?: string;
@@ -57,6 +62,7 @@ function applyTtmlLinePresentation(
   lineElement: HTMLElement,
   entry: unknown,
   state: VocalPresentationState,
+  showSongSections: boolean,
 ): void {
   const presentation = resolveTtmlLinePresentation(entry, state.previousSongPartKey);
   if (presentation.ProviderLineId) {
@@ -71,7 +77,7 @@ function applyTtmlLinePresentation(
   if (presentation.SongPartBlockIndex !== undefined) {
     lineElement.dataset.ttmlSongPartBlock = String(presentation.SongPartBlockIndex);
   }
-  if (presentation.label) {
+  if (showSongSections && presentation.label) {
     const label = document.createElement("span");
     label.classList.add("TtmlSongPartLabel");
     label.textContent = presentation.label;
@@ -102,8 +108,11 @@ export function applyVocalPresentation(
   data: VocalDocument,
   entry: unknown,
   state: VocalPresentationState,
+  options: VocalPresentationOptions = {},
 ): void {
-  applyTtmlLinePresentation(lineElement, entry, state);
+  const showSongSections = options.showSongSections !== false;
+  const showVocalistLabels = options.showVocalistLabels !== false;
+  applyTtmlLinePresentation(lineElement, entry, state, showSongSections);
   const cue = vocalCue(entry);
   if (cue) {
     lineElement.classList.add("VocalCue");
@@ -119,7 +128,9 @@ export function applyVocalPresentation(
     state.previousNamedAgentId,
   );
   state.previousNamedAgentId = presentation.agentId;
-  if (!presentation.label) return;
+  if (presentation.agentId) lineElement.dataset.vocalAgentId = presentation.agentId;
+  if (presentation.type) lineElement.dataset.vocalAgentType = presentation.type;
+  if (!showVocalistLabels || !presentation.label) return;
 
   const label = document.createElement("span");
   label.classList.add("VocalAgentLabel");

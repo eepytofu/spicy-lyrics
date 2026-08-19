@@ -10,6 +10,8 @@ import {
   $lyricsCopyFormat,
   $showBuiltInTranslationButton,
   $showChineseTranslitButton,
+  $showSongSections,
+  $showVocalistLabels,
 } from "../../../utils/uiState.ts";
 import { matches, Row, Select, SectionTitle, SubsectionTitle, Toggle } from "./components.tsx";
 
@@ -33,6 +35,8 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
   const lineHoverBackground = useStore($lineHoverBackground);
   const copyFormat = useStore($lyricsCopyFormat);
   const hideEmbeddedProviderInfo = useStore($hideEmbeddedProviderInfo);
+  const showVocalistLabels = useStore($showVocalistLabels);
+  const showSongSections = useStore($showSongSections);
   const showTranslationButton = useStore($showBuiltInTranslationButton);
   const showChineseButton = useStore($showChineseTranslitButton);
 
@@ -59,6 +63,16 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
       query,
       "Hide Embedded Provider Info",
       "Hide provider-supplied credit and rights lines from lyrics and copied text. Promotional notices are always omitted."
+    ),
+    vocalistLabels: matches(
+      query,
+      "Show Vocalist Labels",
+      "Show named vocalists and standalone speaker cues."
+    ),
+    songSections: matches(
+      query,
+      "Show Song Sections",
+      "Show typed song sections such as Verse and Chorus."
     ),
   };
   const controlRows = {
@@ -132,6 +146,28 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
           <Toggle
             checked={hideEmbeddedProviderInfo}
             onChange={(value) => $hideEmbeddedProviderInfo.set(value)}
+          />
+        </Row>
+      )}
+      {displayRows.vocalistLabels && (
+        <Row
+          label="Show Vocalist Labels"
+          description="Show named vocalists and standalone speaker cues."
+        >
+          <Toggle
+            checked={showVocalistLabels}
+            onChange={(value) => $showVocalistLabels.set(value)}
+          />
+        </Row>
+      )}
+      {displayRows.songSections && (
+        <Row
+          label="Show Song Sections"
+          description="Show typed song sections such as Verse and Chorus."
+        >
+          <Toggle
+            checked={showSongSections}
+            onChange={(value) => $showSongSections.set(value)}
           />
         </Row>
       )}

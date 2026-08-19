@@ -204,3 +204,28 @@ test("interop v6 publishes provider cues and AMLL agents without resolving anony
   assert.equal(amllSnapshot?.lines[1].vocalAgentId, "v1");
   assert.equal(amllSnapshot?.lines.some((line) => line.vocalCue), false);
 });
+
+test("interop suppresses synthetic Japanese CJK gaps only for AMLL DB", () => {
+  const lyrics = (source: string) => ({
+    Type: "Syllable" as const,
+    source,
+    uri: `spotify:track:${source}`,
+    id: source,
+    ProviderLanguage: "ja",
+    Content: [{
+      Type: "Vocal" as const,
+      Lead: {
+        StartTime: 0,
+        EndTime: 2,
+        Syllables: [
+          { Text: "夢", StartTime: 0, EndTime: 1, IsPartOfWord: false },
+          { Text: "見て", StartTime: 1, EndTime: 2, IsPartOfWord: false },
+        ],
+      },
+    }],
+  });
+
+  assert.equal(buildLyricsInteropSnapshot(lyrics("amlldb"))?.lines[0].displayText, "夢見て");
+  assert.equal(buildLyricsInteropSnapshot(lyrics("local"))?.lines[0].displayText, "夢 見て");
+  assert.equal(buildLyricsInteropSnapshot(lyrics("custom-server"))?.lines[0].displayText, "夢 見て");
+});

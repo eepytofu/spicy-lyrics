@@ -43,6 +43,15 @@ test("provider-info markers are additive and filtering preserves source identity
     indexedVisibleLyricsEntries(lines, (line) => line, false).map(({ sourceIndex }) => sourceIndex),
     [0, 1, 2, 3, 4],
   );
+  assert.deepEqual(
+    indexedVisibleLyricsEntries(
+      [...lines, { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } }],
+      (line) => line,
+      false,
+      (line) => "VocalCue" in line,
+    ).map(({ sourceIndex }) => sourceIndex),
+    [0, 1, 2, 3, 4],
+  );
 });
 
 test("marked rows and the frozen legacy fallback do not contribute Smart Match evidence", () => {
@@ -127,6 +136,8 @@ test("all native renderers filter complete marked rows and keep source indices",
     const source = readSource(relativePath);
     assert.match(source, /indexedVisibleLyricsEntries/u, relativePath);
     assert.match(source, /\$hideEmbeddedProviderInfo\.get\(\)/u, relativePath);
+    assert.match(source, /\$showVocalistLabels\.get\(\)/u, relativePath);
+    assert.match(source, /isVocalCueEntry/u, relativePath);
     assert.match(source, /spicyLyricsLineId = `lead:\$\{sourceIndex\}`/u, relativePath);
     assert.match(source, /visibleLines\.map\(\(\{ entry \}\) => entry\)/u, relativePath);
   }
@@ -138,4 +149,6 @@ test("copy filtering covers Static, Line, and Syllable shapes before formatting"
   assert.match(source, /lyrics\.Type === "Line"[\s\S]*?shouldHideProviderInfoEntry\(line, hideProviderInfo\)/u);
   assert.match(source, /lyrics\.Type === "Syllable"[\s\S]*?shouldHideProviderInfoEntry\(group\?\.Lead, hideProviderInfo\)/u);
   assert.match(source, /hideProviderInfo = \$hideEmbeddedProviderInfo\.get\(\)/u);
+  assert.match(source, /showVocalistLabels = \$showVocalistLabels\.get\(\)/u);
+  assert.match(source, /isVocalCueEntry/u);
 });

@@ -21,6 +21,8 @@ const {
   UI_STATE_KEY,
   $providerTranslationsEnabled,
   $hideEmbeddedProviderInfo,
+  $showSongSections,
+  $showVocalistLabels,
   $chineseTones,
   $joinMandarinWords,
   $pinyinPlacement,
@@ -34,6 +36,8 @@ const {
 test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($providerTranslationsEnabled.get(), true);
   assert.equal($hideEmbeddedProviderInfo.get(), false);
+  assert.equal($showVocalistLabels.get(), true);
+  assert.equal($showSongSections.get(), true);
   assert.equal($chineseTones.get(), true);
   assert.equal($joinMandarinWords.get(), false);
   assert.equal($pinyinPlacement.get(), "below");
@@ -52,4 +56,13 @@ test("built-in translation button visibility and tone preference persist indepen
   assert.equal(persisted.chineseTones, false);
   assert.equal(persisted.showBuiltInTranslationButton, false);
   assert.equal(persisted.translationEnabled, undefined);
+});
+
+test("vocalist and song-section visibility persist independently", () => {
+  $showVocalistLabels.set(false);
+
+  const persisted = JSON.parse(storage.get(UI_STATE_KEY) ?? "{}");
+  assert.equal(persisted.showVocalistLabels, false);
+  assert.equal(persisted.showSongSections, undefined);
+  assert.equal($showSongSections.get(), true);
 });
