@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { markProviderLineSemantics } from "../src/provider-line-semantics";
+import type { ProviderLineSemanticContext } from "../src/provider-line-semantics";
 import type { NativeLyrics } from "../src/types";
-import type { ProviderInfoContext } from "../src/provider-info";
 
-const CONTEXT: ProviderInfoContext = {
+const CONTEXT: ProviderLineSemanticContext = {
   reference: {
     id: "speaker-corpus",
     title: "遥问海棠赴微雨",
@@ -115,7 +115,7 @@ describe("embedded vocal cue semantics", () => {
   });
 
   it("keeps provider-info precedence over empty-colon cue syntax", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       ...CONTEXT,
       reference: { ...CONTEXT.reference, title: "草木青时" },
       selected: { ...CONTEXT.selected!, title: "草木青时" },

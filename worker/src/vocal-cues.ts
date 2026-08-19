@@ -5,7 +5,7 @@ import type {
   VocalCue,
   VocalCueForm,
 } from "./types";
-import type { ProviderInfoContext } from "./provider-info";
+import type { ProviderLineSemanticContext } from "./provider-line-semantics";
 
 type CueEntry = {
   target: Record<string, unknown>;
@@ -56,7 +56,7 @@ function boundedArtistForms(value: string): string[] {
   return [...forms].filter(Boolean);
 }
 
-function contextArtistForms(context: ProviderInfoContext): string[] {
+function contextArtistForms(context: ProviderLineSemanticContext): string[] {
   return [...new Set([
     ...context.reference.artists,
     ...(context.selected?.artists ?? []),
@@ -195,7 +195,7 @@ function seededCompositeIdentity(
 export function markEmbeddedVocalCues(
   lyrics: NativeLyrics,
   provider: ProviderId,
-  context: ProviderInfoContext,
+  context: ProviderLineSemanticContext,
 ): NativeLyrics {
   if (!lyricsMayContainCue(lyrics)) return lyrics;
   const entries = entriesForLyrics(lyrics);

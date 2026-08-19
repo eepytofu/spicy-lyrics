@@ -102,6 +102,7 @@ describe("Worker HTTP boundary", () => {
         Lines: [
           { Text: "作词：Writer", ProviderInfoKind: "credit" },
           { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+          { Text: "ordinary lyric" },
         ],
         source: "qq",
         fetchProvider: "qq",
@@ -124,6 +125,7 @@ describe("Worker HTTP boundary", () => {
       Lines: [
         { Text: "作词：Writer", ProviderInfoKind: "credit" },
         { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+        { Text: "ordinary lyric" },
       ],
     });
   });
@@ -246,6 +248,23 @@ describe("Worker HTTP boundary", () => {
       })),
     )(request());
     expect(invalidCue.status).toBe(502);
+
+    const semanticOnly = await createWorkerHandler(
+      adapters("qq", async () => ({
+        format: "json",
+        lyrics: {
+          Type: "Static",
+          Lines: [
+            { Text: "作词：Writer", ProviderInfoKind: "credit" },
+            { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+          ],
+          source: "qq",
+          fetchProvider: "qq",
+          sourceDisplayName: "QQ Music",
+        } as any,
+      })),
+    )(request());
+    expect(semanticOnly.status).toBe(502);
 
     const overlappingSemantics = await createWorkerHandler(
       adapters("qq", async () => ({

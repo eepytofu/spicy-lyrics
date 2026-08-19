@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   markEmbeddedProviderInfo,
-  providerInfoContext,
-  type ProviderInfoContext,
+  providerLineSemanticContext,
 } from "../src/provider-info";
+import type { ProviderLineSemanticContext } from "../src/provider-line-semantics";
 import type { NativeLyrics, ProviderInfoKind } from "../src/types";
 
-const LUO_TIAN_YI: ProviderInfoContext = {
+const LUO_TIAN_YI: ProviderLineSemanticContext = {
   reference: {
     id: "7aSXHJ8djFxfqKLuOs039d",
     title: "乐鸣东方",
@@ -154,7 +154,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("uses selected provider metadata and aliases for an exact track header", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "spotify",
         title: "暴风雨 - Live",
@@ -238,7 +238,7 @@ describe("embedded provider-info classification", () => {
     credits,
     firstLyric,
   ) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: title,
         title,
@@ -268,7 +268,7 @@ describe("embedded provider-info classification", () => {
     ["reversed mismatched artist", "等什么君 - 关山酒"],
     ["non-exact conflicting version", "关山酒 (Remix) - 等什么君"],
   ])("classifies a structurally proven leading header despite %s", (_name, header) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "关山酒",
         title: "关山酒",
@@ -365,7 +365,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("uses safe raw title and artist tags only as post-selection header aliases", () => {
-    const context = providerInfoContext(LUO_TIAN_YI.reference, {
+    const context = providerLineSemanticContext(LUO_TIAN_YI.reference, {
       title: "Fate (命运)",
       artists: ["GFRIEND"],
     }, "[ti:Fate]\n[ar:여자친구 GFRIEND]\n[by:1]");
@@ -381,7 +381,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("accepts extra delimited provider artists only after the complete selected artist set", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "4Be8UHXmXCaKBWTi4OwpU6",
         title: "归家",
@@ -421,7 +421,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("treats an exact leading title as the header when its credited artist set is partial", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "4Be8UHXmXCaKBWTi4OwpU6",
         title: "归家",
@@ -445,7 +445,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("recovers 食语人间 through one bounded provider-title annotation", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "spotify-food-world",
         title: "食语人间",
@@ -475,7 +475,7 @@ describe("embedded provider-info classification", () => {
     "Bounded Track【edition】",
     "Bounded Track《edition》",
   ])("accepts one supported trailing balanced title annotation: %s", (header) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "bounded-track",
         title: "Bounded Track",
@@ -499,7 +499,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("recovers 不谓侠 when a selected artist has one trailing alias annotation", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "netease:473403027",
         title: "不谓侠",
@@ -524,7 +524,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("recovers symmetric base-title and split-header 马步摇 shapes only beside strict blocks", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "netease:2644122969",
         title: "马步摇（《一梦江湖》马步谣变奏欢乐版）",
@@ -578,7 +578,7 @@ describe("embedded provider-info classification", () => {
   });
 
   it("classifies a first-row header above one proven direct credit", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "bounded-single-credit",
         title: "食语人间",
@@ -603,7 +603,7 @@ describe("embedded provider-info classification", () => {
   it.each(["Studio Song (Live)", "Studio Song (2022Ver.)"])(
     "classifies a structurally proven version-shaped header without catalog-title agreement: %s",
     (header) => {
-      const context: ProviderInfoContext = {
+      const context: ProviderLineSemanticContext = {
         reference: {
           id: "studio-song",
           title: "Studio Song",
@@ -628,7 +628,7 @@ describe("embedded provider-info classification", () => {
   );
 
   it("marks an exact header and independently anchored block after authoritative leading credits", () => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "netease:3348520852",
         title: "卦象怎判",
@@ -674,7 +674,7 @@ describe("embedded provider-info classification", () => {
     ["missing selected artist", "卦象怎判-洛天依", ["编曲：李兀", "混音：神曦"]],
     ["one following direct credit", "卦象怎判-洛天依/乐正绫", ["编曲：李兀"]],
   ] as const)("keeps an unmatched header visible while classifying %s", (_name, header, following) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "netease:3348520852",
         title: "卦象怎判",
@@ -742,7 +742,7 @@ describe("embedded provider-info classification", () => {
     ["Soda DJ KRC capture", "soda", "DJ Track", "Artist", ["Lyrics: A", "Composer: B", "DJ: C"]],
     ["Soda D/N/A LRC capture", "soda", "D/N/A", "AZARI", ["Lyrics: AZARI", "Composer: AZARI"]],
   ] as const)("classifies the complete bounded block for %s", (_name, source, title, artist, credits) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: { id: title, title, artists: [artist], album: "", durationMs: 200_000 },
       selected: { title, artists: [artist] },
     };
@@ -816,7 +816,7 @@ describe("embedded provider-info classification", () => {
   it.each(["qq", "kugou"] as const)(
     "classifies an exact artist-valued 歌 row as a bounded performance credit for %s",
     (provider) => {
-      const context: ProviderInfoContext = {
+      const context: ProviderLineSemanticContext = {
         reference: {
           id: "spotify-whale",
           title: "クーネル・エンゲイザー",
@@ -846,7 +846,7 @@ describe("embedded provider-info classification", () => {
     "歌：電ǂ鯨と琴葉茜",
     "この歌：電ǂ鯨",
   ])("keeps an unproven 歌-shaped row visible: %s", (text) => {
-    const context: ProviderInfoContext = {
+    const context: ProviderLineSemanticContext = {
       reference: {
         id: "spotify-whale",
         title: "クーネル・エンゲイザー",
@@ -945,7 +945,7 @@ describe("structural first-row track headers", () => {
     "【成都】三无MarBlue",
     "【广州】KBShinya",
   ];
-  const reference: ProviderInfoContext["reference"] = {
+  const reference: ProviderLineSemanticContext["reference"] = {
     id: "7eb16VbQPt3Ii4UAhq8yBY",
     title: "江山行歌",
     artists: ["三无Marblue", "排骨教主", "銀臨", "不才", "KBShinya", "赵景旭（Winky诗）"],
@@ -958,7 +958,7 @@ describe("structural first-row track headers", () => {
   };
 
   it("classifies the reverse KuGou header without selected native artist-group plumbing", () => {
-    const context = providerInfoContext(reference, selected);
+    const context = providerLineSemanticContext(reference, selected);
     const result = markEmbeddedProviderInfo(
       syllableLyrics([header, ...credits, ...cityRows, "柳絮躲四合院里歇脚"], "kugou"),
       "kugou",
@@ -1014,7 +1014,7 @@ describe("structural first-row track headers", () => {
     referenceTitle,
     selectedTitle,
   ) => {
-    const context = providerInfoContext({
+    const context = providerLineSemanticContext({
       id: referenceTitle,
       title: referenceTitle,
       artists: ["reference artist"],

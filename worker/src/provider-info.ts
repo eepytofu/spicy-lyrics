@@ -1,21 +1,12 @@
-import type { NativeLyrics, ProviderId, ProviderInfoKind, TrackMetadata } from "./types";
+import type { NativeLyrics, ProviderId, ProviderInfoKind } from "./types";
 import { versionTags } from "./matching/normalize";
+import type { ProviderLineSemanticContext } from "./provider-line-semantics";
 
-export type ProviderInfoContext = {
-  reference: TrackMetadata;
-  selected?: {
-    title: string;
-    titleAliases?: string[];
-    artists: string[];
-    artistAliases?: string[];
-  };
-};
-
-export function providerInfoContext(
-  reference: TrackMetadata,
-  selected: NonNullable<ProviderInfoContext["selected"]>,
+export function providerLineSemanticContext(
+  reference: ProviderLineSemanticContext["reference"],
+  selected: NonNullable<ProviderLineSemanticContext["selected"]>,
   rawMetadata?: string,
-): ProviderInfoContext {
+): ProviderLineSemanticContext {
   const aliases = rawMetadataAliases(rawMetadata);
   const titleAliases = uniqueAliases(selected.titleAliases, aliases.titles)
     ?.filter((alias) => compact(alias) !== compact(selected.title));
@@ -118,7 +109,7 @@ function parseMetadataRow(text: string): ParsedMetadataRow | undefined {
   };
 }
 
-function contextArtistValues(context: ProviderInfoContext): string[] {
+function contextArtistValues(context: ProviderLineSemanticContext): string[] {
   return [
     ...context.reference.artists,
     ...(context.selected?.artists ?? []),
@@ -126,7 +117,7 @@ function contextArtistValues(context: ProviderInfoContext): string[] {
   ];
 }
 
-function isBoundedPerformanceCredit(text: string, context: ProviderInfoContext): boolean {
+function isBoundedPerformanceCredit(text: string, context: ProviderLineSemanticContext): boolean {
   const parsed = parseMetadataRow(text);
   if (!parsed || compact(parsed.label) !== compact("歌")) return false;
   const value = compact(parsed.value);
@@ -135,7 +126,7 @@ function isBoundedPerformanceCredit(text: string, context: ProviderInfoContext):
 
 function markBoundedPerformanceCredits(
   entries: ProviderInfoEntry[],
-  context: ProviderInfoContext,
+  context: ProviderLineSemanticContext,
 ): void {
   for (const entry of entries) {
     if (!entry.kind && isBoundedPerformanceCredit(entry.text, context)) {
@@ -181,7 +172,7 @@ function entriesForLyrics(lyrics: NativeLyrics): ProviderInfoEntry[] {
   });
 }
 
-function headerTitles(context: ProviderInfoContext): string[] {
+function headerTitles(context: ProviderLineSemanticContext): string[] {
   return [
     context.selected?.title,
     ...(context.selected?.titleAliases ?? []),
@@ -189,7 +180,7 @@ function headerTitles(context: ProviderInfoContext): string[] {
   ].filter((value): value is string => Boolean(value?.trim()));
 }
 
-function headerArtistGroups(context: ProviderInfoContext): string[][] {
+function headerArtistGroups(context: ProviderLineSemanticContext): string[][] {
   return [
     context.selected?.artists,
     context.reference.artists,
@@ -289,7 +280,7 @@ function matchesBoundedArtists(value: string, expected: string[]): boolean {
 
 function matchesBoundedTrackHeader(
   text: string,
-  context: ProviderInfoContext,
+  context: ProviderLineSemanticContext,
 ): BoundedTitleMatch | undefined {
   const titles = headerTitles(context);
   const selectedArtists = context.selected?.artists.filter((artist) => compact(artist)) ?? [];
@@ -310,7 +301,7 @@ function matchesBoundedTrackHeader(
   return undefined;
 }
 
-function hasTrackHeaderTitleShape(text: string, context: ProviderInfoContext): boolean {
+function hasTrackHeaderTitleShape(text: string, context: ProviderLineSemanticContext): boolean {
   const structured = TRACK_HEADER_ROW.exec(text);
   if (!structured) return false;
   return [structured[1], structured[2]].some((side) =>
@@ -335,7 +326,7 @@ function matchesHeaderSides(
     || (rightIsTitle && sideMatchesArtists(structured[1]));
 }
 
-function matchesTrackHeader(text: string, context: ProviderInfoContext): boolean {
+function matchesTrackHeader(text: string, context: ProviderLineSemanticContext): boolean {
   const titles = headerTitles(context);
   const normalized = compact(text);
   if (titles.some((title) => normalized === compact(title))) return true;
@@ -368,7 +359,7 @@ function stableProviderArtistForms(value: string): string[] {
 
 // The compact pattern also accepts a dash without surrounding whitespace, so it
 // requires every artist to appear rather than accepting a joined-artist side.
-function matchesPostCreditTrackHeader(text: string, context: ProviderInfoContext): boolean {
+function matchesPostCreditTrackHeader(text: string, context: ProviderLineSemanticContext): boolean {
   if (matchesTrackHeader(text, context)) return true;
   const artistGroups = headerArtistGroups(context);
   return matchesHeaderSides(text, COMPACT_TRACK_HEADER_ROW, headerTitles(context), (value) => {
@@ -576,7 +567,7 @@ function markRights(entries: ProviderInfoEntry[], provider: ProviderId): void {
 export function markEmbeddedProviderInfo(
   lyrics: NativeLyrics,
   provider: ProviderId,
-  context: ProviderInfoContext,
+  context: ProviderLineSemanticContext,
 ): NativeLyrics {
   const entries = entriesForLyrics(lyrics);
   if (!entries.length) return lyrics;

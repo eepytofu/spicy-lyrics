@@ -2,7 +2,7 @@ import { inflateSync } from "node:zlib";
 import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
-import { providerInfoContext } from "../provider-info";
+import { providerLineSemanticContext } from "../provider-info";
 import type { LyricsProvider, TimedLine } from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
@@ -292,7 +292,7 @@ function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong,
   const result = toSyllableLyrics(
     attachQqSidecars(parseQrc(bundle.primary), bundle.translation, bundle.romanization),
     "qq",
-    providerInfoContext(track, song, bundle.primary),
+    providerLineSemanticContext(track, song, bundle.primary),
   );
   const ProviderCredits = dedupeProviderCredits([
     extractByCredit(bundle.primary, "lyrics", "qq"),

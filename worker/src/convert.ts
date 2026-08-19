@@ -1,6 +1,9 @@
-import { isProviderInfoKind, type NativeLyrics, type ProviderId, type ProviderInfoKind, type TimedLine, type TimedWord } from "./types";
-import type { ProviderInfoContext } from "./provider-info";
-import { markProviderLineSemantics } from "./provider-line-semantics";
+import { type NativeLyrics, type ProviderId, type ProviderInfoKind, type TimedLine, type TimedWord } from "./types";
+import {
+  hasOrdinaryLyricContent,
+  markProviderLineSemantics,
+  type ProviderLineSemanticContext,
+} from "./provider-line-semantics";
 
 const labels: Record<ProviderId, string> = {
   qq: "QQ Music",
@@ -28,17 +31,15 @@ function cleanSidecarText(text: string | undefined, provider: ProviderId): strin
   return cleaned && !isProviderPlaceholder(cleaned, provider) ? cleaned : undefined;
 }
 
-function finalizeProviderInfo(
+function finalizeProviderLineSemantics(
   result: NativeLyrics,
   provider: ProviderId,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
-  const marked = providerInfo ? markProviderLineSemantics(result, provider, providerInfo) : result;
-  const entries = marked.Type === "Static"
-    ? ((marked.Lines as Array<{ ProviderInfoKind?: unknown }> | undefined) ?? [])
-    : ((marked.Content as Array<Record<string, any>> | undefined) ?? []).map((line) =>
-      marked.Type === "Syllable" ? line.Lead : line);
-  return entries.some((entry) => !isProviderInfoKind(entry?.ProviderInfoKind)) ? marked : undefined;
+  const marked = semanticContext
+    ? markProviderLineSemantics(result, provider, semanticContext)
+    : result;
+  return hasOrdinaryLyricContent(marked) ? marked : undefined;
 }
 
 function endMs(word: TimedWord, next?: TimedWord): number {
@@ -66,7 +67,7 @@ function hasAuthoredBoundaryAfter(words: TimedWord[], index: number): boolean {
 export function toSyllableLyrics(
   lines: TimedLine[],
   provider: ProviderId,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   const usableLines = lines.flatMap((line) => {
     // QRC, KRC, and YRC already encode their authored text as ordered
@@ -122,7 +123,7 @@ export function toSyllableLyrics(
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
   };
-  return finalizeProviderInfo(result, provider, providerInfo);
+  return finalizeProviderLineSemantics(result, provider, semanticContext);
 }
 
 export function parseLrc(text: string): Array<{ startMs: number; text: string }> {
@@ -156,14 +157,14 @@ export function parseLrc(text: string): Array<{ startMs: number; text: string }>
 export function toStaticLyrics(
   text: string,
   provider: ProviderId,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   const rows = text.split(/\r?\n/).flatMap((row) => {
     if (/^\s*\[(?:ar|al|ti|by|offset|manualoffset|language|id|hash|sign|qq|total)\s*:/iu.test(row)) return [];
     const value = row.replace(/^(?:\[\d+:\d+(?:[.:]\d+)?\])+/u, "").trim();
     return value ? [{ text: value }] : [];
   });
-  return toStaticLyricsFromRows(rows, provider, providerInfo);
+  return toStaticLyricsFromRows(rows, provider, semanticContext);
 }
 
 export type StaticLyricsRow = {
@@ -174,7 +175,7 @@ export type StaticLyricsRow = {
 export function toStaticLyricsFromRows(
   rows: StaticLyricsRow[],
   provider: ProviderId,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   const Lines = rows.map((row) => ({
     Text: row.text,
@@ -188,7 +189,7 @@ export function toStaticLyricsFromRows(
     fetchProvider: provider,
     sourceDisplayName: labels[provider],
   };
-  return finalizeProviderInfo(result, provider, providerInfo);
+  return finalizeProviderLineSemantics(result, provider, semanticContext);
 }
 
 function alignSidecars<T>(
@@ -278,7 +279,7 @@ export function toLineLyricsFromRows(
   provider: ProviderId,
   translation?: string,
   romanization?: string,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   const rows = inputRows.filter((row) => !isProviderPlaceholder(row.text, provider));
   if (!rows.length || isInstrumentalSentinelDocument(rows.map((row) => row.text), provider)) return undefined;
@@ -307,7 +308,7 @@ export function toLineLyricsFromRows(
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
   };
-  return finalizeProviderInfo(result, provider, providerInfo);
+  return finalizeProviderLineSemantics(result, provider, semanticContext);
 }
 
 export function toLineLyrics(
@@ -316,7 +317,7 @@ export function toLineLyrics(
   provider: ProviderId,
   translation?: string,
   romanization?: string,
-  providerInfo?: ProviderInfoContext,
+  semanticContext?: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   return toLineLyricsFromRows(
     parseLrc(lrc),
@@ -324,7 +325,7 @@ export function toLineLyrics(
     provider,
     translation,
     romanization,
-    providerInfo,
+    semanticContext,
   );
 }
 

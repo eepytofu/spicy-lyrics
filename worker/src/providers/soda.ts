@@ -7,7 +7,8 @@ import {
 } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import { ProviderUpstreamError } from "../http/fetch";
-import { providerInfoContext, type ProviderInfoContext } from "../provider-info";
+import { providerLineSemanticContext } from "../provider-info";
+import type { ProviderLineSemanticContext } from "../provider-line-semantics";
 import type { LyricsProvider, NativeLyrics, TimedLine } from "../types";
 import { parseKrc } from "./kugou";
 import { parseYrc } from "./netease";
@@ -275,7 +276,7 @@ function sodaTranslation(lyric: any): SodaLyric | undefined {
 function convertSodaLyrics(
   body: any,
   durationMs: number,
-  providerInfo: ProviderInfoContext,
+  semanticContext: ProviderLineSemanticContext,
 ): NativeLyrics | undefined {
   const lyric: SodaLyric = body?.lyric ?? {};
   const content = typeof lyric.content === "string" ? lyric.content : "";
@@ -284,7 +285,7 @@ function convertSodaLyrics(
   const translation = sodaTranslation(lyric);
 
   if (type === "lrc") {
-    return toLineLyrics(content, durationMs, "soda", translation?.content, undefined, providerInfo);
+    return toLineLyrics(content, durationMs, "soda", translation?.content, undefined, semanticContext);
   }
 
   const lines = structuredSodaLyrics(type, content);
@@ -295,10 +296,10 @@ function convertSodaLyrics(
     const withSidecar = translatedLines.length
       ? attachTimedSidecars(lines, translatedLines)
       : attachSidecars(lines, translation?.content);
-    return toSyllableLyrics(withSidecar, "soda", providerInfo);
+    return toSyllableLyrics(withSidecar, "soda", semanticContext);
   }
 
-  return toStaticLyrics(content, "soda", providerInfo);
+  return toStaticLyrics(content, "soda", semanticContext);
 }
 
 // Soda's Luna PC search/detail flow and current client identity are adapted
@@ -325,7 +326,7 @@ export const sodaProvider: LyricsProvider = async (track, context = {}) => {
     const result = convertSodaLyrics(
       body,
       detail.durationMs ?? song.durationMs ?? track.durationMs,
-      providerInfoContext(track, detail, body?.lyric?.content),
+      providerLineSemanticContext(track, detail, body?.lyric?.content),
     );
     if (!result) continue;
     const ProviderCredits = dedupeProviderCredits([

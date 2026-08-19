@@ -1,7 +1,7 @@
 import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
-import { providerInfoContext } from "../provider-info";
+import { providerLineSemanticContext } from "../provider-info";
 import type { LyricsProvider, TimedLine } from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags, type CandidateAssessment } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
@@ -265,7 +265,7 @@ export const kugouProvider: LyricsProvider = async (track, context = {}) => {
       throwIfAborted(context.signal);
       if (!isKugouCandidateAssessmentCompatible(track, song, candidate, assessment, catalogAssessment)) continue;
       const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
-      const result = toSyllableLyrics(parseKrc(raw), "kugou", providerInfoContext(track, song, raw));
+      const result = toSyllableLyrics(parseKrc(raw), "kugou", providerLineSemanticContext(track, song, raw));
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
       if (result) return {
         ...result,

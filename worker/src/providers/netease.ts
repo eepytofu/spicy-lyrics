@@ -1,7 +1,7 @@
 import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, parseLrc, toLineLyricsFromRows, toStaticLyricsFromRows, toSyllableLyrics, type LineLyricsRow, type StaticLyricsRow } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
-import { providerInfoContext } from "../provider-info";
+import { providerLineSemanticContext } from "../provider-info";
 import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
@@ -352,7 +352,7 @@ export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
     if (body?.pureMusic === true) continue;
     const ProviderCredits = neteaseProviderCredits(body);
     const rawPrimary = body?.yrc?.lyric ?? body?.lrc?.lyric;
-    const infoContext = providerInfoContext(track, {
+    const infoContext = providerLineSemanticContext(track, {
       title: song.name,
       titleAliases: song.titleAliases,
       artists: song.artists,

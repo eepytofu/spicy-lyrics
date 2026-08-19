@@ -5,7 +5,8 @@ import {
   type ProviderPayload,
   type WorkerProviderId,
 } from "../acquisition";
-import { isProviderInfoKind, isVocalCue, type TrackMetadata } from "../types";
+import { isProviderInfoKind, isVocalCue, type NativeLyrics, type TrackMetadata } from "../types";
+import { hasOrdinaryLyricContent } from "../provider-line-semantics";
 
 const WORKER_REQUEST_VERSION = "22";
 const MAX_REQUEST_URL_LENGTH = 8192;
@@ -100,7 +101,8 @@ function isValidNativeLyrics(value: unknown): boolean {
       && value.Lines.length <= 10_000
       && value.Lines.every((line) => isRecord(line)
         && typeof line.Text === "string"
-        && validLineSemantics(line));
+        && validLineSemantics(line))
+      && hasOrdinaryLyricContent(value as NativeLyrics);
   }
   if (!Array.isArray(value.Content) || value.Content.length > 10_000) return false;
   const finiteNumber = (entry: unknown) => typeof entry === "number" && Number.isFinite(entry);
@@ -109,7 +111,8 @@ function isValidNativeLyrics(value: unknown): boolean {
       && typeof line.Text === "string"
       && finiteNumber(line.StartTime)
       && finiteNumber(line.EndTime)
-      && validLineSemantics(line));
+      && validLineSemantics(line))
+      && hasOrdinaryLyricContent(value as NativeLyrics);
   }
   const validGroup = (group: unknown) => {
     if (!isRecord(group) || !Array.isArray(group.Syllables) || group.Syllables.length > 20_000) return false;
@@ -125,7 +128,8 @@ function isValidNativeLyrics(value: unknown): boolean {
   return value.Content.every((line) => isRecord(line)
     && validGroup(line.Lead)
     && (line.Background === undefined
-      || (Array.isArray(line.Background) && line.Background.every(validGroup))));
+      || (Array.isArray(line.Background) && line.Background.every(validGroup))))
+    && hasOrdinaryLyricContent(value as NativeLyrics);
 }
 
 function byteLength(value: string): number {
