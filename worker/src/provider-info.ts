@@ -53,6 +53,7 @@ const LATIN_ROLE_ANCHOR = /^(?:lyrics?|lyricist|writer|written|songwriter|compos
 const DIRECT_CJK_CREDIT_LABEL = /^(?:作?[词詞曲]|[词詞]曲|[编編]曲|制作人|製作人|混音|录音|錄音|母带|母帶)$/u;
 const DIRECT_LATIN_CREDIT_LABEL = /^(?:lyrics?(?:\s+by)?|lyricist|writer|written\s+by|songwriter|composer|composed\s+by|music(?:\s+by)?|arranger|arranged\s+by|producer|produced\s+by|production|mix|mixing|mixed\s+by|mastering|recording)$/u;
 const PROVIDER_BRAND = /(?:网易|網易|酷狗|腾讯|騰訊|\bqq\b|\btme\b|soda|汽水)/iu;
+const STANDALONE_ANNOTATION_ROW = /^\s*(?:[^\r\n:：]{1,48}\s*[:：]|[【[({（][^】\])}）\r\n]{1,48}[】\])}）])\s*$/u;
 
 function compact(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -286,7 +287,10 @@ function matchesBoundedArtists(value: string, expected: string[]): boolean {
     headerArtists.some((headerArtist) => sharesBoundedForm(headerArtist, artist)));
 }
 
-function matchesBoundedTrackHeader(text: string, context: ProviderInfoContext): BoundedTitleMatch | undefined {
+function matchesBoundedTrackHeader(
+  text: string,
+  context: ProviderInfoContext,
+): BoundedTitleMatch | undefined {
   const titles = headerTitles(context);
   const selectedArtists = context.selected?.artists.filter((artist) => compact(artist)) ?? [];
   const structured = TRACK_HEADER_ROW.exec(text);
@@ -417,6 +421,25 @@ function scanBoundaryBlock(
     && metadata.reduce((sum, row) => sum + row.anchorCount, 0) >= requiredAnchors
     ? indices
     : [];
+}
+
+function leadingStructuralHeaderCredits(entries: ProviderInfoEntry[]): number[] {
+  const header = entries[0];
+  const firstCredit = entries[1];
+  if (!header || !firstCredit || header.kind || !header.text.trim()
+    || !/[\p{L}\p{N}]/u.test(header.text)
+    || parseMetadataRow(header.text)
+    || STANDALONE_ANNOTATION_ROW.test(header.text)) return [];
+
+  if (firstCredit.kind === "credit") {
+    const indices: number[] = [];
+    for (let index = 1; entries[index]?.kind === "credit"; index += 1) indices.push(index);
+    return indices;
+  }
+
+  const parsed = parseMetadataRow(firstCredit.text);
+  if (!parsed) return [];
+  return scanBoundaryBlock(entries, 1, 1, parsed.directCredit);
 }
 
 function hasCreditBlockEvidence(entries: ProviderInfoEntry[], indices: number[]): boolean {
@@ -562,12 +585,17 @@ export function markEmbeddedProviderInfo(
   markRights(entries, provider);
   markBoundedPerformanceCredits(entries, context);
 
-  const hasHeader = !entries[0].kind && matchesTrackHeader(entries[0].text, context);
+  const structuralLeading = leadingStructuralHeaderCredits(entries);
+  const hasStructuralHeader = structuralLeading.length > 0;
+  const hasHeader = hasStructuralHeader || (!entries[0].kind
+    && matchesTrackHeader(entries[0].text, context));
   const boundedHeader = !hasHeader && !entries[0].kind
     ? matchesBoundedTrackHeader(entries[0].text, context)
     : undefined;
   const headerIndices = hasHeader || boundedHeader ? [0] : [];
-  let leadingStart = headerIndices.length ? 1 : 0;
+  let leadingStart = hasStructuralHeader
+    ? structuralLeading.at(-1)! + 1
+    : headerIndices.length ? 1 : 0;
   if (boundedHeader?.continuation
     && entries[leadingStart]
     && !entries[leadingStart].kind
@@ -575,7 +603,7 @@ export function markEmbeddedProviderInfo(
     headerIndices.push(leadingStart);
     leadingStart += 1;
   }
-  let hasAuthoritativeLeadingCredit = false;
+  let hasAuthoritativeLeadingCredit = hasStructuralHeader;
   while (entries[leadingStart]?.kind === "credit") {
     hasAuthoritativeLeadingCredit = true;
     leadingStart += 1;
@@ -587,12 +615,14 @@ export function markEmbeddedProviderInfo(
     ? leadingStart
     : undefined;
   if (postCreditHeader !== undefined) leadingStart += 1;
-  let leading = scanBoundaryBlock(
-    entries,
-    leadingStart,
-    1,
-    postCreditHeader === undefined && (hasHeader || hasAuthoritativeLeadingCredit),
-  );
+  let leading = hasStructuralHeader
+    ? structuralLeading
+    : scanBoundaryBlock(
+      entries,
+      leadingStart,
+      1,
+      postCreditHeader === undefined && (hasHeader || hasAuthoritativeLeadingCredit),
+    );
   if (!leading.length
     && !headerIndices.length
     && leadingStart === 0

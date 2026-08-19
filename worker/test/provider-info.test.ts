@@ -267,7 +267,7 @@ describe("embedded provider-info classification", () => {
   it.each([
     ["reversed mismatched artist", "等什么君 - 关山酒"],
     ["non-exact conflicting version", "关山酒 (Remix) - 等什么君"],
-  ])("does not grant exact-title trust to a %s", (_name, header) => {
+  ])("classifies a structurally proven leading header despite %s", (_name, header) => {
     const context: ProviderInfoContext = {
       reference: {
         id: "关山酒",
@@ -288,7 +288,7 @@ describe("embedded provider-info classification", () => {
       "first lyric",
     ], "kugou"), "kugou", context);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
   });
 
   it("decomposes bilingual role labels without enumerating combined labels", () => {
@@ -577,7 +577,7 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
   });
 
-  it("keeps a bounded header visible while classifying a proven direct credit label", () => {
+  it("classifies a first-row header above one proven direct credit", () => {
     const context: ProviderInfoContext = {
       reference: {
         id: "bounded-single-credit",
@@ -597,11 +597,11 @@ describe("embedded provider-info classification", () => {
       "first lyric",
     ]), "qq", context);
 
-    expect(kinds(result)).toEqual([undefined, "credit", undefined]);
+    expect(kinds(result)).toEqual(["trackHeader", "credit", undefined]);
   });
 
   it.each(["Studio Song (Live)", "Studio Song (2022Ver.)"])(
-    "keeps a conflicting version-shaped bounded header ordinary while recovering its strict credits: %s",
+    "classifies a structurally proven version-shaped header without catalog-title agreement: %s",
     (header) => {
       const context: ProviderInfoContext = {
         reference: {
@@ -623,7 +623,7 @@ describe("embedded provider-info classification", () => {
         "first lyric",
       ]), "qq", context);
 
-      expect(kinds(result)).toEqual([undefined, "credit", "credit", undefined]);
+      expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
     },
   );
 
@@ -761,13 +761,14 @@ describe("embedded provider-info classification", () => {
 
   it("marks complete anchored trailing blocks", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
+      "第一句歌词",
       "最后一句歌词",
       "Lyrics: Alice",
       "Composer: Bob",
       "FOH+录音: Carol",
     ]), "kugou", LUO_TIAN_YI);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit"]);
+    expect(kinds(result)).toEqual([undefined, undefined, "credit", "credit", "credit"]);
   });
 
   it("counts stable compound role heads without enumerating the unknown labels they anchor", () => {
@@ -783,6 +784,7 @@ describe("embedded provider-info classification", () => {
   it("classifies proven common credit labels independently at any document position", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "开场歌词",
+      "开场歌词续句",
       "作词：Alice",
       "第一句歌词",
       "第二句歌词",
@@ -796,6 +798,7 @@ describe("embedded provider-info classification", () => {
     ]), "netease", LUO_TIAN_YI);
 
     expect(kinds(result)).toEqual([
+      undefined,
       undefined,
       "credit",
       undefined,
@@ -828,11 +831,12 @@ describe("embedded provider-info classification", () => {
       };
       const result = markEmbeddedProviderInfo(lineLyrics([
         "first lyric",
-        "歌：電ǂ鯨",
         "second lyric",
+        "歌：電ǂ鯨",
+        "third lyric",
       ], provider), provider, context);
 
-      expect(kinds(result)).toEqual([undefined, "credit", undefined]);
+      expect(kinds(result)).toEqual([undefined, undefined, "credit", undefined]);
     },
   );
 
@@ -859,16 +863,17 @@ describe("embedded provider-info classification", () => {
   it("classifies a validated obscure-label island without an exact direct-label seed", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "第一句歌词",
+      "第二句歌词",
       "混音&母带：Alice",
       "原作信息如下：",
       "曲绘：Bob",
       "最后一句歌词",
     ]), "netease", LUO_TIAN_YI);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", undefined]);
+    expect(kinds(result)).toEqual([undefined, undefined, "credit", "credit", "credit", undefined]);
   });
 
-  it("recovers a leading block behind a bare title while leaving the title visible", () => {
+  it("classifies a native bare title above a proven leading credit block", () => {
     const result = markEmbeddedProviderInfo(lineLyrics([
       "草木青时",
       "演唱：星尘Infinity",
@@ -878,7 +883,7 @@ describe("embedded provider-info classification", () => {
       "第一句歌词",
     ]), "netease", LUO_TIAN_YI);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", "credit", undefined]);
+    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", "credit", undefined]);
   });
 
   it.each([
@@ -886,13 +891,14 @@ describe("embedded provider-info classification", () => {
     ["「一日还」 原创国风音乐企划", "kugou"],
   ] as const)("classifies a bounded project attribution beside a validated block: %s", (attribution, provider) => {
     const result = markEmbeddedProviderInfo(lineLyrics([
+      "第一句歌词",
       "最后一句歌词",
       "混音&母带：Alice",
       "录音棚：Studio",
       attribution,
     ]), provider, LUO_TIAN_YI);
 
-    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit"]);
+    expect(kinds(result)).toEqual([undefined, undefined, "credit", "credit", "credit"]);
   });
 
   it.each([
@@ -925,5 +931,150 @@ describe("embedded provider-info classification", () => {
   ])("abstains from %s", (_name, texts) => {
     const result = markEmbeddedProviderInfo(lineLyrics(texts), "netease", LUO_TIAN_YI);
     expect(kinds(result)).toEqual(Array(texts.length).fill(undefined));
+  });
+});
+
+describe("structural first-row track headers", () => {
+  const header = "国风堂、排骨教主、银临、Winky诗、不才、三无Marblue、KBShinya - 江山行歌";
+  const credits = ["作词：慕清明", "作曲：陈致逸/张燕峰", "编曲：闫津"];
+  const cityRows = [
+    "【北京】排骨教主",
+    "【南京】银临",
+    "【杭州】Winky诗",
+    "【西安】不才",
+    "【成都】三无MarBlue",
+    "【广州】KBShinya",
+  ];
+  const reference: ProviderInfoContext["reference"] = {
+    id: "7eb16VbQPt3Ii4UAhq8yBY",
+    title: "江山行歌",
+    artists: ["三无Marblue", "排骨教主", "銀臨", "不才", "KBShinya", "赵景旭（Winky诗）"],
+    album: "江山行歌",
+    durationMs: 265_000,
+  };
+  const selected = {
+    title: "江山行歌",
+    artists: ["排骨教主", "银临", "winky诗", "不才", "三无MarBlue", "KB"],
+  };
+
+  it("classifies the reverse KuGou header without selected native artist-group plumbing", () => {
+    const context = providerInfoContext(reference, selected);
+    const result = markEmbeddedProviderInfo(
+      syllableLyrics([header, ...credits, ...cityRows, "柳絮躲四合院里歇脚"], "kugou"),
+      "kugou",
+      context,
+    );
+
+    expect(kinds(result)).toEqual([
+      "trackHeader",
+      "credit", "credit", "credit",
+      ...Array(cityRows.length).fill(undefined),
+      undefined,
+    ]);
+  });
+
+  it.each([
+    [
+      "QQ 日不落 live header",
+      "qq",
+      "日不落(Live)-蔡依林(Jolin Tsai)",
+      ["词：崔惟楷", "曲：Bard,Alexander Bengt Magnus,Anders Hansson "],
+      "日不落",
+      "日不落",
+    ],
+    [
+      "KuGou サクラ・ホライズン reverse header",
+      "kugou",
+      "坂上なち - サクラ・ホライズン",
+      ["词：Haruka", "曲：ZUN", "编曲：Masayoshi Minoshima"],
+      "サクラ・ホライズン",
+      "サクラ・ホライズン feat.nachi (BEATLESS)",
+    ],
+    [
+      "KuGou 舞娘 live header",
+      "kugou",
+      "舞娘 (Live) - 蔡依林 (Jolin Tsai)",
+      ["词：陈镇川", "曲：Miriam Nervo/Liv Nervo/Greg Kursten"],
+      "舞娘",
+      "舞娘",
+    ],
+    [
+      "NetEase 草木青时 bare header",
+      "netease",
+      "草木青时",
+      ["演唱：星尘Infinity", "调校：早起又是好天气-", "混音：落华", "作词：慕清明"],
+      "【星尘Infinity】草木青时【SYNTHESIZER V COVER】",
+      "【星尘Infinity】草木青时【SYNTHESIZER V COVER】",
+    ],
+  ] as const)("classifies the exact corpus shape for %s", (
+    _name,
+    provider,
+    corpusHeader,
+    corpusCredits,
+    referenceTitle,
+    selectedTitle,
+  ) => {
+    const context = providerInfoContext({
+      id: referenceTitle,
+      title: referenceTitle,
+      artists: ["reference artist"],
+      album: referenceTitle,
+      durationMs: 240_000,
+    }, {
+      title: selectedTitle,
+      artists: ["selected artist"],
+    });
+    const texts = [corpusHeader, ...corpusCredits, "first lyric"];
+    const result = markEmbeddedProviderInfo(
+      provider === "netease" ? lineLyrics(texts, provider) : syllableLyrics(texts, provider),
+      provider,
+      context,
+    );
+
+    expect(kinds(result)).toEqual([
+      "trackHeader",
+      ...Array<ProviderInfoKind>(corpusCredits.length).fill("credit"),
+      undefined,
+    ]);
+  });
+
+  it.each([
+    ["standalone first row", "qq", ["Native Header", "first lyric"], [undefined, undefined]],
+    ["first sung line with a later credit", "netease", ["first sung line", "second sung line", "作词：Alice", "last lyric"], [undefined, undefined, "credit", undefined]],
+    ["empty-value speaker cue", "qq", ["男：", "作词：Alice", "first lyric"], [undefined, "credit", undefined]],
+    ["dialogue row", "netease", ["甲：你好", "作词：Alice", "first lyric"], [undefined, "credit", undefined]],
+    ["bracketed section row", "netease", ["[Chorus]", "Lyrics: Alice", "first lyric"], [undefined, "credit", undefined]],
+    ["one obscure unproven row", "kugou", ["Native Header", "PGM：Alice", "first lyric"], [undefined, undefined, undefined]],
+    ["title-like row outside row zero", "qq", ["first lyric", "Native Header", "Lyrics: Alice", "Composer: Bob", "last lyric"], [undefined, undefined, "credit", "credit", undefined]],
+    ["ordinary Soda opening", "soda", ["ordinary opening", "next lyric"], [undefined, undefined]],
+  ] as const)("abstains from %s", (_name, provider, texts, expected) => {
+    const result = markEmbeddedProviderInfo(lineLyrics([...texts], provider), provider, LUO_TIAN_YI);
+    expect(kinds(result)).toEqual(expected);
+  });
+
+  it("keeps NetEase sung-title rows ordinary after authoritative leading credits", () => {
+    const result = lineLyrics([
+      "作词: “hitman”bang",
+      "作曲: “hitman”bang",
+      "총맞은것처럼",
+      "총맞은 것처럼 정말",
+      "총맞은것처럼",
+    ], "netease");
+    for (const line of (result.Content as Array<Record<string, unknown>>).slice(0, 2)) {
+      line.ProviderInfoKind = "credit";
+    }
+
+    markEmbeddedProviderInfo(result, "netease", {
+      reference: {
+        id: "spotify-shot",
+        title: "총맞은것처럼",
+        artists: ["Baek Z Young"],
+        album: "Sensibility",
+        durationMs: 240_000,
+      },
+      selected: { title: "총맞은것처럼", artists: ["백지영"] },
+    });
+
+    expect(kinds(result)).toEqual(["credit", "credit", undefined, undefined, undefined]);
   });
 });

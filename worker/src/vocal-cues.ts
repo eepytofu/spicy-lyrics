@@ -176,6 +176,21 @@ function mark(candidate: CueCandidate): void {
   candidate.entry.target.VocalCue = cue;
 }
 
+function seededCompositeIdentity(
+  label: string,
+  seededLabels: ReadonlySet<string>,
+): string | undefined {
+  const [identity, ...modifierParts] = label.normalize("NFKC").trim().split(/\s+/u);
+  const modifier = modifierParts.join(" ");
+  const normalizedIdentity = compact(identity ?? "");
+  return normalizedIdentity
+    && modifier
+    && seededLabels.has(normalizedIdentity)
+    && !STRUCTURAL_LABEL.test(modifier)
+    ? normalizedIdentity
+    : undefined;
+}
+
 /** Adds speaker semantics without changing source text, timing, order, or provider-info kinds. */
 export function markEmbeddedVocalCues(
   lyrics: NativeLyrics,
@@ -202,6 +217,22 @@ export function markEmbeddedVocalCues(
   if (seededLabels.size < 2) return lyrics;
   const firstSeed = Math.min(...seeded.map((entry) => entry.index));
   const lastSeed = Math.max(...seeded.map((entry) => entry.index));
+
+  // Some documents preserve an already-proven identity while appending a
+  // performance modifier (for example, `男 Rap：`). Recover that row only
+  // inside the bounded, repeated cue sequence; the modifier is never promoted
+  // to a document-independent cue token.
+  for (const entry of candidates) {
+    if (entry.entry.cue || entry.index <= firstSeed || entry.index >= lastSeed) continue;
+    const identity = seededCompositeIdentity(entry.label, seededLabels);
+    if (!identity || !hasFollowingLyric(entries, entry)) continue;
+    const identitySeeds = seeded.filter((seed) => compact(seed.label) === identity);
+    if (identitySeeds.some((seed) => seed.index < entry.index)
+      && identitySeeds.some((seed) => seed.index > entry.index)) {
+      mark(entry);
+    }
+  }
+
   const byLabel = new Map<string, CueCandidate[]>();
   for (const entry of candidates) {
     if (entry.entry.cue || entry.index < firstSeed || entry.index > lastSeed) continue;

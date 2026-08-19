@@ -7,7 +7,7 @@ import {
 } from "../acquisition";
 import { isProviderInfoKind, isVocalCue, type TrackMetadata } from "../types";
 
-const WORKER_REQUEST_VERSION = "20";
+const WORKER_REQUEST_VERSION = "22";
 const MAX_REQUEST_URL_LENGTH = 8192;
 const MAX_TRACK_ID_LENGTH = 256;
 const MAX_TITLE_LENGTH = 512;

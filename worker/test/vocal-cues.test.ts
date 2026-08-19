@@ -167,4 +167,44 @@ describe("embedded vocal cue semantics", () => {
     const unknowns = (result.Content as any[]).filter((line) => /角色甲|Chorus|：hello|：world|^糯：/u.test(line.Text));
     expect(unknowns.every((line) => line.VocalCue === undefined)).toBe(true);
   });
+
+  it("recovers a bounded QQ composite cue without promoting its modifier", () => {
+    const lyrics = syllableLyrics([
+      "女：", "one",
+      "男：", "two",
+      "女：", "three",
+      "男 Rap：", "four",
+      "男：", "five",
+      "女：", "six",
+    ]);
+    const cue = target(lyrics, 6);
+    cue.StartTime = 81.925;
+    cue.EndTime = 82.925;
+    cue.Syllables[0].StartTime = 81.925;
+    cue.Syllables[0].EndTime = 82.925;
+
+    const result = markProviderLineSemantics(lyrics, "qq", CONTEXT);
+    expect(target(result, 6).VocalCue).toEqual({ Label: "男 Rap", Form: "labelColon" });
+    expect(target(result, 6).ProviderInfoKind).toBeUndefined();
+    expect(target(result, 6).StartTime).toBe(81.925);
+    expect(target(result, 6).EndTime).toBe(82.925);
+    expect(target(result, 6).Syllables).toEqual([
+      { Text: "男 Rap：", StartTime: 81.925, EndTime: 82.925, IsPartOfWord: false },
+    ]);
+    expect(target(result, 6).RomanizedText).toBeUndefined();
+  });
+
+  it.each([
+    ["isolated modifier", ["Rap：", "one"]],
+    ["unseeded composite identity", ["女：", "one", "角色 Rap：", "two", "男：", "three"]],
+    ["structural composite modifier", ["男：", "one", "男 Verse：", "two", "男：", "three", "女：", "four"]],
+    ["unbounded composite identity", ["男：", "one", "男 Rap：", "two", "女：", "three"]],
+    ["brace and loop syntax", ["男：", "one", "{rap}", "(rap loop)", "女：", "two"]],
+  ])("does not generalize contextual composite recovery to %s", (_name, texts) => {
+    const result = markProviderLineSemantics(syllableLyrics(texts), "qq", CONTEXT);
+    const ambiguous = (result.Content as any[])
+      .map((line) => line.Lead)
+      .filter((line) => /Rap|Verse|\{rap\}|rap loop/iu.test(line.Syllables[0].Text));
+    expect(ambiguous.every((line) => line.VocalCue === undefined)).toBe(true);
+  });
 });
