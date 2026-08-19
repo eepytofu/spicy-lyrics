@@ -198,14 +198,9 @@ function parseYrcDocument(value: string, classifyStructuredInfo: boolean): Parse
       },
     });
   }
-  const ordinaryIndices = rows.flatMap((row, index) => row.structured ? [] : [index]);
-  const firstOrdinary = ordinaryIndices[0] ?? Number.POSITIVE_INFINITY;
-  const lastOrdinary = ordinaryIndices.at(-1) ?? Number.NEGATIVE_INFINITY;
   const songWriters: string[] = [];
-  const lines = rows.map((row, index) => {
-    const authoritativeInfo = classifyStructuredInfo
-      && row.structured
-      && (index < firstOrdinary || index > lastOrdinary);
+  const lines = rows.map((row) => {
+    const authoritativeInfo = classifyStructuredInfo && row.structured;
     if (!authoritativeInfo) return row.line;
     for (const writer of row.writerSegments) {
       if (!songWriters.includes(writer)) songWriters.push(writer);
@@ -265,13 +260,8 @@ export function parseNeteaseLrc(value: string): ParsedNeteaseLrc {
     }
   }
 
-  const ordinaryIndices = rows.flatMap((row, index) =>
-    !row.structured && (row.lines.length || row.plainText) ? [index] : []);
-  const firstOrdinary = ordinaryIndices[0] ?? Number.POSITIVE_INFINITY;
-  const lastOrdinary = ordinaryIndices.at(-1) ?? Number.NEGATIVE_INFINITY;
   const songWriters: string[] = [];
-  const authoritative = rows.map((row, index) =>
-    row.structured && (index < firstOrdinary || index > lastOrdinary));
+  const authoritative = rows.map((row) => row.structured);
   rows.forEach((row, index) => {
     if (!authoritative[index]) return;
     for (const writer of row.writerSegments) {

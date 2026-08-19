@@ -515,11 +515,12 @@ describe("provider-info conversion contract", () => {
       .toEqual(["credit", "credit", undefined]);
   });
 
-  it("preserves leading and trailing NetEase YRC JSON credits and exact writer segments", () => {
+  it("preserves NetEase YRC JSON credits at any position and exact writer segments", () => {
     const parsed = parseNeteaseYrc([
       JSON.stringify({ t: 0, c: [{ tx: "作词: " }, { tx: "Brent Kutzle" }, { tx: "/" }, { tx: "Ryan Tedder" }] }),
       "[1000,1000](1000,1000,0)first lyric",
-      JSON.stringify({ t: 3000, c: [{ tx: "编曲: " }, { tx: "Producer" }] }),
+      JSON.stringify({ t: 2100, c: [{ tx: "编曲: " }, { tx: "Producer" }] }),
+      "[3000,1000](3000,1000,0)last lyric",
     ].join("\n"));
     const lyrics = toSyllableLyrics(parsed.lines, "netease") as any;
 
@@ -532,7 +533,23 @@ describe("provider-info conversion contract", () => {
     }))).toEqual([
       { text: "作词: Brent Kutzle/Ryan Tedder", kind: "credit", start: 0, end: 0 },
       { text: "first lyric", kind: undefined, start: 1, end: 2 },
-      { text: "编曲: Producer", kind: "credit", start: 3, end: 3 },
+      { text: "编曲: Producer", kind: "credit", start: 2.1, end: 2.1 },
+      { text: "last lyric", kind: undefined, start: 3, end: 4 },
+    ]);
+  });
+
+  it("marks NetEase JSON metadata embedded between ordinary LRC rows", () => {
+    const parsed = parseNeteaseLrc([
+      "[00:01.00]first lyric",
+      JSON.stringify({ t: 2000, c: [{ tx: "作词: " }, { tx: "Alice" }] }),
+      "[00:03.00]last lyric",
+    ].join("\n"));
+
+    expect(parsed.songWriters).toEqual(["Alice"]);
+    expect(parsed.lines).toEqual([
+      { startMs: 1000, text: "first lyric" },
+      { startMs: 2000, text: "作词: Alice", providerInfoKind: "credit" },
+      { startMs: 3000, text: "last lyric" },
     ]);
   });
 

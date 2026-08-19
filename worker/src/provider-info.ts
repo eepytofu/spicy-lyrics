@@ -40,6 +40,7 @@ type ProviderInfoEntry = {
 
 type ParsedMetadataRow = {
   anchorCount: number;
+  directCredit: boolean;
 };
 
 const METADATA_ROW = /^\s*(?:\d{1,3}\s*[.．、)]\s*)?([^\r\n:：]{1,48})\s*[:：]\s*(\S[^\r\n]{0,239})\s*$/u;
@@ -47,6 +48,9 @@ const TRACK_HEADER_ROW = /^\s*(.+)\s+(?:[-–—－])\s+(.+?)\s*$/u;
 const COMPACT_TRACK_HEADER_ROW = /^\s*(.+?)\s*(?:[-–—－])\s*(.+?)\s*$/u;
 const CJK_ROLE_ANCHOR = /^(?:作?[词詞曲]|[词詞]曲|[编編]曲|制作|製作|混音|录音|錄音|母带|母帶)/u;
 const LATIN_ROLE_ANCHOR = /^(?:lyrics?|lyricist|writer|written|songwriter|composer|composed|music|arranger|arranged|producer|produced|production|mix|mixing|mixed|mastering|recording)$/u;
+const DIRECT_CJK_CREDIT_LABEL = /^(?:作?[词詞曲]|[词詞]曲|[编編]曲|制作人|製作人|混音|录音|錄音|母带|母帶)$/u;
+const DIRECT_LATIN_CREDIT_LABEL = /^(?:lyrics?(?:\s+by)?|lyricist|writer|written\s+by|songwriter|composer|composed\s+by|music(?:\s+by)?|arranger|arranged\s+by|producer|produced\s+by|production|mix|mixing|mixed\s+by|mastering|recording)$/u;
+const PROVIDER_BRAND = /(?:网易|網易|酷狗|腾讯|騰訊|\bqq\b|\btme\b|soda|汽水)/iu;
 
 function compact(value: string): string {
   return value.normalize("NFKC").toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
@@ -99,10 +103,14 @@ function parseMetadataRow(text: string): ParsedMetadataRow | undefined {
   const match = METADATA_ROW.exec(text);
   if (!match) return undefined;
   const normalized = match[1].trim().normalize("NFKC").toLocaleLowerCase();
-  if (/^(?:作[词詞]作曲|作曲作[词詞])$/u.test(normalized.replace(/\s+/gu, ""))) {
-    return { anchorCount: 2 };
-  }
-  return { anchorCount: roleAnchorCount(normalized) };
+  const compactLabel = normalized.replace(/\s+/gu, "");
+  const combinedWriterComposer = /^(?:作[词詞]作曲|作曲作[词詞])$/u.test(compactLabel);
+  return {
+    anchorCount: combinedWriterComposer ? 2 : roleAnchorCount(normalized),
+    directCredit: combinedWriterComposer
+      || DIRECT_CJK_CREDIT_LABEL.test(compactLabel)
+      || DIRECT_LATIN_CREDIT_LABEL.test(normalized.replace(/\s+/gu, " ")),
+  };
 }
 
 function entriesForLyrics(lyrics: NativeLyrics): ProviderInfoEntry[] {
@@ -381,6 +389,84 @@ function scanBoundaryBlock(
     : [];
 }
 
+function hasCreditBlockEvidence(entries: ProviderInfoEntry[], indices: number[]): boolean {
+  const metadata = indices
+    .map((index) => parseMetadataRow(entries[index].text))
+    .filter((row): row is ParsedMetadataRow => Boolean(row));
+  return metadata.length >= 2
+    && metadata.reduce((sum, row) => sum + row.anchorCount, 0) >= 2;
+}
+
+function isCreditIslandBridge(text: string): boolean {
+  const value = text.normalize("NFKC").trim();
+  return value.length > 0
+    && [...value].length <= 80
+    && /[:：]$/u.test(value)
+    && !METADATA_ROW.test(value);
+}
+
+function markValidatedCreditIslands(entries: ProviderInfoEntry[]): void {
+  let start = 0;
+  while (start < entries.length) {
+    while (start < entries.length && (entries[start].kind || !parseMetadataRow(entries[start].text))) {
+      start += 1;
+    }
+    if (start >= entries.length) break;
+
+    const indices = [start];
+    const metadataIndices = [start];
+    let cursor = start + 1;
+    while (cursor < entries.length && !entries[cursor].kind) {
+      const parsed = parseMetadataRow(entries[cursor].text);
+      if (parsed) {
+        indices.push(cursor);
+        metadataIndices.push(cursor);
+        cursor += 1;
+        continue;
+      }
+
+      const bridge: number[] = [];
+      let lookahead = cursor;
+      while (bridge.length < 3 && lookahead < entries.length && !entries[lookahead].kind) {
+        if (parseMetadataRow(entries[lookahead].text)) break;
+        if (!isCreditIslandBridge(entries[lookahead].text)) break;
+        bridge.push(lookahead);
+        lookahead += 1;
+      }
+      if (bridge.length > 2 || lookahead >= entries.length || entries[lookahead].kind
+        || !parseMetadataRow(entries[lookahead].text)) break;
+      indices.push(...bridge, lookahead);
+      metadataIndices.push(lookahead);
+      cursor = lookahead + 1;
+    }
+
+    if (hasCreditBlockEvidence(entries, indices)) {
+      for (const index of indices) entries[index].setKind("credit");
+    } else {
+      for (const index of metadataIndices) {
+        if (parseMetadataRow(entries[index].text)?.directCredit) entries[index].setKind("credit");
+      }
+    }
+    start = Math.max(cursor, start + 1);
+  }
+}
+
+function isProjectAttributionContinuation(text: string): boolean {
+  const value = text.normalize("NFKC").trim();
+  if (!value || [...value].length > 120 || METADATA_ROW.test(value) || PROVIDER_BRAND.test(value)) return false;
+  return /^\s*本歌曲来自(?:原创|原創)?(?:国风|國風)?(?:音乐|音樂)?企[划劃][【〖「『《].+[】〗」』》]\s*$/u.test(value)
+    || /^\s*[【〖「『《].+[】〗」』》]\s*(?:原创|原創)(?:国风|國風)?(?:音乐|音樂)?企[划劃]\s*$/u.test(value);
+}
+
+function markAdjacentProjectAttributions(entries: ProviderInfoEntry[]): void {
+  for (const [index, entry] of entries.entries()) {
+    if (entry.kind || !isProjectAttributionContinuation(entry.text)) continue;
+    if (entries[index - 1]?.kind === "credit" || entries[index + 1]?.kind === "credit") {
+      entry.setKind("credit");
+    }
+  }
+}
+
 function isStrongRightsNotice(text: string, provider: ProviderId): boolean {
   const value = text.normalize("NFKC").toLocaleLowerCase();
   if (/^\s*[【[][^\]\r\n】]*(?:音乐|音樂|歌曲|词曲|詞曲|作品)[^\]\r\n】]*已(?:获得|獲得|取得)?(?:正版)?(?:授权|授權)[^\]\r\n】]*[】\]]\s*$/u.test(value)) return true;
@@ -500,6 +586,9 @@ export function markEmbeddedProviderInfo(
   if (trailing.length) {
     for (const index of trailing) entries[index].setKind("credit");
   }
+
+  markValidatedCreditIslands(entries);
+  markAdjacentProjectAttributions(entries);
 
   return lyrics;
 }

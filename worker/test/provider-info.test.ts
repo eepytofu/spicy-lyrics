@@ -577,7 +577,7 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
   });
 
-  it("does not give bounded headers the exact header's relaxed single-credit trust", () => {
+  it("keeps a bounded header visible while classifying a proven direct credit label", () => {
     const context: ProviderInfoContext = {
       reference: {
         id: "bounded-single-credit",
@@ -597,7 +597,7 @@ describe("embedded provider-info classification", () => {
       "first lyric",
     ]), "qq", context);
 
-    expect(kinds(result)).toEqual([undefined, undefined, undefined]);
+    expect(kinds(result)).toEqual([undefined, "credit", undefined]);
   });
 
   it.each(["Studio Song (Live)", "Studio Song (2022Ver.)"])(
@@ -672,8 +672,8 @@ describe("embedded provider-info classification", () => {
   it.each([
     ["non-matching intervening row", "另一首歌-洛天依/乐正绫", ["编曲：李兀", "混音：神曦"]],
     ["missing selected artist", "卦象怎判-洛天依", ["编曲：李兀", "混音：神曦"]],
-    ["insufficient following block", "卦象怎判-洛天依/乐正绫", ["编曲：李兀"]],
-  ] as const)("keeps post-credit rows visible for %s", (_name, header, following) => {
+    ["one following direct credit", "卦象怎判-洛天依/乐正绫", ["编曲：李兀"]],
+  ] as const)("keeps an unmatched header visible while classifying %s", (_name, header, following) => {
     const context: ProviderInfoContext = {
       reference: {
         id: "netease:3348520852",
@@ -695,7 +695,13 @@ describe("embedded provider-info classification", () => {
 
     const result = markEmbeddedProviderInfo(lyrics, "netease", context);
 
-    expect(kinds(result)).toEqual(["credit", "credit", ...Array(texts.length - 2).fill(undefined)]);
+    expect(kinds(result)).toEqual([
+      "credit",
+      "credit",
+      undefined,
+      ...Array<ProviderInfoKind>(following.length).fill("credit"),
+      undefined,
+    ]);
   });
 
   it.each([
@@ -774,17 +780,102 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result)).toEqual(["credit", "credit", undefined]);
   });
 
+  it("classifies proven common credit labels independently at any document position", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "开场歌词",
+      "作词：Alice",
+      "第一句歌词",
+      "第二句歌词",
+      "第三句歌词",
+      "制作人：Bob",
+      "第四句歌词",
+      "第五句歌词",
+      "第六句歌词",
+      "Lyrics by: Carol",
+      "收尾歌词",
+    ]), "netease", LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual([
+      undefined,
+      "credit",
+      undefined,
+      undefined,
+      undefined,
+      "credit",
+      undefined,
+      undefined,
+      undefined,
+      "credit",
+      undefined,
+    ]);
+  });
+
+  it("classifies a validated obscure-label island without an exact direct-label seed", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "第一句歌词",
+      "混音&母带：Alice",
+      "原作信息如下：",
+      "曲绘：Bob",
+      "最后一句歌词",
+    ]), "netease", LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", undefined]);
+  });
+
+  it("recovers a leading block behind a bare title while leaving the title visible", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "草木青时",
+      "演唱：星尘Infinity",
+      "混音：落华",
+      "原作信息如下：",
+      "制作人：叶萱",
+      "第一句歌词",
+    ]), "netease", LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit", "credit", undefined]);
+  });
+
+  it.each([
+    ["本歌曲来自企划【天依游学记】", "netease"],
+    ["「一日还」 原创国风音乐企划", "kugou"],
+  ] as const)("classifies a bounded project attribution beside a validated block: %s", (attribution, provider) => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "最后一句歌词",
+      "混音&母带：Alice",
+      "录音棚：Studio",
+      attribution,
+    ]), provider, LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual([undefined, "credit", "credit", "credit"]);
+  });
+
+  it.each([
+    ["platform promotion", ["最后一句歌词", "本歌曲来自〖网易音乐人〗", "10亿现金激励！", "合作：st399@vip.163.com"]],
+    ["unanchored project wording", ["本歌曲来自企划【天依游学记】", "第一句歌词"]],
+  ] as const)("keeps %s visible", (_name, texts) => {
+    const result = markEmbeddedProviderInfo(lineLyrics([...texts]), "netease", LUO_TIAN_YI);
+    expect(kinds(result)).toEqual(Array(texts.length).fill(undefined));
+  });
+
+  it("keeps three-row gaps visible while retaining independently proven credits", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "作词：Alice",
+      "one",
+      "two",
+      "three",
+      "作曲：Bob",
+    ]), "netease", LUO_TIAN_YI);
+
+    expect(kinds(result)).toEqual(["credit", undefined, undefined, undefined, "credit"]);
+  });
+
   it.each([
     ["section heading", ["[Chorus]", "sing it again", "first lyric"]],
     ["duet and empty-value cues", ["Alice/Bob：", "Alice：hello", "Bob：world"]],
-    ["title inside a lyric line", ["今晚唱着乐鸣东方", "作词：Alice", "first lyric"]],
     ["colon lyric and dialogue", ["喧笑：突然安静", "甲：你好吗", "乙：我很好"]],
-    ["standalone credit", ["作词：Alice", "第一句歌词"]],
     ["unknown unanchored block", ["PGM: Alice", "DJ: Bob", "FOH+录音: Carol", "第一句歌词"]],
-    ["middle-song role run", ["第一句歌词", "作词：Alice", "作曲：Bob", "最后一句歌词"]],
     ["loose Lyricify er false positives", ["water: falling", "summer: rain", "第一句歌词"]],
     ["incomplete rights wording", ["最后一句歌词", "版权所有"]],
-    ["three-row continuation gap", ["作词：Alice", "one", "two", "three", "作曲：Bob"]],
   ])("abstains from %s", (_name, texts) => {
     const result = markEmbeddedProviderInfo(lineLyrics(texts), "netease", LUO_TIAN_YI);
     expect(kinds(result)).toEqual(Array(texts.length).fill(undefined));
