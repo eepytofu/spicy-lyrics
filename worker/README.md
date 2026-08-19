@@ -61,6 +61,8 @@ Successful responses are private and `no-store` in the browser. Cloudflare's edg
 
 Provider JSON can include `SourceMatch`, `ProviderCredits`, and `SongWriters`. `SourceMatch.discoveryEvidence` separately reports the strongest match for any requested artist and whether the provider's canonical title carries a conflicting version marker. Native lyric rows (`Lines[]`, `Content[]`, or `Content[].Lead`) can also carry an additive `ProviderInfoKind` value of `trackHeader`, `credit`, `rightsHolder`, `rightsNotice`, or `providerNotice`. The marker does not change provider text, timing, order, or source indices. Promotional provider notices are always omitted from display and copied text. Other embedded provider-info rows remain visible by default and can be hidden with the extension's **Hide Embedded Provider Info** setting. AMLL match metadata is URL-encoded in `X-Spicy-Lyrics-Match`.
 
+Provider lyric rows may also carry `VocalCue: { Label, Form }`, where `Form` is `labelColon` or `bracketedLabel`. The marker preserves the exact provider row and timing while letting the extension render speaker cues separately from credits. AMLL TTML agent metadata is parsed by the extension and does not pass through Worker cue heuristics.
+
 The Worker returns `400` for invalid metadata, `404` for an unknown route or no safe match, `426` for a stale request contract, `429` when an upstream provider rate-limits the request, `499` after client cancellation, `504` when a provider times out, and `502` when an upstream request or response fails validation.
 
 The Worker allows cross-origin `GET` and `OPTIONS`. It has no built-in authentication or rate limiting. Add Cloudflare controls before using it as a public high-traffic service.
