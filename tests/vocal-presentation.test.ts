@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   applyVocalPresentation,
@@ -139,4 +140,19 @@ test("presentation defaults show independent section and named-agent labels", ()
   } finally {
     Object.defineProperty(globalThis, "document", { configurable: true, value: originalDocument });
   }
+});
+
+test("provider vocal cues keep semantic datasets without special compact typography", () => {
+  const line = new FakeElement();
+  applyVocalPresentation(
+    line as unknown as HTMLElement,
+    document,
+    { VocalCue: { Label: "小月白", Form: "labelColon" } },
+    {},
+  );
+  assert.deepEqual(line.classNames, ["VocalCue"]);
+  assert.deepEqual(line.dataset, { vocalCueForm: "labelColon" });
+
+  const css = readFileSync(new URL("../src/css/Lyrics/main.css", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /\.line\.VocalCue\s*\{/u);
 });

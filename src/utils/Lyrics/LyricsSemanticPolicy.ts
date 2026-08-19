@@ -10,7 +10,7 @@ export function shouldExcludeFromLyricsMatching(entry: any, text: string): boole
 }
 
 export function shouldSkipGeneratedLyricsProcessing(entry: any): boolean {
-  return isProviderInfoEntry(entry) || isVocalCueEntry(entry);
+  return isProviderInfoEntry(entry);
 }
 
 export type LyricsDisplayPolicy = {

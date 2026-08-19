@@ -55,6 +55,7 @@ import {
   indexedVisibleLyricsEntries,
   shouldSkipGeneratedLyricsProcessing,
 } from "../../LyricsSemanticPolicy.ts";
+import { isVocalCueEntry } from "../../VocalSemantics.ts";
 import { applyVocalPresentation, type VocalPresentationState } from "../VocalPresentation.ts";
 
 // Define the data structure for syllable lyrics
@@ -476,7 +477,7 @@ export function ApplySyllableLyrics(
     applyVocalPresentation(
       lineElem,
       data,
-      skipGeneratedProcessing ? line.Lead : line,
+      isVocalCueEntry(line.Lead) ? line.Lead : line,
       vocalPresentationState,
       { showSongSections, showVocalistLabels },
     );

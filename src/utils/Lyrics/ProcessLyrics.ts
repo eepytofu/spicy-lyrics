@@ -96,8 +96,8 @@ import {
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v72: keep compatibility normalization in analysis without rewriting display text.
-export const LYRICS_PROCESSING_VERSION = 72;
+// v73: process typed vocal cues as ordinary lyric text while provider info remains excluded.
+export const LYRICS_PROCESSING_VERSION = 73;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 

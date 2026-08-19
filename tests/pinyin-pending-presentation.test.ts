@@ -48,16 +48,22 @@ test("line-timed backgrounds contribute to pending document routing", () => {
   assert.equal(isChineseDocumentPendingReading(lyrics), true);
 });
 
-test("provider-info and vocal-cue rows do not choose pending reading presentation", () => {
-  const lyrics = {
+test("provider-info stays out of pending readings while a vocal cue remains eligible", () => {
+  const providerInfoLyrics = {
     Type: "Line",
     Content: [
       { Text: "无大碍 没伤到脑袋", ProviderInfoKind: "credit" },
-      { Text: "女合：", VocalCue: { Label: "女合", Form: "labelColon" } },
-      { Text: "本当にすみません" },
-      { Text: "今日は大丈夫" },
+      { Text: "la la" },
     ],
   };
+  assert.equal(isChineseDocumentPendingReading(providerInfoLyrics), false);
 
-  assert.equal(isChineseDocumentPendingReading(lyrics), false);
+  const vocalCueLyrics = {
+    Type: "Line",
+    Content: [
+      { Text: "小月白：", VocalCue: { Label: "小月白", Form: "labelColon" } },
+      { Text: "la la" },
+    ],
+  };
+  assert.equal(isChineseDocumentPendingReading(vocalCueLyrics), true);
 });

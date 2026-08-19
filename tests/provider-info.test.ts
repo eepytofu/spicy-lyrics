@@ -49,9 +49,16 @@ test("provider-line consumer policies keep provider info and vocal cues as separ
     showVocalistLabels: true,
   }), true);
 
-  const cue = { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } };
+  const cue = {
+    Type: "Vocal",
+    Text: "小月白：",
+    StartTime: 35.489,
+    EndTime: 35.968,
+    OppositeAligned: false,
+    VocalCue: { Label: "小月白", Form: "labelColon" },
+  };
   assert.equal(isProviderInfoEntry(cue), false);
-  assert.equal(shouldSkipGeneratedLyricsProcessing(cue), true);
+  assert.equal(shouldSkipGeneratedLyricsProcessing(cue), false);
   assert.equal(shouldExcludeFromLyricsMatching(cue, cue.Text), true);
   assert.equal(shouldHideLyricsDisplayEntry(cue, {
     hideProviderInfo: false,
@@ -125,23 +132,23 @@ test("marked rows and the frozen legacy fallback do not contribute Smart Match e
   assert.equal(isProviderInfoMatchingEvidence({}, "water: falling"), false);
 });
 
-test("provider-info rows are excluded from Han conversion and translation inputs", () => {
+test("provider-info rows skip generated work while vocal cues use ordinary lyric processing", () => {
   const lyrics = {
     Type: "Static",
     Lines: [
       { Text: "作詞：繁體", ProviderInfoKind: "credit" },
-      { Text: "合：", VocalCue: { Label: "合", Form: "labelColon" } },
+      { Text: "小月白：", VocalCue: { Label: "小月白", Form: "labelColon" } },
       { Text: "風裡" },
     ],
   };
 
   convertChineseLyricsText(lyrics, "simplified", () => true);
   assert.equal(lyrics.Lines[0].Text, "作詞：繁體");
-  assert.equal(lyrics.Lines[1].Text, "合：");
+  assert.equal(lyrics.Lines[1].Text, "小月白：");
   assert.equal(lyrics.Lines[2].Text, "风里");
   assert.deepEqual(
     collectTranslationLineRefs(lyrics).map(({ sourceText }) => sourceText),
-    ["风里"],
+    ["小月白：", "风里"],
   );
 
   const timed = {
@@ -174,7 +181,7 @@ test("line-timed backgrounds remain translation inputs", () => {
   );
 });
 
-test("processing skips provider-info and vocal-cue rows before cleanup or readings", () => {
+test("processing skips provider-info rows before cleanup or readings", () => {
   const source = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
   assert.match(source, /for \(const line of lyrics\.Lines\) \{\s*if \(shouldSkipGeneratedLyricsProcessing\(line\)\) continue;\s*const textProjection = projectLyricsText/u);
   assert.match(source, /for \(const vocalGroup of lyrics\.Content\) \{\s*if \(shouldSkipGeneratedLyricsProcessing\(vocalGroup\)\) continue;/u);
@@ -218,6 +225,7 @@ test("format-specific render traversal preserves timing, backgrounds, and seek t
   assert.match(syllableSource, /line\.Background\.forEach\(\(bg\)/u);
   assert.match(syllableSource, /StartTime: ConvertTime\(bg\.StartTime\)/u);
   assert.match(syllableSource, /appendInterludeLine\([\s\S]*?nextLineStartTime/u);
+  assert.match(syllableSource, /isVocalCueEntry\(line\.Lead\) \? line\.Lead : line/u);
 });
 
 test("copy filtering keeps its Static, Line, and Syllable assembly paths", () => {

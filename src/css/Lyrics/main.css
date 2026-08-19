@@ -145,13 +145,7 @@ body:has(.Root:not(.global-nav))
   --DerivedTextBlurAmount: clamp(0px, calc(var(--BlurAmount, 0px) * 0.46), 3.25px);
 }
 
-/* Provider-authored speaker cues remain their original timed, seekable rows.
-   Typed TTML agents are a separate overline and never expose anonymous IDs. */
-#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line.VocalCue {
-  --font-size: calc(var(--DefaultLyricsSize) * 0.52);
-  letter-spacing: 0.02em;
-}
-
+/* Typed TTML agents are a separate overline and never expose anonymous IDs. */
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line .VocalAgentLabel {
   display: block;
   flex: 0 0 100%;
