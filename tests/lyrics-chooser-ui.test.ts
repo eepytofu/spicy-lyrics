@@ -33,6 +33,16 @@ test("chooser exposes compact all-provider metadata search from lyric controls",
 });
 
 test("chooser auto-loads candidate sources and keeps manual search playback-scoped", () => {
+  const loadCandidatesSource = externalSources.match(
+    /export async function loadLyricsCandidates[\s\S]*?(?=\nexport async function searchLyricsCandidates)/u
+  )?.[0] ?? "";
+  const searchCandidatesSource = externalSources.match(
+    /export async function searchLyricsCandidates[\s\S]*?(?=\nexport async function fetchLyricsFromProviders)/u
+  )?.[0] ?? "";
+  const foregroundSource = externalSources.match(
+    /export async function fetchLyricsFromProviders[\s\S]*$/u
+  )?.[0] ?? "";
+
   assert.match(
     chooser,
     /current\?\.ManualLyricsSelection === true \|\| localOverride \|\| !next\?\.alternativesLoaded/
@@ -50,9 +60,17 @@ test("chooser auto-loads candidate sources and keeps manual search playback-scop
   );
   assert.doesNotMatch(chooser, /const resultFallback = \{[\s\S]*?title: title\.trim\(\)/);
   assert.match(chooser, />Automatic</);
-  assert.match(externalSources, /searchLyricsCandidates/);
-  assert.match(externalSources, /\$lyricsSelectionMode\.get\(\) !== "strict"/);
-  assert.match(externalSources, /overrides:\s*normalizedOverrides/);
+  assert.match(fetchLyrics, /fetchLyricsFromProviders\(uri, providers, session\.signal\)/);
+  assert.match(
+    foregroundSource,
+    /nativeTitleEnrichment:\s*mode !== "strict"/u
+  );
+  assert.match(
+    loadCandidatesSource,
+    /nativeTitleEnrichment:\s*\$lyricsSelectionMode\.get\(\) !== "strict"/u
+  );
+  assert.match(searchCandidatesSource, /overrides:\s*normalizedOverrides/u);
+  assert.doesNotMatch(searchCandidatesSource, /nativeTitleEnrichment/u);
   assert.match(externalSources, /trackInfo\(uri, overrides\)/);
   assert.doesNotMatch(sources, /Last Selection/);
 });

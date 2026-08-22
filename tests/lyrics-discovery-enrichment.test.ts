@@ -3,7 +3,8 @@ import { test } from "node:test";
 import {
   acquireWithNativeTitleEnrichment,
   isAcceptedNativeTitleResult,
-  NATIVE_TITLE_ENRICHMENT_BUDGET_MS,
+  NATIVE_TITLE_ENRICHMENT_OUTER_DEADLINE_MS,
+  NATIVE_TITLE_RETRY_PHASE_LIMIT_MS,
   nativeTitleHint,
   nativeTitleRetryInfo,
   type NativeTitleHint,
@@ -382,9 +383,10 @@ test("starts every base request immediately and fills only approved no-match pro
   assert.equal(new Set(records.map((record) => record.provider)).size, records.length);
 });
 
-test("shared enrichment budget keeps completed retries and abandons slow retries", async () => {
+test("shared retry-phase limit keeps completed retries and abandons slow retries", async () => {
   let completedRetrySignal: AbortSignal | undefined;
   let slowRetrySignal: AbortSignal | undefined;
+  const startedAt = performance.now();
   const records = await acquireWithNativeTitleEnrichment(
     ["netease", "qq", "kugou"],
     "Shojo Rei",
@@ -409,17 +411,19 @@ test("shared enrichment budget keeps completed retries and abandons slow retries
         signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
       });
     },
-    { budgetMs: 500 },
+    { outerDeadlineMs: 1_000, retryPhaseLimitMs: 30 },
   );
 
+  assert.ok(performance.now() - startedAt < 500);
   assert.equal(completedRetrySignal, slowRetrySignal);
   assert.equal(slowRetrySignal?.aborted, true);
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "lyrics");
   assert.equal(records.find(({ provider }) => provider === "kugou")?.outcome.kind, "no-match");
 });
 
-test("retains a Shojo-shaped retry that completes inside the total transaction budget", async () => {
-  assert.equal(NATIVE_TITLE_ENRICHMENT_BUDGET_MS, 12_000);
+test("retains a Shojo-shaped retry that completes inside both latency limits", async () => {
+  assert.equal(NATIVE_TITLE_ENRICHMENT_OUTER_DEADLINE_MS, 12_000);
+  assert.equal(NATIVE_TITLE_RETRY_PHASE_LIMIT_MS, 5_000);
   const records = await acquireWithNativeTitleEnrichment(
     ["netease", "qq"],
     "Shojo Rei",
@@ -439,13 +443,13 @@ test("retains a Shojo-shaped retry that completes inside the total transaction b
       }
       return { kind: "no-match" };
     },
-    { budgetMs: 500 },
+    { outerDeadlineMs: 500, retryPhaseLimitMs: 100 },
   );
 
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "lyrics");
 });
 
-test("does not start a retry when its base no-match settles after the shared window", async () => {
+test("does not start a retry when its base no-match settles after the retry phase", async () => {
   const qqBase = deferred<ProviderAcquisitionOutcome<Result>>();
   let retryCalls = 0;
   const request = acquireWithNativeTitleEnrichment(
@@ -466,7 +470,7 @@ test("does not start a retry when its base no-match settles after the shared win
       }
       return qqBase.promise;
     },
-    { budgetMs: 15 },
+    { outerDeadlineMs: 500, retryPhaseLimitMs: 15 },
   );
 
   await new Promise((resolve) => setTimeout(resolve, 40));
@@ -477,7 +481,7 @@ test("does not start a retry when its base no-match settles after the shared win
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
 });
 
-test("counts NetEase hint discovery against the shared enrichment budget", async () => {
+test("counts NetEase hint discovery against the outer enrichment deadline", async () => {
   let retryCalls = 0;
   const records = await acquireWithNativeTitleEnrichment(
     ["netease", "qq"],
@@ -498,10 +502,45 @@ test("counts NetEase hint discovery against the shared enrichment budget", async
       }
       return { kind: "no-match" };
     },
-    { budgetMs: 100 },
+    { outerDeadlineMs: 100, retryPhaseLimitMs: 500 },
   );
 
   assert.equal(retryCalls, 0);
+  assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
+});
+
+test("outer deadline wins when a slow hint leaves less time than the retry phase", async () => {
+  let retrySignal: AbortSignal | undefined;
+  let retryStarted = false;
+  const startedAt = performance.now();
+  const records = await acquireWithNativeTitleEnrichment(
+    ["netease", "qq"],
+    "Shojo Rei",
+    async (provider, hint, signal) => {
+      if (hint) {
+        retryStarted = true;
+        retrySignal = signal;
+        return new Promise<ProviderAcquisitionOutcome<Result>>((resolve) => {
+          signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
+        });
+      }
+      if (provider === "netease") {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        return {
+          kind: "lyrics",
+          result: lyricsResult(match("少女レイ", {
+            evidence: { ...match("少女レイ").evidence!, title: 0 },
+          })),
+        };
+      }
+      return { kind: "no-match" };
+    },
+    { outerDeadlineMs: 500, retryPhaseLimitMs: 1_000 },
+  );
+
+  assert.equal(retryStarted, true);
+  assert.equal(retrySignal?.aborted, true);
+  assert.ok(performance.now() - startedAt < 800);
   assert.equal(records.find(({ provider }) => provider === "qq")?.outcome.kind, "no-match");
 });
 
@@ -530,7 +569,7 @@ test("parent cancellation aborts an active native-title retry", async () => {
         signal?.addEventListener("abort", () => resolve({ kind: "aborted" }), { once: true });
       });
     },
-    { signal: controller.signal, budgetMs: 1_000 },
+    { signal: controller.signal, outerDeadlineMs: 1_000 },
   );
 
   await retryStarted.promise;

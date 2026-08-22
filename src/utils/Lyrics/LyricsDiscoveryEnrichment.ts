@@ -12,11 +12,13 @@ const METADATA_WORKER_PROVIDERS = new Set<LyricsSourceProviderId>([
   "soda",
 ]);
 
-export const NATIVE_TITLE_ENRICHMENT_BUDGET_MS = 12_000;
+export const NATIVE_TITLE_ENRICHMENT_OUTER_DEADLINE_MS = 12_000;
+export const NATIVE_TITLE_RETRY_PHASE_LIMIT_MS = 5_000;
 
 export type NativeTitleEnrichmentOptions = {
   signal?: AbortSignal;
-  budgetMs?: number;
+  outerDeadlineMs?: number;
+  retryPhaseLimitMs?: number;
 };
 
 const CJK_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
@@ -133,7 +135,7 @@ type NativeTitleRetryWindow = {
 
 function createNativeTitleRetryWindow(
   parentSignal: AbortSignal | undefined,
-  remainingBudgetMs: number,
+  retryWindowMs: number,
 ): NativeTitleRetryWindow {
   const controller = new AbortController();
   let resolveAbort!: () => void;
@@ -143,8 +145,8 @@ function createNativeTitleRetryWindow(
   const onParentAbort = () => controller.abort(parentSignal?.reason);
   parentSignal?.addEventListener("abort", onParentAbort, { once: true });
   const timer = setTimeout(
-    () => controller.abort(new DOMException("Native-title enrichment budget expired", "TimeoutError")),
-    remainingBudgetMs,
+    () => controller.abort(new DOMException("Native-title retry window expired", "TimeoutError")),
+    retryWindowMs,
   );
 
   return {
@@ -167,8 +169,12 @@ export async function acquireWithNativeTitleEnrichment<Result extends Enrichable
   ) => Promise<ProviderAcquisitionOutcome<Result>>,
   options: NativeTitleEnrichmentOptions = {},
 ): Promise<Array<ProviderAcquisitionRecord<LyricsSourceProviderId, Result>>> {
-  const { signal, budgetMs = NATIVE_TITLE_ENRICHMENT_BUDGET_MS } = options;
-  const enrichmentDeadline = performance.now() + Math.max(0, budgetMs);
+  const {
+    signal,
+    outerDeadlineMs = NATIVE_TITLE_ENRICHMENT_OUTER_DEADLINE_MS,
+    retryPhaseLimitMs = NATIVE_TITLE_RETRY_PHASE_LIMIT_MS,
+  } = options;
+  const outerDeadlineAt = performance.now() + Math.max(0, outerDeadlineMs);
   const basePromises = order.map(async (provider, orderIndex) => ({
     provider,
     orderIndex,
@@ -182,9 +188,12 @@ export async function acquireWithNativeTitleEnrichment<Result extends Enrichable
   const hint = nativeTitleHint(originalTitle, neteaseRecord.outcome.result);
   if (!hint || signal?.aborted) return Promise.all(basePromises);
 
-  const remainingBudgetMs = enrichmentDeadline - performance.now();
-  if (remainingBudgetMs <= 0) return Promise.all(basePromises);
-  const retryWindow = createNativeTitleRetryWindow(signal, remainingBudgetMs);
+  const retryWindowMs = Math.min(
+    outerDeadlineAt - performance.now(),
+    Math.max(0, retryPhaseLimitMs),
+  );
+  if (retryWindowMs <= 0) return Promise.all(basePromises);
+  const retryWindow = createNativeTitleRetryWindow(signal, retryWindowMs);
   try {
     const retryPromises = order.map(async (provider, orderIndex) => {
       if (!nativeTitleRetryProvider(provider)) return null;
