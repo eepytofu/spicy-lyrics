@@ -107,11 +107,29 @@ export function projectJapaneseReadingToSource(
   const displayText = projectJapaneseText(authoredProjection.displayText, options);
   const textProjection = buildTextAnalysisProjection(displayText);
   const analysisDisplayText = reading.displayText ?? reading.sourceText;
-  if (!textProjection.coordinateSafe || textProjection.analysisText !== analysisDisplayText) {
+  if (!textProjection.coordinateSafe) {
     return undefined;
   }
+  let analysisOffset = 0;
+  if (textProjection.analysisText !== analysisDisplayText) {
+    const leadingWhitespace = textProjection.analysisText.match(/^\s*/u)?.[0] || "";
+    const trailingWhitespace = textProjection.analysisText.match(/\s*$/u)?.[0] || "";
+    const coreEnd = Math.max(
+      leadingWhitespace.length,
+      textProjection.analysisText.length - trailingWhitespace.length,
+    );
+    if (
+      textProjection.analysisText.slice(leadingWhitespace.length, coreEnd) !== analysisDisplayText
+    ) {
+      return undefined;
+    }
+    analysisOffset = leadingWhitespace.length;
+  }
   const furigana = reading.furigana.flatMap((segment) => {
-    const range = mapAnalysisUtf16RangeToDisplay(textProjection, segment);
+    const range = mapAnalysisUtf16RangeToDisplay(textProjection, {
+      start: segment.start + analysisOffset,
+      end: segment.end + analysisOffset,
+    });
     return range ? [{ ...segment, ...range }] : [];
   });
   return {

@@ -14,6 +14,7 @@ import {
   applyJapaneseReadingToSyllables,
   buildJapaneseLineTextMap,
   prepareJapaneseLineAnalysis,
+  projectJapaneseReadingToSource,
 } from "../src/utils/Lyrics/Reading/JapaneseReading.ts";
 import {
   ChineseProviderJapaneseTextProjection,
@@ -109,6 +110,56 @@ test("halfwidth Kana analysis maps following furigana back to provider text", as
   assert.deepEqual(
     syllable.JapaneseReading?.furigana.map(({ start, end, reading }) => ({ start, end, reading })),
     [{ start: 2, end: 4, reading: "とけい" }],
+  );
+});
+
+test("tsumetaimori timed words retain furigana beside authored spaces", async () => {
+  const syllables = [
+    { Text: "氷", StartTime: 155.53, EndTime: 157.19, IsPartOfWord: true },
+    { Text: "の", StartTime: 157.19, EndTime: 158.23, IsPartOfWord: true },
+    { Text: "花 ", StartTime: 158.23, EndTime: 159.85, IsPartOfWord: false },
+    { Text: "こ", StartTime: 159.85, EndTime: 159.98, IsPartOfWord: true },
+  ];
+  const mapped = buildJapaneseLineTextMap(syllables);
+  assert.equal(mapped.sourceText, "氷の花 こ");
+
+  await processJapanesePackageLine(mapped.sourceText, syllables, mapped.spans, syllables, {
+    analyzer: tokenAnalyzer(mapped.sourceText, [
+      { surface: "氷", readingKana: "コオリ" },
+      { surface: "の", readingKana: "ノ", partOfSpeech: "particle" },
+      { surface: "花", readingKana: "ハナ" },
+      { surface: " ", readingKana: "" },
+      { surface: "こ", readingKana: "コ" },
+    ]),
+    kanaRomanizer: (kana) =>
+      ({
+        こおり: "koori",
+        の: "no",
+        はな: "hana",
+        こ: "ko",
+      })[kana] || kana,
+  });
+
+  assert.equal(syllables[2].JapaneseReading?.sourceText, "花 ");
+  assert.deepEqual(
+    syllables[2].JapaneseReading?.furigana.map(({ start, end, reading }) => ({
+      start,
+      end,
+      reading,
+    })),
+    [{ start: 0, end: 1, reading: "はな" }],
+  );
+
+  assert.equal(
+    projectJapaneseReadingToSource(
+      {
+        sourceText: "花",
+        romaji: "hana",
+        furigana: [{ start: 0, end: 1, reading: "はな" }],
+      },
+      "花!",
+    ),
+    undefined,
   );
 });
 
