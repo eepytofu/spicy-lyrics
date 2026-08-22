@@ -49,12 +49,12 @@ Required query data:
 - `title`
 - one or more `artist_name` values
 - `duration` in seconds
-- `request_version=22`
+- `request_version=23`
 
 `album` is optional but can improve matching. The extension supplies these values automatically.
 
 ```text
-/v1/lyrics/qq/spotify-id?request_version=22&title=Song&artist_name=Artist&album=Album&duration=240
+/v1/lyrics/qq/spotify-id?request_version=23&title=Song&artist_name=Artist&album=Album&duration=240
 ```
 
 Successful responses are private and `no-store` in the browser. Cloudflare's edge cache can reuse them for one hour and serve stale data for one day when the origin fails. No-match results, invalid requests, cancellations, timeouts, rate limits, and upstream failures are not cached.
