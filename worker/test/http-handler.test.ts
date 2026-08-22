@@ -9,7 +9,7 @@ import { createWorkerHandler, parseTrackMetadata } from "../src/http/handler";
 import { ProviderRateLimitError, ProviderUpstreamError } from "../src/http/fetch";
 
 const trackQuery =
-  "?request_version=22&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
+  "?request_version=23&title=Song&artist_name=First&artist_name=Second&album=Album&duration=240";
 
 function adapters(
   provider: WorkerProviderId,
@@ -64,12 +64,12 @@ describe("Worker HTTP boundary", () => {
         )
       ).status,
     ).toBe(400);
-    expect((await handler(request("qq", "?request_version=22&title=Song&duration=240"))).status).toBe(400);
+    expect((await handler(request("qq", "?request_version=23&title=Song&duration=240"))).status).toBe(400);
   });
 
   it("rejects stale request contracts and oversized metadata", async () => {
     const handler = createWorkerHandler();
-    expect((await handler(request("qq", trackQuery.replace("request_version=22", "request_version=21")))).status).toBe(426);
+    expect((await handler(request("qq", trackQuery.replace("request_version=23", "request_version=22")))).status).toBe(426);
     expect((await handler(request("qq", `${trackQuery}&artist_name=${"x".repeat(257)}`))).status).toBe(400);
   });
 
@@ -117,7 +117,7 @@ describe("Worker HTTP boundary", () => {
     expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(response.headers.get("Cloudflare-CDN-Cache-Control")).toBe("public, max-age=3600, stale-if-error=86400");
-    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v22");
+    expect(response.headers.get("Cache-Tag")).toBe("spicy-lyrics-v23");
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(await response.json()).toMatchObject({
       Type: "Static",
@@ -128,6 +128,56 @@ describe("Worker HTTP boundary", () => {
         { Text: "ordinary lyric" },
       ],
     });
+  });
+
+  it("validates provider-reading evidence before serialization", async () => {
+    const baseLyrics = {
+      Type: "Static" as const,
+      Lines: [{ Text: "ordinary lyric" }],
+      source: "qq" as const,
+      fetchProvider: "qq" as const,
+      sourceDisplayName: "QQ Music",
+    };
+    const valid = await createWorkerHandler(adapters("qq", async () => ({
+      format: "json",
+      lyrics: {
+        ...baseLyrics,
+        ProviderReadingEvidence: {
+          schemaVersion: 1,
+          providerId: "qq",
+          lineReadings: [{
+            evidenceId: "qq:romanization:roma",
+            providerId: "qq",
+            evidenceKind: "romanization",
+            granularity: "line",
+            documentRole: "romanization",
+            container: "qrc",
+            responseField: "roma",
+            authorshipProvenance: "unknown",
+            derivation: "inferredKanaProjection",
+            rows: [{
+              exactValue: "exact ",
+              rowOrdinal: 0,
+              sourceRowOrdinal: 0,
+              alignment: "rowOrdinalProven",
+              validationStatus: "usable",
+            }],
+          }],
+        },
+      },
+    })))(request());
+    expect(valid.status).toBe(200);
+    expect(((await valid.json()) as any).ProviderReadingEvidence.lineReadings[0].rows[0].exactValue)
+      .toBe("exact ");
+
+    const invalid = await createWorkerHandler(adapters("qq", async () => ({
+      format: "json",
+      lyrics: {
+        ...baseLyrics,
+        ProviderReadingEvidence: { schemaVersion: 1, providerId: "kugou" },
+      },
+    })))(request());
+    expect(invalid.status).toBe(502);
   });
 
   it("serializes AMLL TTML and match metadata", async () => {

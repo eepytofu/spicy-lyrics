@@ -2,7 +2,12 @@ import { inflateSync } from "node:zlib";
 import { toSyllableLyrics } from "../convert";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import { providerLineSemanticContext } from "../provider-info";
-import type { LyricsProvider, TimedLine } from "../types";
+import {
+  kugouPhoneticLanes,
+  parseProviderKanaLayer,
+  providerReadingEvidence,
+} from "../provider-readings";
+import type { LyricsProvider, ProviderLineReadingLane, TimedLine } from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, normalize, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed, versionTags, type CandidateAssessment } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
@@ -22,12 +27,25 @@ function krcSidecarText(row: unknown): string | undefined {
   return parts.length ? parts.join("") : undefined;
 }
 
+export function parseKrcLanguage(value: string): Record<string, unknown> | undefined {
+  const encoded = /^\[language:(.+)\]$/m.exec(value)?.[1];
+  if (!encoded) return undefined;
+  try {
+    const decoded = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+    return typeof decoded === "object" && decoded !== null && !Array.isArray(decoded)
+      ? decoded
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseKrc(value: string): TimedLine[] {
   const translations: string[][] = []; const romanizations: string[][] = [];
-  const language = /^\[language:(.+)\]$/m.exec(value)?.[1];
-  if (language) try {
-    const data = JSON.parse(Buffer.from(language, "base64").toString("utf8"));
-    for (const entry of data?.content ?? []) {
+  const data = parseKrcLanguage(value);
+  if (data) try {
+    const content = Array.isArray(data.content) ? data.content : [];
+    for (const entry of content) {
       if (entry.type === 1) translations.push(...(entry.lyricContent ?? []));
       if (entry.type === 0) romanizations.push(...(entry.lyricContent ?? []));
     }
@@ -40,18 +58,70 @@ export function parseKrc(value: string): TimedLine[] {
     const sidecarIndex = timedRowIndex;
     timedRowIndex += 1;
     const lineStart = Math.max(0, Number(header[1]) + offset);
-    const words = parseLeadingTimedWords(header[3], /<(\d+),(\d+),(?:\d+)>/g, lineStart);
+    const words = parseLeadingTimedWords(
+      header[3],
+      /<(\d+),(\d+),(?:\d+)>/g,
+      lineStart,
+      (text) => text,
+      Number(header[1]),
+    );
     if (words.length) {
-      lines.push({
+      const line: TimedLine = {
         startMs: lineStart,
         durationMs: Number(header[2]),
         words,
         translation: krcSidecarText(translations[sidecarIndex]),
         romanization: krcSidecarText(romanizations[sidecarIndex]),
+      };
+      Object.defineProperty(line, "sourceRowOrdinal", {
+        value: sidecarIndex,
+        enumerable: false,
       });
+      lines.push(line);
     }
   }
   return lines;
+}
+
+export function kugouLineReadings(
+  lines: readonly TimedLine[],
+  value: string,
+): ProviderLineReadingLane[] {
+  const data = parseKrcLanguage(value);
+  const entries = Array.isArray(data?.content) ? data.content : [];
+  const targetBySourceRow = new Map(
+    lines.map((line, rowOrdinal) => [line.sourceRowOrdinal ?? rowOrdinal, rowOrdinal] as const),
+  );
+  return entries.flatMap((entry: any, laneIndex: number): ProviderLineReadingLane[] => {
+    if (entry?.type !== 0 || !Array.isArray(entry?.lyricContent)) return [];
+    const rows = entry.lyricContent.map((row: unknown, sourceRowOrdinal: number) => {
+      const exactValue = Array.isArray(row)
+        ? row.filter((cell): cell is string => typeof cell === "string").join("")
+        : "";
+      const targetRowOrdinal = targetBySourceRow.get(sourceRowOrdinal);
+      return {
+        exactValue,
+        ...(targetRowOrdinal !== undefined ? { rowOrdinal: targetRowOrdinal } : {}),
+        sourceRowOrdinal,
+        alignment: targetRowOrdinal !== undefined ? "rowOrdinalProven" : "unmatched",
+        validationStatus: exactValue ? "usable" : "explicitEmpty",
+      };
+    });
+    return [{
+      evidenceId: `kugou:transliteration:${laneIndex}`,
+      providerId: "kugou",
+      evidenceKind: "transliteration",
+      granularity: "line",
+      documentRole: "romanization",
+      container: "krc",
+      responseField: "language.content[type=0]",
+      rawProviderKind: 0,
+      rawLanguage: Number.isInteger(entry.language) ? Number(entry.language) : null,
+      authorshipProvenance: "unknown",
+      derivation: "unknown",
+      rows,
+    }];
+  });
 }
 
 export type KugouSong = {
@@ -265,7 +335,20 @@ export const kugouProvider: LyricsProvider = async (track, context = {}) => {
       throwIfAborted(context.signal);
       if (!isKugouCandidateAssessmentCompatible(track, song, candidate, assessment, catalogAssessment)) continue;
       const raw = await fetchKugouKrc(candidate, context.signal); if (!raw) continue;
-      const result = toSyllableLyrics(parseKrc(raw), "kugou", providerLineSemanticContext(track, song, raw));
+      const lines = parseKrc(raw);
+      const language = parseKrcLanguage(raw);
+      const kanaLayer = parseProviderKanaLayer(raw, lines, "kugou", "krc", lyricOffset(raw));
+      const result = toSyllableLyrics(
+        lines,
+        "kugou",
+        providerLineSemanticContext(track, song, raw),
+        providerReadingEvidence(
+          "kugou",
+          kanaLayer,
+          kugouPhoneticLanes(language?.contentV2),
+          kugouLineReadings(lines, raw),
+        ),
+      );
       const ProviderCredits = dedupeProviderCredits([extractByCredit(raw, "lyrics", "kugou")]);
       if (result) return {
         ...result,

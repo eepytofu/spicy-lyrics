@@ -7,8 +7,9 @@ import type { ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
 import type { ProviderSidecar } from "../TtmlSemantics.ts";
 import type { VocalAgents, VocalCue } from "../VocalSemantics.ts";
+import type { ProviderReadingEvidence } from "../ProviderReadingEvidence.ts";
 
-export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 7;
+export const SOURCE_LYRIC_DOCUMENT_SCHEMA_VERSION = 8;
 
 export type SourceDocumentTimingOwner = {
   readonly id: string;
@@ -46,6 +47,7 @@ export type SourceLyricDocument = {
   };
   readonly providerLanguage?: string;
   readonly vocalAgents?: Readonly<VocalAgents>;
+  readonly providerReadings?: ProviderReadingEvidence;
   readonly lines: readonly SourceDocumentLine[];
   readonly provenance: "sourceEvidenceAdapter";
 };
@@ -140,6 +142,7 @@ export function sourceLyricDocumentFromEvidence(
     ...(provider ? { provider } : {}),
     ...(evidence.providerLanguage ? { providerLanguage: evidence.providerLanguage } : {}),
     ...(vocalAgents ? { vocalAgents } : {}),
+    ...(evidence.providerReadings ? { providerReadings: evidence.providerReadings } : {}),
     lines,
     provenance: "sourceEvidenceAdapter",
   });
@@ -164,6 +167,9 @@ export function compareSourceDocumentToEvidence(
   }
   if (JSON.stringify(document.vocalAgents) !== JSON.stringify(evidence.vocalAgents)) {
     errors.push("vocal-agents");
+  }
+  if (JSON.stringify(document.providerReadings) !== JSON.stringify(evidence.providerReadings)) {
+    errors.push("provider-readings");
   }
   if (document.lines.length !== evidence.lines.length) {
     errors.push(`lines:length:${document.lines.length}!=${evidence.lines.length}`);

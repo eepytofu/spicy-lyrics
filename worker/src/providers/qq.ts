@@ -1,9 +1,18 @@
 import { inflateSync } from "node:zlib";
-import { attachSidecars, attachTimedSidecars, toSyllableLyrics } from "../convert";
+import { attachSidecars, toSyllableLyrics } from "../convert";
 import { decryptQrcBytes } from "../crypto/qrc-eslyric";
 import { dedupeProviderCredits, extractByCredit } from "../credits";
 import { providerLineSemanticContext } from "../provider-info";
-import type { LyricsProvider, TimedLine } from "../types";
+import {
+  parseProviderKanaLayer,
+  providerReadingEvidence,
+} from "../provider-readings";
+import type {
+  LyricsProvider,
+  ProviderLayerProvenance,
+  ProviderLineReadingLane,
+  TimedLine,
+} from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, readResponseText, searchQueries, simplify, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseTrailingTimedWords } from "./timed";
 
@@ -34,27 +43,109 @@ export function qrcContent(value: string | undefined): string | undefined {
 export function parseQrc(value: string): TimedLine[] {
   const lines: TimedLine[] = [];
   const offset = lyricOffset(value);
+  let sourceRowOrdinal = 0;
   for (const row of value.split(/\r?\n/)) {
     const header = /^\[(\d+),(\d+)\](.*)$/.exec(row.trim()); if (!header) continue;
+    const currentSourceRowOrdinal = sourceRowOrdinal;
+    sourceRowOrdinal += 1;
     // Only a complete numeric tuple is syntax. Literal parentheses and other
     // punctuation remain in the text slice before that tuple.
-    const words = parseTrailingTimedWords(header[3], /\((\d+),(\d+)\)/g, offset, decodeEntities);
-    if (words.length) lines.push({
-      startMs: Math.max(0, Number(header[1]) + offset),
-      durationMs: Number(header[2]),
-      words,
-    });
+    const words = parseTrailingTimedWords(header[3], /\((\d+),(\d+)\)/g, offset, decodeEntities, 0);
+    if (words.length) {
+      const line: TimedLine = {
+        startMs: Math.max(0, Number(header[1]) + offset),
+        durationMs: Number(header[2]),
+        words,
+      };
+      Object.defineProperty(line, "sourceRowOrdinal", {
+        value: currentSourceRowOrdinal,
+        enumerable: false,
+      });
+      lines.push(line);
+    }
   }
   return lines;
 }
 
-function attachQqSidecars(lines: TimedLine[], translation?: string, romanization?: string): TimedLine[] {
+export function attachQqSidecars(lines: TimedLine[], translation?: string, romanization?: string): TimedLine[] {
   const translationLines = translation ? parseQrc(translation) : [];
   const romanizationLines = romanization ? parseQrc(romanization) : [];
   if (translationLines.length || romanizationLines.length) {
-    return attachTimedSidecars(lines, translationLines, romanizationLines);
+    const exactText = (line: TimedLine | undefined): string | undefined =>
+      line ? line.words.map((word) => word.text).join("") : undefined;
+    const bySourceRow = (sidecars: TimedLine[]): Map<number, TimedLine> =>
+      new Map(sidecars.map((line, index) => [line.sourceRowOrdinal ?? index, line] as const));
+    const translationsByRow = bySourceRow(translationLines);
+    const romanizationsByRow = bySourceRow(romanizationLines);
+    const fallback = attachSidecars(
+      lines,
+      translationLines.length ? undefined : translation,
+      romanizationLines.length ? undefined : romanization,
+    );
+    return fallback.map((line, rowOrdinal) => {
+      const sourceRowOrdinal = lines[rowOrdinal]?.sourceRowOrdinal ?? rowOrdinal;
+      const translationValue = exactText(translationsByRow.get(sourceRowOrdinal)) ?? line.translation;
+      const romanizationValue = exactText(romanizationsByRow.get(sourceRowOrdinal)) ?? line.romanization;
+      return {
+        ...line,
+        ...(translationValue !== undefined ? { translation: translationValue } : {}),
+        ...(romanizationValue !== undefined ? { romanization: romanizationValue } : {}),
+      };
+    });
   }
   return attachSidecars(lines, translation, romanization);
+}
+
+export function qqLineReadings(
+  lines: readonly TimedLine[],
+  romanization: string | undefined,
+  responseField: "roma" | "contentroma" = "roma",
+): ProviderLineReadingLane[] {
+  if (!romanization) return [];
+  const offset = lyricOffset(romanization);
+  const targetBySourceRow = new Map(
+    lines.map((line, rowOrdinal) => [line.sourceRowOrdinal ?? rowOrdinal, rowOrdinal] as const),
+  );
+  const rows: ProviderLineReadingLane["rows"][number][] = [];
+  let sourceRowOrdinal = 0;
+  for (const row of romanization.split(/\r?\n/u)) {
+    const header = /^\[(\d+),(\d+)\](.*)$/u.exec(row.trim());
+    if (!header) continue;
+    const currentSourceRowOrdinal = sourceRowOrdinal;
+    sourceRowOrdinal += 1;
+    const parsedWords = parseTrailingTimedWords(
+      header[3],
+      /\((\d+),(\d+)\)/gu,
+      offset,
+      decodeEntities,
+      0,
+    );
+    const exactValue = parsedWords.length
+      ? parsedWords.map((word) => word.text).join("")
+      : decodeEntities(header[3]);
+    const targetRowOrdinal = targetBySourceRow.get(currentSourceRowOrdinal);
+    rows.push({
+      exactValue,
+      ...(targetRowOrdinal !== undefined ? { rowOrdinal: targetRowOrdinal } : {}),
+      sourceRowOrdinal: currentSourceRowOrdinal,
+      rawStartMs: Number(header[1]),
+      effectiveStartMs: Math.max(0, Number(header[1]) + offset),
+      alignment: targetRowOrdinal !== undefined ? "rowOrdinalProven" : "unmatched",
+      validationStatus: exactValue ? "usable" : "explicitEmpty",
+    });
+  }
+  return rows.length ? [{
+    evidenceId: `qq:romanization:${responseField}`,
+    providerId: "qq",
+    evidenceKind: "romanization",
+    granularity: "line",
+    documentRole: "romanization",
+    container: "qrc",
+    responseField,
+    authorshipProvenance: "unknown",
+    derivation: "inferredKanaProjection",
+    rows,
+  }] : [];
 }
 
 type SearchSong = {
@@ -66,7 +157,79 @@ type SearchSong = {
   album: string;
   durationMs?: number;
 };
-type QqLyricBundle = { primary?: string; translation?: string; romanization?: string };
+type QqLyricBundle = {
+  primary?: string;
+  translation?: string;
+  romanization?: string;
+  layerProvenance: ProviderLayerProvenance[];
+  romanizationResponseField: "roma" | "contentroma";
+};
+
+function provenanceFlag(
+  name: string,
+  value: unknown,
+): ProviderLayerProvenance["sourceFlags"][number] | undefined {
+  return ["string", "number", "boolean"].includes(typeof value)
+    ? { name, exactValue: value as string | number | boolean }
+    : undefined;
+}
+
+function modernQqLayerProvenance(data: any): ProviderLayerProvenance[] {
+  const layer = (
+    role: ProviderLayerProvenance["role"],
+    revision: unknown,
+    flags: Array<[string, unknown]>,
+  ): ProviderLayerProvenance => ({
+    role,
+    ...(revision !== undefined && revision !== null ? { revision: String(revision) } : {}),
+    contributors: [],
+    sourceFlags: flags.flatMap(([name, value]) => {
+      const flag = provenanceFlag(name, value);
+      return flag ? [flag] : [];
+    }),
+  });
+  return [
+    ...(String(data?.lyric ?? "").trim()
+      ? [layer("primary", data?.qrc_t ?? data?.lrc_t, [["hasContributor", data?.hasContributor], ["qrc", data?.qrc], ["crypt", data?.crypt]])]
+      : []),
+    ...(String(data?.trans ?? "").trim()
+      ? [layer("translation", data?.trans_t, [["hasTransContributor", data?.hasTransContributor], ["transSource", data?.transSource]])]
+      : []),
+    ...(String(data?.roma ?? "").trim() ? [layer("romanization", data?.roma_t, [])] : []),
+  ];
+}
+
+function xmlAttribute(attributes: string, name: string): string | undefined {
+  const match = new RegExp(`\\b${name}\\s*=\\s*["']([^"']*)["']`, "iu").exec(attributes);
+  return match ? decodeEntities(match[1]) : undefined;
+}
+
+function legacyQqLayerProvenance(xml: string): ProviderLayerProvenance[] {
+  const contributorBlock = /<adoptuser\b([^>]*)>([\s\S]*?)<\/adoptuser>/iu.exec(xml);
+  const contributorId = contributorBlock ? xmlAttribute(contributorBlock[1], "id") : undefined;
+  const contributorUin = contributorBlock
+    ? /<uin\b[^>]*>([\s\S]*?)<\/uin>/iu.exec(contributorBlock[2])?.[1]
+    : undefined;
+  const contributors: ProviderLayerProvenance["contributors"] = [
+    ...(contributorId !== undefined ? [{ kind: "userId" as const, exactValue: contributorId }] : []),
+    ...(contributorUin !== undefined ? [{ kind: "uin" as const, exactValue: decodeEntities(contributorUin) }] : []),
+  ];
+  return ([
+    ["primary", "content"],
+    ["translation", "contentts"],
+    ["romanization", "contentroma"],
+  ] as const).flatMap(([role, tag]): ProviderLayerProvenance[] => {
+    const opening = new RegExp(`<${tag}\\b([^>]*)>`, "iu").exec(xml);
+    if (!opening) return [];
+    const revision = xmlAttribute(opening[1], "timetag");
+    return [{
+      role,
+      ...(revision !== undefined ? { revision } : {}),
+      contributors: contributors.map((entry) => ({ ...entry })),
+      sourceFlags: [],
+    }];
+  });
+}
 
 function assessSearchSong(track: Parameters<LyricsProvider>[0], song: SearchSong) {
   return assessCandidate(track, {
@@ -275,6 +438,8 @@ export async function fetchQqLegacyLyrics(song: SearchSong, signal?: AbortSignal
     primary: decodeQqLyricField(extractLegacyQqField(xml, "content")),
     translation: decodeQqLyricField(extractLegacyQqField(xml, "contentts")),
     romanization: decodeQqLyricField(extractLegacyQqField(xml, "contentroma")),
+    layerProvenance: legacyQqLayerProvenance(xml),
+    romanizationResponseField: "contentroma" as const,
   };
   return bundle.primary || bundle.translation || bundle.romanization ? bundle : undefined;
 }
@@ -284,15 +449,34 @@ function bundleFromPlayPayload(data: any): QqLyricBundle {
     primary: qrcContent(decryptQrc(data?.lyric ?? "")),
     translation: qrcContent(decryptQrc(data?.trans ?? "")),
     romanization: qrcContent(decryptQrc(data?.roma ?? "")),
+    layerProvenance: modernQqLayerProvenance(data),
+    romanizationResponseField: "roma",
   };
 }
 
 function convertQqBundle(track: Parameters<LyricsProvider>[0], song: SearchSong, bundle: QqLyricBundle, method: string) {
   if (!bundle.primary) return undefined;
+  const parsedLines = parseQrc(bundle.primary);
+  const lines = attachQqSidecars(parsedLines, bundle.translation, bundle.romanization);
+  const kanaLayer = parseProviderKanaLayer(
+    bundle.primary,
+    parsedLines,
+    "qq",
+    "qrc",
+    lyricOffset(bundle.primary),
+    bundle.translation,
+  );
   const result = toSyllableLyrics(
-    attachQqSidecars(parseQrc(bundle.primary), bundle.translation, bundle.romanization),
+    lines,
     "qq",
     providerLineSemanticContext(track, song, bundle.primary),
+    providerReadingEvidence(
+      "qq",
+      kanaLayer,
+      [],
+      qqLineReadings(parsedLines, bundle.romanization, bundle.romanizationResponseField),
+      bundle.layerProvenance,
+    ),
   );
   const ProviderCredits = dedupeProviderCredits([
     extractByCredit(bundle.primary, "lyrics", "qq"),

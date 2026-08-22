@@ -60,6 +60,7 @@ import {
   nativeTitleRetryInfo,
   type NativeTitleHint,
 } from "./LyricsDiscoveryEnrichment.ts";
+import { cloneProviderReadingEvidenceForProvider } from "./ProviderReadingEvidence.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -110,7 +111,25 @@ function stamp(lyrics: any, provider: LyricsSourceProviderId, displayName?: stri
   if (!lyrics || !["Static", "Line", "Syllable"].includes(lyrics.Type)) return null;
   const directMatch = ["spicy", "apple", "spotify"].includes(provider) ? { confidence: 1, method: "spotify-id" } : undefined;
   const sourceMatch = match ?? lyrics.SourceMatch ?? directMatch;
-  return { lyrics: { ...lyrics, SourceMatch: sourceMatch, source: lyrics.source || provider, fetchProvider: provider, sourceDisplayName: resolveLyricsSourceLabel(lyrics.source || provider, displayName || lyrics.sourceDisplayName, provider) }, status: 200, match: sourceMatch };
+  const source = lyrics.source || provider;
+  const evidence = cloneProviderReadingEvidenceForProvider(lyrics.ProviderReadingEvidence, source);
+  const { ProviderReadingEvidence: _untrustedEvidence, ...rest } = lyrics;
+  return {
+    lyrics: {
+      ...rest,
+      ...(evidence ? { ProviderReadingEvidence: evidence } : {}),
+      SourceMatch: sourceMatch,
+      source,
+      fetchProvider: provider,
+      sourceDisplayName: resolveLyricsSourceLabel(
+        source,
+        displayName || lyrics.sourceDisplayName,
+        provider,
+      ),
+    },
+    status: 200,
+    match: sourceMatch,
+  };
 }
 
 async function spicyRaw(id: string): Promise<{ data: any | null; status: number }> {

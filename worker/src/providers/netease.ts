@@ -2,7 +2,18 @@ import { AES, ECB, Hex, Latin1, MD5, Utf8 } from "crypto-es";
 import { attachSidecars, parseLrc, toLineLyricsFromRows, toStaticLyricsFromRows, toSyllableLyrics, type LineLyricsRow, type StaticLyricsRow } from "../convert";
 import { cleanCreditName, dedupeProviderCredits, extractByCredit } from "../credits";
 import { providerLineSemanticContext } from "../provider-info";
-import type { LyricsProvider, ProviderCredit, ProviderCreditRole, TimedLine } from "../types";
+import {
+  exactTimedLineReadings,
+  providerLineReadingLane,
+  providerReadingEvidence,
+} from "../provider-readings";
+import type {
+  LyricsProvider,
+  ProviderCredit,
+  ProviderCreditRole,
+  ProviderLayerProvenance,
+  TimedLine,
+} from "../types";
 import { assessAndRankCandidates, assessCandidate, fetchWithTimeout, hasInstrumentalVersionConflict, isAcceptableCandidate, isStrongCandidate, matchMetadata, readResponseJson, searchQueries, throwIfAborted, throwIfProviderRequestFailed } from "./shared";
 import { lyricOffset, parseLeadingTimedWords } from "./timed";
 
@@ -298,6 +309,24 @@ function neteaseUserCredit(value: any, role: ProviderCreditRole): ProviderCredit
   };
 }
 
+function neteaseRomanizationProvenance(body: any, lane: any): ProviderLayerProvenance[] {
+  const contributors: ProviderLayerProvenance["contributors"] = [];
+  const rawUserId = body?.romaUser?.userid;
+  if (typeof rawUserId === "number" || typeof rawUserId === "string")
+    contributors.push({ kind: "userId", exactValue: String(rawUserId) });
+  if (typeof body?.romaUser?.nickname === "string")
+    contributors.push({ kind: "name", exactValue: body.romaUser.nickname });
+  const revision = lane?.version;
+  return [{
+    role: "romanization",
+    ...(typeof revision === "number" || typeof revision === "string"
+      ? { revision: String(revision) }
+      : {}),
+    contributors,
+    sourceFlags: [],
+  }];
+}
+
 export function neteaseProviderCredits(body: any): ProviderCredit[] {
   const lyricText = body?.yrc?.lyric ?? body?.lrc?.lyric;
   const translationText = body?.ytlrc?.lyric ?? body?.tlyric?.lyric;
@@ -361,8 +390,31 @@ export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
     const yrc = body?.yrc?.lyric;
     if (typeof yrc === "string" && yrc.trim()) {
       const parsed = parseNeteaseYrc(yrc);
-      const lines = attachSidecars(parsed.lines, body?.ytlrc?.lyric ?? body?.tlyric?.lyric, body?.yromalrc?.lyric ?? body?.romalrc?.lyric);
-      const result = toSyllableLyrics(lines, "netease", infoContext);
+      const romanization = body?.yromalrc?.lyric ?? body?.romalrc?.lyric;
+      const romanizationLane = body?.yromalrc?.lyric ? body.yromalrc : body?.romalrc;
+      const lines = attachSidecars(
+        parsed.lines,
+        body?.ytlrc?.lyric ?? body?.tlyric?.lyric,
+        romanization,
+      );
+      const readingRows = exactTimedLineReadings(parsed.lines, romanization);
+      const lineReadings = readingRows.length ? [providerLineReadingLane({
+        evidenceId: "netease:romanization:yromalrc",
+        providerId: "netease",
+        evidenceKind: "romanization",
+        container: "yrc",
+        responseField: body?.yromalrc?.lyric ? "yromalrc" : "romalrc",
+        authorshipProvenance: "unknown",
+        derivation: "unknown",
+      }, readingRows)] : [];
+      const evidence = providerReadingEvidence(
+        "netease",
+        undefined,
+        [],
+        lineReadings,
+        neteaseRomanizationProvenance(body, romanizationLane),
+      );
+      const result = toSyllableLyrics(lines, "netease", infoContext, evidence);
       if (result) return {
         ...result,
         ...(parsed.songWriters.length ? { SongWriters: parsed.songWriters } : {}),
@@ -380,16 +432,35 @@ export const neteaseProvider: LyricsProvider = async (track, context = {}) => {
     }
     if (typeof body?.lrc?.lyric === "string") {
       const parsed = parseNeteaseLrc(body.lrc.lyric);
+      const romanization = body?.romalrc?.lyric;
+      const readingRows = exactTimedLineReadings(parsed.lines, romanization);
+      const lineReadings = readingRows.length ? [providerLineReadingLane({
+        evidenceId: "netease:romanization:romalrc",
+        providerId: "netease",
+        evidenceKind: "romanization",
+        container: "lrc",
+        responseField: "romalrc",
+        authorshipProvenance: "unknown",
+        derivation: "unknown",
+      }, readingRows)] : [];
+      const evidence = providerReadingEvidence(
+        "netease",
+        undefined,
+        [],
+        lineReadings,
+        neteaseRomanizationProvenance(body, body?.romalrc),
+      );
       const result = parsed.lines.length
         ? toLineLyricsFromRows(
           parsed.lines,
           song.durationMs ?? track.durationMs,
           "netease",
           body?.tlyric?.lyric,
-          body?.romalrc?.lyric,
+          romanization,
           infoContext,
+          evidence,
         )
-        : toStaticLyricsFromRows(parsed.staticLines, "netease", infoContext);
+        : toStaticLyricsFromRows(parsed.staticLines, "netease", infoContext, evidence);
       if (result) return {
         ...result,
         ...(parsed.songWriters.length ? { SongWriters: parsed.songWriters } : {}),

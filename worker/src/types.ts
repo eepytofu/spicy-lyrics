@@ -42,11 +42,167 @@ export type TrackMetadata = {
   durationMs: number;
 };
 
-export type TimedWord = { text: string; startMs: number; durationMs: number };
+export type ProviderReadingFinding =
+  | "walkNotClosed"
+  | "truncatedLine"
+  | "extraEntries"
+  | "zeroCount"
+  | "oversizeCount"
+  | "emptyReadingWithGroup"
+  | "groupSpansToken"
+  | "groupSpansRow"
+  | "readingContainsNonKana"
+  | "malformedTimingGroup"
+  | "partialSubTiming"
+  | "anchorMismatch"
+  | "spanEndOutOfTolerance"
+  | "nonMonotonicTiming"
+  | "overlappingTiming"
+  | "zeroDurationTiming"
+  | "duplicateKanaLine"
+  | "redundantLayerMismatch"
+  | "unknownSourceUnit";
+
+export type ProviderKanaTime = { startMs: number; durationMs: number };
+
+export type ProviderKanaTiming = {
+  state: "timingProven" | "timingAbsent" | "timingRejected";
+  offsetMs: number;
+  rawBaseStartMs: number;
+  effectiveBaseStartMs: number;
+  baseDurationMs: number;
+  rawKana: ProviderKanaTime[];
+  effectiveKana: ProviderKanaTime[];
+  spanEndDeltaMs?: number;
+  internalGaps: Array<{ afterKanaIndex: number; gapMs: number }>;
+};
+
+export type ProviderKanaUnit = {
+  ordinal: number;
+  groupId: string;
+  groupSize: number;
+  groupRole: "sole" | "groupHead" | "groupMember";
+  source: {
+    rowOrdinal: number;
+    tokenOrdinal: number;
+    utf16Start: number;
+    utf16End: number;
+    codePointCount: number;
+    exactSourceSlice: string;
+  };
+  groupSource?: {
+    rowOrdinal: number;
+    tokenOrdinal: number;
+    utf16Start: number;
+    utf16End: number;
+    readingUnitCount: number;
+    codePointCount: number;
+    exactSourceSlice: string;
+  };
+  coverage: "covered" | "explicitEmpty";
+  reading?: string;
+  timing: ProviderKanaTiming;
+  findings: ProviderReadingFinding[];
+};
+
+export type ProviderKanaLayer = {
+  transport: {
+    providerId: "qq" | "kugou";
+    container: "qrc" | "krc";
+    documentRole: "primary";
+    responseField: "lyric";
+    rawLine: string;
+    rawLineSha256: string;
+    rawLineByteLength: number;
+  };
+  authorship: { declaredAuthor?: string; authorshipProvenance: "unknown" };
+  derivation: {
+    redundantCopies: Array<{
+      documentRole: "translation";
+      identicalWithoutTimings: boolean;
+    }>;
+    layersDerivedFromThis: Array<{
+      documentRole: "romanization";
+      relationship: "inferredDerivation";
+    }>;
+  };
+  validation: {
+    walkState: "ordinalUnitProven" | "walkNotClosed" | "layerRejected";
+    declaredUnitCount: number;
+    resolvedUnitCount: number;
+    findings: ProviderReadingFinding[];
+  };
+  units: ProviderKanaUnit[];
+};
+
+export type ProviderLineReadingRow = {
+  exactValue: string;
+  rowOrdinal?: number;
+  sourceRowOrdinal?: number;
+  rawStartMs?: number;
+  effectiveStartMs?: number;
+  alignment: "rowOrdinalProven" | "exactTimestamp" | "unmatched" | "ambiguous";
+  validationStatus: "usable" | "explicitEmpty";
+};
+
+export type ProviderLineReadingLane = {
+  evidenceId: string;
+  providerId: ProviderId;
+  evidenceKind: "romanization" | "transliteration";
+  granularity: "line";
+  documentRole: "romanization";
+  container: "qrc" | "krc" | "lrc" | "yrc";
+  responseField: "roma" | "contentroma" | "language.content[type=0]" | "yromalrc" | "romalrc";
+  rawProviderKind?: number;
+  rawLanguage?: number | null;
+  authorshipProvenance: "unknown" | "providerDeclaredHuman" | "providerDeclaredGenerated";
+  derivation: "independent" | "inferredKanaProjection" | "unknown";
+  rows: ProviderLineReadingRow[];
+};
+
+export type ProviderLayerProvenance = {
+  role: "primary" | "translation" | "romanization";
+  revision?: string;
+  contributors: Array<{ kind: "userId" | "uin" | "name"; exactValue: string }>;
+  sourceFlags: Array<{ name: string; exactValue: string | number | boolean }>;
+};
+
+export type ProviderPhoneticLane = {
+  evidenceId: string;
+  providerId: ProviderId;
+  rawNumericKind: number;
+  rawLanguage: number | null;
+  evidenceKind: "phonetic";
+  targetScript: "Han" | "Latin" | "mixed" | "empty" | "unknown";
+  authorshipProvenance: "providerDeclaredGenerated" | "unknown";
+  declaredProvenanceText?: string;
+  validationStatus: "shapeProven" | "layerRejected";
+  validationFindings: Array<"invalidLanguage" | "invalidRows" | "invalidCells">;
+  rows: Array<{ rowOrdinal: number; cells: string[] }>;
+};
+
+export type ProviderReadingEvidence = {
+  schemaVersion: 1;
+  providerId: ProviderId;
+  layerProvenance?: ProviderLayerProvenance[];
+  lineReadings?: ProviderLineReadingLane[];
+  kanaLayers?: ProviderKanaLayer[];
+  phoneticLanes?: ProviderPhoneticLane[];
+};
+
+export type TimedWord = {
+  text: string;
+  startMs: number;
+  durationMs: number;
+  /** Provider timing before a document-level offset is applied. */
+  rawStartMs?: number;
+};
 export type TimedLine = {
   startMs: number;
   durationMs: number;
   words: TimedWord[];
+  /** Parser-only raw timed-row identity before empty rows are removed. */
+  sourceRowOrdinal?: number;
   translation?: string;
   romanization?: string;
   providerInfoKind?: ProviderInfoKind;
@@ -59,6 +215,7 @@ export type NativeLyrics = Record<string, unknown> & {
   fetchProvider: ProviderId;
   SourceMatch?: ProviderMatchMetadata;
   ProviderCredits?: ProviderCredit[];
+  ProviderReadingEvidence?: ProviderReadingEvidence;
 };
 
 export type ProviderMatchMetadata = {

@@ -11,17 +11,25 @@ function timedWord(
   text: string,
   match: RegExpMatchArray,
   startOffsetMs: number,
-  transform: TextTransform,
+  rawStartOffsetMs: number,
+  transform: TextTransform
 ): TimedWord | undefined {
   const value = transform(text);
   const startMs = Number(match[1]);
   const durationMs = Number(match[2]);
-  if (!value || !Number.isFinite(startMs) || !Number.isFinite(durationMs) || durationMs < 0) return undefined;
-  return {
+  if (!value || !Number.isFinite(startMs) || !Number.isFinite(durationMs) || durationMs < 0)
+    return undefined;
+  const word: TimedWord = {
     text: value,
     startMs: Math.max(0, startOffsetMs + startMs),
     durationMs,
   };
+  // Parser-only provenance must not widen the serialized TimedWord contract.
+  Object.defineProperty(word, "rawStartMs", {
+    value: rawStartOffsetMs + startMs,
+    enumerable: false,
+  });
+  return word;
 }
 
 /** Parse formats such as KRC/YRC where a timing token precedes its text. */
@@ -30,12 +38,19 @@ export function parseLeadingTimedWords(
   pattern: RegExp,
   startOffsetMs = 0,
   transform: TextTransform = (text) => text,
+  rawStartOffsetMs = startOffsetMs
 ): TimedWord[] {
   const matches = timingMatches(value, pattern);
   return matches.flatMap((match, index) => {
     const start = (match.index ?? 0) + match[0].length;
     const end = matches[index + 1]?.index ?? value.length;
-    const word = timedWord(value.slice(start, end), match, startOffsetMs, transform);
+    const word = timedWord(
+      value.slice(start, end),
+      match,
+      startOffsetMs,
+      rawStartOffsetMs,
+      transform
+    );
     return word ? [word] : [];
   });
 }
@@ -46,12 +61,19 @@ export function parseTrailingTimedWords(
   pattern: RegExp,
   startOffsetMs = 0,
   transform: TextTransform = (text) => text,
+  rawStartOffsetMs = startOffsetMs
 ): TimedWord[] {
   const matches = timingMatches(value, pattern);
   let cursor = 0;
   return matches.flatMap((match) => {
     const index = match.index ?? cursor;
-    const word = timedWord(value.slice(cursor, index), match, startOffsetMs, transform);
+    const word = timedWord(
+      value.slice(cursor, index),
+      match,
+      startOffsetMs,
+      rawStartOffsetMs,
+      transform
+    );
     cursor = index + match[0].length;
     return word ? [word] : [];
   });

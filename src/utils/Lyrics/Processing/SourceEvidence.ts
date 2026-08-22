@@ -1,6 +1,11 @@
 import { isProviderInfoKind, providerInfoKind, type ProviderInfoKind } from "../ProviderInfo.ts";
 import type { ProviderRubyTag } from "../ProviderRuby.ts";
 import {
+  cloneProviderReadingEvidence,
+  isProviderReadingEvidence,
+  type ProviderReadingEvidence,
+} from "../ProviderReadingEvidence.ts";
+import {
   cloneProviderSidecars,
   isProviderSidecars,
   type ProviderSidecar,
@@ -13,7 +18,7 @@ import {
   type VocalCue,
 } from "../VocalSemantics.ts";
 
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 7;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 8;
 
 export type SourceTimingOwner = {
   readonly id: string;
@@ -49,6 +54,7 @@ export type SourceLyricsEvidence = {
   readonly providerName?: string;
   readonly providerLanguage?: string;
   readonly vocalAgents?: Readonly<VocalAgents>;
+  readonly providerReadings?: ProviderReadingEvidence;
   readonly lines: readonly SourceEvidenceLine[];
 };
 
@@ -61,6 +67,7 @@ type EvidenceLyrics = {
   Content?: any[];
   VocalAgents?: VocalAgents;
   ProviderLanguage?: string;
+  ProviderReadingEvidence?: unknown;
   SourceEvidence?: SourceLyricsEvidence;
 };
 
@@ -281,7 +288,58 @@ function cloneVocalAgents(value: unknown): VocalAgents | undefined {
   return Object.keys(output).length ? output : undefined;
 }
 
+function readingsOwnedByEvidence(
+  readings: ProviderReadingEvidence | undefined,
+  lines: readonly SourceEvidenceLine[],
+  providerId?: string,
+): ProviderReadingEvidence | undefined {
+  if (!readings) return undefined;
+  if (providerId && readings.providerId !== providerId) return undefined;
+  const lead = lines.filter((line) => line.role === "lead");
+  for (const lane of readings.lineReadings ?? []) {
+    for (const reading of lane.rows) {
+      if (reading.rowOrdinal === undefined) continue;
+      const target = lead[reading.rowOrdinal];
+      if (!target) return undefined;
+      if (
+        reading.alignment === "exactTimestamp"
+        && reading.effectiveStartMs !== undefined
+        && Math.round(target.startTime * 1000) !== reading.effectiveStartMs
+      ) return undefined;
+    }
+  }
+  for (const layer of readings.kanaLayers ?? []) {
+    for (const unit of layer.units) {
+      const target = lead[unit.source.rowOrdinal];
+      const owner = target?.timingOwners[unit.source.tokenOrdinal];
+      if (
+        !owner
+        || owner.providerText.slice(unit.source.utf16Start, unit.source.utf16End)
+          !== unit.source.exactSourceSlice
+        || Math.round(owner.startTime * 1000) !== unit.timing.effectiveBaseStartMs
+      ) return undefined;
+      if (
+        unit.groupSource
+        && owner.providerText.slice(unit.groupSource.utf16Start, unit.groupSource.utf16End)
+          !== unit.groupSource.exactSourceSlice
+      ) return undefined;
+    }
+  }
+  return readings;
+}
+
 function deepFreezeEvidence(evidence: SourceLyricsEvidence): SourceLyricsEvidence {
+  if (evidence.providerReadings && !Object.isFrozen(evidence.providerReadings)) {
+    const providerReadings = cloneProviderReadingEvidence(evidence.providerReadings);
+    if (providerReadings) {
+      Object.defineProperty(evidence, "providerReadings", {
+        value: providerReadings,
+        enumerable: true,
+        configurable: false,
+        writable: false,
+      });
+    }
+  }
   for (const line of evidence.lines) {
     for (const sidecar of [
       ...(line.providerTranslations || []),
@@ -377,6 +435,9 @@ function isSourceLyricsEvidence(value: unknown): value is SourceLyricsEvidence {
     && optionalString(evidence.providerName)
     && optionalString(evidence.providerLanguage)
     && vocalAgents(evidence.vocalAgents)
+    && (evidence.providerReadings === undefined
+      || (isProviderReadingEvidence(evidence.providerReadings)
+        && (!evidence.providerId || evidence.providerReadings.providerId === evidence.providerId)))
     && Array.isArray(evidence.lines)
     && evidence.lines.every(line);
 }
@@ -396,12 +457,18 @@ export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEviden
       ? lineEvidence(lyrics.Content || [])
       : syllableEvidence(lyrics.Content || []);
   const vocalAgents = cloneVocalAgents(lyrics.VocalAgents);
+  const providerId = lyrics.fetchProvider || lyrics.source
+    ? String(lyrics.fetchProvider || lyrics.source)
+    : undefined;
+  const providerReadings = readingsOwnedByEvidence(
+    cloneProviderReadingEvidence(lyrics.ProviderReadingEvidence),
+    lines,
+    providerId,
+  );
   const evidence: SourceLyricsEvidence = {
     schemaVersion: SOURCE_EVIDENCE_SCHEMA_VERSION,
     lyricsType,
-    ...(lyrics.fetchProvider || lyrics.source
-      ? { providerId: String(lyrics.fetchProvider || lyrics.source) }
-      : {}),
+    ...(providerId ? { providerId } : {}),
     ...(lyrics.sourceDisplayName
       ? { providerName: String(lyrics.sourceDisplayName) }
       : {}),
@@ -409,6 +476,7 @@ export function ensureSourceEvidence(lyrics: EvidenceLyrics): SourceLyricsEviden
       ? { providerLanguage: lyrics.ProviderLanguage }
       : {}),
     ...(vocalAgents ? { vocalAgents } : {}),
+    ...(providerReadings ? { providerReadings } : {}),
     lines,
   };
   lyrics.SourceEvidence = deepFreezeEvidence(evidence);

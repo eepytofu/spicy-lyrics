@@ -1,4 +1,11 @@
-import { type NativeLyrics, type ProviderId, type ProviderInfoKind, type TimedLine, type TimedWord } from "./types";
+import {
+  type NativeLyrics,
+  type ProviderId,
+  type ProviderInfoKind,
+  type ProviderReadingEvidence,
+  type TimedLine,
+  type TimedWord,
+} from "./types";
 import {
   hasOrdinaryLyricContent,
   markProviderLineSemantics,
@@ -64,20 +71,81 @@ function hasAuthoredBoundaryAfter(words: TimedWord[], index: number): boolean {
   return false;
 }
 
+function remapReadingEvidenceRows(
+  evidence: ProviderReadingEvidence | undefined,
+  retainedRowOrdinals: readonly number[],
+): ProviderReadingEvidence | undefined {
+  if (!evidence) return undefined;
+  const rowMap = new Map(retainedRowOrdinals.map((rowOrdinal, index) => [rowOrdinal, index]));
+  const identity = retainedRowOrdinals.every((rowOrdinal, index) => rowOrdinal === index);
+  if (identity) return evidence;
+
+  const lineReadings = evidence.lineReadings?.map((lane) => ({
+    ...lane,
+    rows: lane.rows.map((reading) => {
+      if (reading.rowOrdinal === undefined) return reading;
+      const rowOrdinal = rowMap.get(reading.rowOrdinal);
+      if (rowOrdinal !== undefined) return { ...reading, rowOrdinal };
+      const { rowOrdinal: _removedRowOrdinal, ...unmatched } = reading;
+      return { ...unmatched, alignment: "unmatched" as const };
+    }),
+  }));
+  const kanaLayers = evidence.kanaLayers?.map((layer) => {
+    const removedUnit = layer.units.some((unit) => !rowMap.has(unit.source.rowOrdinal));
+    if (removedUnit) {
+      return {
+        ...layer,
+        validation: {
+          ...layer.validation,
+          walkState: "layerRejected" as const,
+          findings: [...new Set([...layer.validation.findings, "unknownSourceUnit" as const])],
+        },
+        units: [],
+      };
+    }
+    return {
+      ...layer,
+      units: layer.units.map((unit) => ({
+        ...unit,
+        source: { ...unit.source, rowOrdinal: rowMap.get(unit.source.rowOrdinal)! },
+        ...(unit.groupSource
+          ? {
+              groupSource: {
+                ...unit.groupSource,
+                rowOrdinal: rowMap.get(unit.groupSource.rowOrdinal)!,
+              },
+            }
+          : {}),
+      })),
+    };
+  });
+  return {
+    ...evidence,
+    ...(lineReadings?.length ? { lineReadings } : {}),
+    ...(kanaLayers?.length ? { kanaLayers } : {}),
+  };
+}
+
 export function toSyllableLyrics(
   lines: TimedLine[],
   provider: ProviderId,
   semanticContext?: ProviderLineSemanticContext,
+  readingEvidence?: ProviderReadingEvidence,
 ): NativeLyrics | undefined {
-  const usableLines = lines.flatMap((line) => {
+  const retained = lines.flatMap((line, inputRowOrdinal) => {
     // QRC, KRC, and YRC already encode their authored text as ordered
     // fragments. Keep that order and every nonempty zero-duration fragment;
     // ESLyric and Lyricify also concatenate these fragments literally.
     const words = line.words.filter((word) => word.text && word.durationMs >= 0);
     if (!words.length) return [];
     if (isProviderPlaceholder(words.map((word) => word.text).join(""), provider)) return [];
-    return [{ ...line, words }];
+    return [{ line: { ...line, words }, inputRowOrdinal }];
   });
+  const usableLines = retained.map((entry) => entry.line);
+  const projectedReadingEvidence = remapReadingEvidenceRows(
+    readingEvidence,
+    retained.map((entry) => entry.inputRowOrdinal),
+  );
   if (isInstrumentalSentinelDocument(usableLines.map((line) => line.words.map((word) => word.text).join("")), provider)) return undefined;
 
   const Content = usableLines.map((line) => {
@@ -122,6 +190,7 @@ export function toSyllableLyrics(
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
+    ...(projectedReadingEvidence ? { ProviderReadingEvidence: projectedReadingEvidence } : {}),
   };
   return finalizeProviderLineSemantics(result, provider, semanticContext);
 }
@@ -176,6 +245,7 @@ export function toStaticLyricsFromRows(
   rows: StaticLyricsRow[],
   provider: ProviderId,
   semanticContext?: ProviderLineSemanticContext,
+  readingEvidence?: ProviderReadingEvidence,
 ): NativeLyrics | undefined {
   const Lines = rows.map((row) => ({
     Text: row.text,
@@ -188,6 +258,7 @@ export function toStaticLyricsFromRows(
     source: provider,
     fetchProvider: provider,
     sourceDisplayName: labels[provider],
+    ...(readingEvidence ? { ProviderReadingEvidence: readingEvidence } : {}),
   };
   return finalizeProviderLineSemantics(result, provider, semanticContext);
 }
@@ -280,8 +351,16 @@ export function toLineLyricsFromRows(
   translation?: string,
   romanization?: string,
   semanticContext?: ProviderLineSemanticContext,
+  readingEvidence?: ProviderReadingEvidence,
 ): NativeLyrics | undefined {
-  const rows = inputRows.filter((row) => !isProviderPlaceholder(row.text, provider));
+  const retained = inputRows.flatMap((row, inputRowOrdinal) =>
+    isProviderPlaceholder(row.text, provider) ? [] : [{ row, inputRowOrdinal }],
+  );
+  const rows = retained.map((entry) => entry.row);
+  const projectedReadingEvidence = remapReadingEvidenceRows(
+    readingEvidence,
+    retained.map((entry) => entry.inputRowOrdinal),
+  );
   if (!rows.length || isInstrumentalSentinelDocument(rows.map((row) => row.text), provider)) return undefined;
   const translations = translation ? parseLrc(translation) : [];
   const romanizations = romanization ? parseLrc(romanization) : [];
@@ -307,6 +386,7 @@ export function toLineLyricsFromRows(
     IncludesRomanization: includesRomanization,
     HasTransliterations: includesRomanization,
     source: provider, fetchProvider: provider, sourceDisplayName: labels[provider],
+    ...(projectedReadingEvidence ? { ProviderReadingEvidence: projectedReadingEvidence } : {}),
   };
   return finalizeProviderLineSemantics(result, provider, semanticContext);
 }

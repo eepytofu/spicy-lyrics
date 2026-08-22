@@ -7,8 +7,9 @@ import {
 } from "../acquisition";
 import { isProviderInfoKind, isVocalCue, type NativeLyrics, type TrackMetadata } from "../types";
 import { hasOrdinaryLyricContent } from "../provider-line-semantics";
+import { isProviderReadingEvidence } from "../provider-readings";
 
-const WORKER_REQUEST_VERSION = "22";
+const WORKER_REQUEST_VERSION = "23";
 const MAX_REQUEST_URL_LENGTH = 8192;
 const MAX_TRACK_ID_LENGTH = 256;
 const MAX_TITLE_LENGTH = 512;
@@ -90,6 +91,11 @@ function isValidNativeLyrics(value: unknown): boolean {
   if (!(["Static", "Line", "Syllable"] as unknown[]).includes(value.Type)) return false;
   if (!(["qq", "kugou", "netease", "soda"] as unknown[]).includes(value.source)) return false;
   if (value.fetchProvider !== value.source || typeof value.sourceDisplayName !== "string") return false;
+  if (
+    value.ProviderReadingEvidence !== undefined
+    && (!isProviderReadingEvidence(value.ProviderReadingEvidence)
+      || value.ProviderReadingEvidence.providerId !== value.source)
+  ) return false;
   const validProviderInfoKind = (entry: unknown) => entry === undefined || isProviderInfoKind(entry);
   const validVocalCue = (entry: unknown) => entry === undefined || isVocalCue(entry);
   const validLineSemantics = (entry: Record<string, unknown>) =>
