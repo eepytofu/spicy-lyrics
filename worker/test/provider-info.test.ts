@@ -54,13 +54,21 @@ function lineLyrics(texts: string[], source: NativeLyrics["source"] = "netease")
   };
 }
 
-function staticLyrics(texts: string[], source: NativeLyrics["source"] = "soda"): NativeLyrics {
+type StaticTestLine = {
+  Text: string;
+  ProviderInfoKind?: ProviderInfoKind;
+};
+
+function staticLyrics(
+  lines: Array<string | StaticTestLine>,
+  source: NativeLyrics["source"] = "soda",
+): NativeLyrics {
   return {
     Type: "Static",
     source,
     sourceDisplayName: source,
     fetchProvider: source,
-    Lines: texts.map((Text) => ({ Text })),
+    Lines: lines.map((line) => typeof line === "string" ? { Text: line } : { ...line }),
   };
 }
 
@@ -622,7 +630,6 @@ describe("embedded provider-info classification", () => {
     ["NetEase 一梦红尘", "netease", "一梦红尘", "小曲儿", ["作词：A", "作曲：B", "策划：C"]],
     ["NetEase Bad Apple!!", "netease", "Bad Apple!!", "nomico", ["Lyrics: Haruka", "Composer: ZUN"]],
     ["Soda DJ KRC capture", "soda", "DJ Track", "Artist", ["Lyrics: A", "Composer: B", "DJ: C"]],
-    ["Soda D/N/A LRC capture", "soda", "D/N/A", "AZARI", ["Lyrics: AZARI", "Composer: AZARI"]],
   ] as const)("classifies the complete bounded block for %s", (_name, source, title, artist, credits) => {
     const context: ProviderLineSemanticContext = {
       reference: { id: title, title, artists: [artist], album: "", durationMs: 200_000 },
@@ -641,7 +648,32 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it("classifies the complete bounded block for Soda 一梦红尘 static capture", () => {
+  it("classifies the complete bounded block for Soda D/N/A LRC", () => {
+    const context: ProviderLineSemanticContext = {
+      reference: {
+        id: "D/N/A",
+        title: "D/N/A",
+        artists: ["AZARI"],
+        album: "",
+        durationMs: 200_000,
+      },
+      selected: { title: "D/N/A", artists: ["AZARI"] },
+    };
+    const credits = ["Lyrics: AZARI", "Composer: AZARI"];
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "D/N/A - AZARI",
+      ...credits,
+      "first lyric",
+    ], "soda"), "soda", context);
+
+    expect(kinds(result)).toEqual([
+      "trackHeader",
+      ...Array<ProviderInfoKind>(credits.length).fill("credit"),
+      undefined,
+    ]);
+  });
+
+  it("classifies a complete bounded block through Static normalization", () => {
     const context: ProviderLineSemanticContext = {
       reference: {
         id: "一梦红尘",
@@ -653,15 +685,54 @@ describe("embedded provider-info classification", () => {
       selected: { title: "一梦红尘", artists: ["小曲儿"] },
     };
     const credits = ["作词：A", "作曲：B", "出品：C"];
-    const result = markEmbeddedProviderInfo(staticLyrics([
+    const texts = [
       "一梦红尘 - 小曲儿",
       ...credits,
       "first lyric",
-    ]), "soda", context);
+    ];
+    const result = markEmbeddedProviderInfo(staticLyrics(texts), "soda", context);
 
     expect(kinds(result)).toEqual([
       "trackHeader",
       ...Array<ProviderInfoKind>(credits.length).fill("credit"),
+      undefined,
+    ]);
+    expect((result.Lines as StaticTestLine[]).map((line) => line.Text)).toEqual(texts);
+  });
+
+  it("preserves authoritative Static credits while classifying a post-credit header", () => {
+    const context: ProviderLineSemanticContext = {
+      reference: {
+        id: "netease:3348520852",
+        title: "卦象怎判",
+        artists: ["洛天依Official", "乐正绫"],
+        album: "卦象怎判",
+        durationMs: 162_000,
+      },
+      selected: {
+        title: "卦象怎判",
+        artists: ["洛天依Official", "乐正绫"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(staticLyrics([
+      { Text: "作词: 盏月陆离", ProviderInfoKind: "credit" },
+      { Text: "作曲: 盏月陆离", ProviderInfoKind: "credit" },
+      "卦象怎判-洛天依/乐正绫",
+      "编曲：李兀",
+      "歌姬：洛天依/乐正绫",
+      "调教：盏月陆离",
+      "混音：神曦",
+      "监制：谢墨",
+      "制作人：祭酒",
+      "策划：盏月陆离",
+      "龟甲在烈火里 烧出了裂纹",
+    ], "netease"), "netease", context);
+
+    expect(kinds(result)).toEqual([
+      "credit",
+      "credit",
+      "trackHeader",
+      ...Array<ProviderInfoKind>(7).fill("credit"),
       undefined,
     ]);
   });
