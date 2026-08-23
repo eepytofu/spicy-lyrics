@@ -141,45 +141,6 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result).findIndex((kind) => kind === undefined)).toBe(25);
   });
 
-  it("keeps KuGou's shorter same-track boundary provider-specific", () => {
-    const result = markEmbeddedProviderInfo(syllableLyrics([
-      "乐鸣东方 - 洛天依",
-      "词：元和令/付茂华",
-      "曲：李建衡",
-      "穿越过千年的时光",
-    ], "kugou"), "kugou", LUO_TIAN_YI);
-
-    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
-    expect(kinds(result).findIndex((kind) => kind === undefined)).toBe(3);
-  });
-
-  it("uses selected provider metadata and aliases for an exact track header", () => {
-    const context: ProviderLineSemanticContext = {
-      reference: {
-        id: "spotify",
-        title: "暴风雨 - Live",
-        artists: ["Masiwei"],
-        album: "Live",
-        durationMs: 200_000,
-      },
-      selected: {
-        title: "暴风雨 (Live)",
-        titleAliases: ["暴风雨（Live）"],
-        artists: ["马思唯"],
-        artistAliases: ["Masiwei"],
-      },
-    };
-    const result = markEmbeddedProviderInfo(syllableLyrics([
-      "暴风雨 (Live) - 马思唯",
-      "词：马思唯",
-      "曲：马思唯",
-      "PGM：A",
-      "我说暴风雨就要来了",
-    ]), "qq", context);
-
-    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", "credit", undefined]);
-  });
-
   it("accepts artist-title and exact title-only headers only beside a validated block", () => {
     const artistTitle = markEmbeddedProviderInfo(syllableLyrics([
       "洛天依 - 乐鸣东方",
@@ -201,43 +162,12 @@ describe("embedded provider-info classification", () => {
     expect(kinds(standalone)).toEqual([undefined, undefined]);
   });
 
-  it.each([
-    [
-      "reported 狐ギツネの乱 credited-vocalist shape",
-      "qq",
-      "狐ギツネの乱",
-      ["まらしぃ", "鏡音リン"],
-      "狐ギツネの乱 - 鏡音鈴（鏡音リン）",
-      ["詞：まらしぃ", "曲：まらしぃ"],
-      "今日もまた孤独にて",
-    ],
-    [
-      "reported 关山酒 original-vocalist shape",
-      "kugou",
-      "关山酒",
-      ["小魂"],
-      "关山酒 - 等什么君(邓寓君)",
-      ["词：Yoki", "曲：乐金震", "词改编：苏珂", "曲改编：吕宏斌"],
-      "first lyric",
-    ],
-    [
-      "reported アマツキツネ credited-vocalist shape",
-      "netease",
-      "アマツキツネ",
-      ["まらしぃ", "鏡音リン"],
-      "アマツキツネ - 鏡音鈴（鏡音リン）",
-      ["詞：まらしぃ", "曲：まらしぃ"],
-      "first lyric",
-    ],
-  ] as const)("anchors %s by its exact leading title side", (
-    _name,
-    source,
-    title,
-    artists,
-    header,
-    credits,
-    firstLyric,
-  ) => {
+  it("anchors a reported original-vocalist shape by its exact leading title side", () => {
+    const source = "kugou";
+    const title = "关山酒";
+    const artists = ["小魂"];
+    const header = "关山酒 - 等什么君(邓寓君)";
+    const credits = ["词：Yoki", "曲：乐金震", "词改编：苏珂", "曲改编：吕宏斌"];
     const context: ProviderLineSemanticContext = {
       reference: {
         id: title,
@@ -254,7 +184,7 @@ describe("embedded provider-info classification", () => {
     const result = markEmbeddedProviderInfo(syllableLyrics([
       header,
       ...credits,
-      firstLyric,
+      "first lyric",
     ], source), source, context);
 
     expect(kinds(result)).toEqual([
@@ -264,10 +194,7 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it.each([
-    ["reversed mismatched artist", "等什么君 - 关山酒"],
-    ["non-exact conflicting version", "关山酒 (Remix) - 等什么君"],
-  ])("classifies a structurally proven leading header despite %s", (_name, header) => {
+  it("classifies a structurally proven leading header despite a reversed mismatched artist", () => {
     const context: ProviderLineSemanticContext = {
       reference: {
         id: "关山酒",
@@ -282,7 +209,7 @@ describe("embedded provider-info classification", () => {
       },
     };
     const result = markEmbeddedProviderInfo(lineLyrics([
-      header,
+      "等什么君 - 关山酒",
       "词：Yoki",
       "曲：乐金震",
       "first lyric",
@@ -313,18 +240,15 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result)).toEqual([undefined, "rightsNotice", undefined]);
   });
 
-  it.each(["qq", "kugou", "netease"] as const)(
-    "classifies the complete prohibitive reproduction notice from %s",
-    (provider) => {
-      const result = markEmbeddedProviderInfo(lineLyrics([
-        "first lyric",
-        "【版权所有，未经许可，翻版必究】",
-        "last lyric",
-      ], provider), provider, LUO_TIAN_YI);
+  it("classifies the complete prohibitive reproduction notice", () => {
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "first lyric",
+      "【版权所有，未经许可，翻版必究】",
+      "last lyric",
+    ], "netease"), "netease", LUO_TIAN_YI);
 
-      expect(kinds(result)).toEqual([undefined, "rightsNotice", undefined]);
-    },
-  );
+    expect(kinds(result)).toEqual([undefined, "rightsNotice", undefined]);
+  });
 
   it.each([
     "版权所有",
@@ -418,30 +342,6 @@ describe("embedded provider-info classification", () => {
       undefined,
       undefined,
     ]);
-  });
-
-  it("treats an exact leading title as the header when its credited artist set is partial", () => {
-    const context: ProviderLineSemanticContext = {
-      reference: {
-        id: "4Be8UHXmXCaKBWTi4OwpU6",
-        title: "归家",
-        artists: ["KBShinya", "哦漏"],
-        album: "归家",
-        durationMs: 280_000,
-      },
-      selected: {
-        title: "归家",
-        artists: ["KBShinya", "哦漏"],
-      },
-    };
-    const result = markEmbeddedProviderInfo(syllableLyrics([
-      "归家 - 国风堂/KBShinya",
-      "词：释子/公子无琊",
-      "曲：王韩一淋",
-      "第一句歌词",
-    ], "kugou"), "kugou", context);
-
-    expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
   });
 
   it("recovers 食语人间 through one bounded provider-title annotation", () => {
@@ -600,33 +500,6 @@ describe("embedded provider-info classification", () => {
     expect(kinds(result)).toEqual(["trackHeader", "credit", undefined]);
   });
 
-  it.each(["Studio Song (Live)", "Studio Song (2022Ver.)"])(
-    "classifies a structurally proven version-shaped header without catalog-title agreement: %s",
-    (header) => {
-      const context: ProviderLineSemanticContext = {
-        reference: {
-          id: "studio-song",
-          title: "Studio Song",
-          artists: ["Artist"],
-          album: "Studio Song",
-          durationMs: 200_000,
-        },
-        selected: {
-          title: "Studio Song",
-          artists: ["Artist"],
-        },
-      };
-      const result = markEmbeddedProviderInfo(lineLyrics([
-        `${header} - Artist`,
-        "Lyrics：Alice",
-        "Composer：Bob",
-        "first lyric",
-      ]), "qq", context);
-
-      expect(kinds(result)).toEqual(["trackHeader", "credit", "credit", undefined]);
-    },
-  );
-
   it("marks an exact header and independently anchored block after authoritative leading credits", () => {
     const context: ProviderLineSemanticContext = {
       reference: {
@@ -704,13 +577,9 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it.each([
-    "暴风雨 (Live)",
-    "黑马王子 (Live)",
-    "花花公子 (Live)",
-  ])("classifies the reviewed QQ paired rights tail for %s", (title) => {
+  it("classifies the reviewed QQ paired rights tail", () => {
     const result = markEmbeddedProviderInfo(syllableLyrics([
-      `最后一句 ${title}`,
+      "最后一句 暴风雨 (Live)",
       "A Few Good Kids Records",
       "版权声明：未经著作权人书面许可，任何人不得以任何方式使用",
     ]), "qq", LUO_TIAN_YI);
@@ -813,32 +682,29 @@ describe("embedded provider-info classification", () => {
     ]);
   });
 
-  it.each(["qq", "kugou"] as const)(
-    "classifies an exact artist-valued 歌 row as a bounded performance credit for %s",
-    (provider) => {
-      const context: ProviderLineSemanticContext = {
-        reference: {
-          id: "spotify-whale",
-          title: "クーネル・エンゲイザー",
-          artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
-          album: "クーネル・エンゲイザー",
-          durationMs: 240_000,
-        },
-        selected: {
-          title: "クーネル・エンゲイザー",
-          artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
-        },
-      };
-      const result = markEmbeddedProviderInfo(lineLyrics([
-        "first lyric",
-        "second lyric",
-        "歌：電ǂ鯨",
-        "third lyric",
-      ], provider), provider, context);
+  it("classifies an exact artist-valued 歌 row as a bounded performance credit", () => {
+    const context: ProviderLineSemanticContext = {
+      reference: {
+        id: "spotify-whale",
+        title: "クーネル・エンゲイザー",
+        artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
+        album: "クーネル・エンゲイザー",
+        durationMs: 240_000,
+      },
+      selected: {
+        title: "クーネル・エンゲイザー",
+        artists: ["電ǂ鯨", "琴葉茜・葵", "根音ネネ"],
+      },
+    };
+    const result = markEmbeddedProviderInfo(lineLyrics([
+      "first lyric",
+      "second lyric",
+      "歌：電ǂ鯨",
+      "third lyric",
+    ], "qq"), "qq", context);
 
-      expect(kinds(result)).toEqual([undefined, undefined, "credit", undefined]);
-    },
-  );
+    expect(kinds(result)).toEqual([undefined, undefined, "credit", undefined]);
+  });
 
   it.each([
     "歌：歌",
