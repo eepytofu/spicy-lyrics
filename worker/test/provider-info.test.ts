@@ -54,7 +54,21 @@ function lineLyrics(texts: string[], source: NativeLyrics["source"] = "netease")
   };
 }
 
+function staticLyrics(texts: string[], source: NativeLyrics["source"] = "soda"): NativeLyrics {
+  return {
+    Type: "Static",
+    source,
+    sourceDisplayName: source,
+    fetchProvider: source,
+    Lines: texts.map((Text) => ({ Text })),
+  };
+}
+
 function kinds(lyrics: NativeLyrics): Array<ProviderInfoKind | undefined> {
+  if (lyrics.Type === "Static") {
+    return ((lyrics.Lines as Array<Record<string, unknown>> | undefined) ?? [])
+      .map((entry) => entry.ProviderInfoKind as ProviderInfoKind | undefined);
+  }
   return (lyrics.Content as Array<Record<string, unknown>>).map((entry) => {
     if (lyrics.Type === "Syllable") {
       return (entry.Lead as { ProviderInfoKind?: ProviderInfoKind }).ProviderInfoKind;
@@ -607,7 +621,6 @@ describe("embedded provider-info classification", () => {
     ["NetEase 暴风雨 (Live)", "netease", "暴风雨 (Live)", "马思唯", ["词：马思唯", "曲：马思唯", "PGM：A"]],
     ["NetEase 一梦红尘", "netease", "一梦红尘", "小曲儿", ["作词：A", "作曲：B", "策划：C"]],
     ["NetEase Bad Apple!!", "netease", "Bad Apple!!", "nomico", ["Lyrics: Haruka", "Composer: ZUN"]],
-    ["Soda 一梦红尘 static capture", "soda", "一梦红尘", "小曲儿", ["作词：A", "作曲：B", "出品：C"]],
     ["Soda DJ KRC capture", "soda", "DJ Track", "Artist", ["Lyrics: A", "Composer: B", "DJ: C"]],
     ["Soda D/N/A LRC capture", "soda", "D/N/A", "AZARI", ["Lyrics: AZARI", "Composer: AZARI"]],
   ] as const)("classifies the complete bounded block for %s", (_name, source, title, artist, credits) => {
@@ -620,6 +633,31 @@ describe("embedded provider-info classification", () => {
       ...credits,
       "first lyric",
     ], source), source, context);
+
+    expect(kinds(result)).toEqual([
+      "trackHeader",
+      ...Array<ProviderInfoKind>(credits.length).fill("credit"),
+      undefined,
+    ]);
+  });
+
+  it("classifies the complete bounded block for Soda 一梦红尘 static capture", () => {
+    const context: ProviderLineSemanticContext = {
+      reference: {
+        id: "一梦红尘",
+        title: "一梦红尘",
+        artists: ["小曲儿"],
+        album: "",
+        durationMs: 200_000,
+      },
+      selected: { title: "一梦红尘", artists: ["小曲儿"] },
+    };
+    const credits = ["作词：A", "作曲：B", "出品：C"];
+    const result = markEmbeddedProviderInfo(staticLyrics([
+      "一梦红尘 - 小曲儿",
+      ...credits,
+      "first lyric",
+    ]), "soda", context);
 
     expect(kinds(result)).toEqual([
       "trackHeader",
