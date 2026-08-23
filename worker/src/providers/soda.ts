@@ -45,7 +45,7 @@ function sodaClientParams(): Record<string, string> {
     install_id: installId,
     did: deviceId,
     iid: installId,
-    device_platform: "PC",
+    device_platform: "web",
     version_code: "2.1.0",
     version_name: "2.1.0",
   };
@@ -246,7 +246,7 @@ async function fetchSodaDetail(
       return undefined;
     }
   }
-  return { kind: "valid", body: undefined };
+  throw new ProviderUpstreamError("Soda detail requests were rejected by upstream risk control", 502);
 }
 
 function structuredSodaLyrics(type: string, content: string): TimedLine[] {

@@ -833,6 +833,8 @@ describe("provider search flow", () => {
     expect(urls).toHaveLength(2);
     expect(urls[0]).toContain("/search/track");
     expect(urls[1]).toContain("/luna/track?");
+    expect(new URL(urls[0]).searchParams.get("device_platform")).toBe("web");
+    expect(new URL(urls[1]).searchParams.get("device_platform")).toBe("web");
     expect(result?.Type).toBe("Syllable");
     expect(result?.SourceMatch).toMatchObject({
       title: "大东北我的家乡(DJ何鹏版)",
@@ -843,7 +845,7 @@ describe("provider search flow", () => {
     });
   });
 
-  it("retries only Soda's probabilistic detail risk rejection", async () => {
+  it("retries Soda's detail risk rejection and surfaces persistent refusal", async () => {
     const searchBody = {
       result_groups: [{
         data: [{
@@ -900,7 +902,10 @@ describe("provider search flow", () => {
       detailAttempts += 1;
       return new Response(JSON.stringify({ status_code: 1000062 }));
     }));
-    await expect(sodaProvider(track)).resolves.toBeUndefined();
+    await expect(sodaProvider(track)).rejects.toMatchObject({
+      name: "ProviderUpstreamError",
+      status: 502,
+    });
     expect(detailAttempts).toBe(4);
   });
 
