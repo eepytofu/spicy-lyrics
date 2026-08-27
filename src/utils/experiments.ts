@@ -10,27 +10,6 @@ export type Experiment = {
 
 export const EXPERIMENTS = [
   {
-    id: "disableKuromoji",
-    label: "Disable Kuromoji",
-    description: "Diagnostic hard-off for local Japanese readings. Only exact provider readings remain visible.",
-    default: false,
-    pageClass: undefined,
-  },
-  {
-    id: "disableProviderReadings",
-    label: "Disable Provider Readings",
-    description: "Ignore provider-supplied Japanese readings so local Kuromoji output can be inspected independently.",
-    default: false,
-    pageClass: undefined,
-  },
-  {
-    id: "highlightProviderReadings",
-    label: "Highlight Provider Readings",
-    description: "Tint provider-supplied Japanese readings gold for diagnostics.",
-    default: false,
-    pageClass: "Exp_HighlightProviderReadings",
-  },
-  {
     id: "newProgressBarStyling",
     label: "New SliderBar Styling",
     description: "New glass-like style for the SliderBar. Disable to revert back to the original one.",

@@ -51,6 +51,8 @@ import { ScrollSimplebar } from "../../utils/Scrolling/Simplebar/ScrollSimplebar
 import ApplyDynamicBackground, { KawarpMap } from "../DynamicBG/dynamicBackground.ts";
 import {
   $currentLyricsData,
+  $developerMode,
+  $highlightProviderReadings,
   $lineHoverBackground,
   $fixHanGlyphVariants,
   $lyricsContainerExists,
@@ -306,6 +308,10 @@ async function OpenPage(
   elem.classList.toggle("NoLineHoverBackground", !$lineHoverBackground.get());
   elem.classList.toggle("ShowVolumeSlider", $showVolumeSlider.get());
   ApplyExperimentClasses(elem);
+  elem.classList.toggle(
+    "Exp_HighlightProviderReadings",
+    $developerMode.get() && $highlightProviderReadings.get(),
+  );
 
   const contentBox = elem.querySelector<HTMLElement>(
     ".ContentBox"
@@ -1097,13 +1103,19 @@ const queueProcessingSettingsRefresh = (): void => {
   void runQueuedProcessingSettingsRefresh();
 };
 
-onExperimentChange((experiment) => {
+onExperimentChange(() => {
   if (PageContainer) ApplyExperimentClasses(PageContainer);
-  if (
-    experiment.id === "disableKuromoji" ||
-    experiment.id === "disableProviderReadings"
-  ) queueProcessingSettingsRefresh();
 });
+
+const applyProviderReadingHighlight = (): void => {
+  PageContainer?.classList.toggle(
+    "Exp_HighlightProviderReadings",
+    $developerMode.get() && $highlightProviderReadings.get(),
+  );
+};
+
+$developerMode.listen(applyProviderReadingHighlight);
+$highlightProviderReadings.listen(applyProviderReadingHighlight);
 
 bindCoalescedSourceSettingsRefresh(queueProcessingSettingsRefresh);
 

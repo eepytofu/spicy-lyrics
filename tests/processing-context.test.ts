@@ -16,8 +16,6 @@ const baseContext: ProcessingContext = {
   koreanDisplayMode: "rrStandard",
   cyrillicRomanizationMode: "Russian",
   cyrillicKeepSigns: false,
-  disableKuromoji: false,
-  disableProviderReadings: false,
 };
 
 test("processing context key is stable for same inputs", () => {
@@ -47,8 +45,6 @@ test("processing context key changes when processing modes change", () => {
     { ...baseContext, koreanDisplayMode: "vnPronunciation" },
     { ...baseContext, cyrillicRomanizationMode: "Ukrainian" },
     { ...baseContext, cyrillicKeepSigns: true },
-    { ...baseContext, disableKuromoji: true },
-    { ...baseContext, disableProviderReadings: true },
   ];
 
   const baseKey = buildProcessingContextKey(baseContext);

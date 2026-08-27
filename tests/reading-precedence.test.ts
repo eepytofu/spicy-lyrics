@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   preserveProviderReading,
   preserveProviderReadingWithoutResidual,
+  pendingLyricsPresentation,
   restoreProviderReading,
   restoreProviderReadingWithoutResidual,
   selectTimedLineReading,
@@ -65,6 +66,61 @@ test("provider reading is preserved separately and restored as fallback", () => 
   assert.equal(restoreProviderReading(entry), true);
   assert.equal(entry.RomanizedText, "provider reading");
   assert.equal(entry.TransliteratedText, "provider reading");
+});
+
+test("pending fresh lyrics hide provider display aliases without mutating source evidence", () => {
+  const lyrics = {
+    Type: "Syllable",
+    Content: [{
+      Lead: {
+        RomanizedText: "line provider reading",
+        TransliteratedText: "line provider reading",
+        Syllables: [{
+          RomanizedText: "token provider reading",
+          TransliteratedText: "token provider reading",
+        }],
+      },
+      Background: [{
+        ProviderRomanizedText: "background provider reading",
+        RomanizedText: "background provider reading",
+        Syllables: [],
+      }],
+    }],
+  };
+
+  const pending = pendingLyricsPresentation(lyrics);
+
+  assert.equal(pending.Content[0].Lead.ProviderRomanizedText, "line provider reading");
+  assert.equal(pending.Content[0].Lead.RomanizedText, undefined);
+  assert.equal(pending.Content[0].Lead.TransliteratedText, undefined);
+  assert.equal(pending.Content[0].Lead.Syllables[0].ProviderRomanizedText, "token provider reading");
+  assert.equal(pending.Content[0].Lead.Syllables[0].RomanizedText, undefined);
+  assert.equal(pending.Content[0].Background[0].ProviderRomanizedText, "background provider reading");
+  assert.equal(pending.Content[0].Background[0].RomanizedText, undefined);
+  assert.equal(lyrics.Content[0].Lead.RomanizedText, "line provider reading");
+  assert.equal(lyrics.Content[0].Lead.Syllables[0].RomanizedText, "token provider reading");
+});
+
+test("pending provider suppression covers Static and Line lyric shapes", () => {
+  const staticLyrics = pendingLyricsPresentation({
+    Type: "Static",
+    Lines: [{ Text: "雫", RomanizedText: "shi zu ku" }],
+  });
+  assert.equal(staticLyrics.Lines[0].ProviderRomanizedText, "shi zu ku");
+  assert.equal(staticLyrics.Lines[0].RomanizedText, undefined);
+
+  const lineLyrics = pendingLyricsPresentation({
+    Type: "Line",
+    Content: [{
+      Text: "明日",
+      RomanizedText: "a su",
+      Background: [{ Text: "行く", TransliteratedText: "i ku" }],
+    }],
+  });
+  assert.equal(lineLyrics.Content[0].ProviderRomanizedText, "a su");
+  assert.equal(lineLyrics.Content[0].RomanizedText, undefined);
+  assert.equal(lineLyrics.Content[0].Background[0].ProviderRomanizedText, "i ku");
+  assert.equal(lineLyrics.Content[0].Background[0].TransliteratedText, undefined);
 });
 
 test("same-script provider reading echoes stay as evidence but not display fallback", () => {

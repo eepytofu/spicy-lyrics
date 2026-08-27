@@ -75,8 +75,6 @@ export type JapaneseAnalysisOptions = {
   authoredReadingProjection?: ProviderAuthoredReadingProjection;
   /** Immutable provider evidence selected for this exact source line. */
   providerReading?: ProviderJapaneseLineReading;
-  /** Diagnostic hard-off. No Japanese analyzer may run while this is true. */
-  disableKuromoji?: boolean;
   /** Explicit analyzer seam for tests and isolated experiments. */
   analyzer?: JapaneseAnalyzer;
   /** Explicit deterministic kana-to-romaji seam for characterization tests. */

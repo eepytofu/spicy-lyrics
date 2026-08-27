@@ -42,7 +42,7 @@ import {
 } from "./Fork/Translation.ts";
 import { $chineseCharacterForm, $romanization } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
-import { isExperimentEnabled } from "../experiments.ts";
+import { pendingLyricsPresentation } from "./Processing/ReadingPrecedence.ts";
 import {
   clearLyricsCandidateSessionForTrackChange,
   fetchLyricsFromProviders,
@@ -125,8 +125,6 @@ function currentProcessingContextKey(): string {
     koreanDisplayMode,
     cyrillicRomanizationMode,
     cyrillicKeepSigns,
-    disableKuromoji: isExperimentEnabled("disableKuromoji"),
-    disableProviderReadings: isExperimentEnabled("disableProviderReadings"),
   });
 }
 
@@ -443,9 +441,10 @@ async function processFreshLyrics(
   lyrics.ProcessingPending = true;
   lyrics.RomanizationPending = needsRomanization;
   lyrics.TranslationPending = needsTranslation;
-  presentLyrics(lyrics, session);
+  const pendingLyrics = needsRomanization ? pendingLyricsPresentation(lyrics) : lyrics;
+  presentLyrics(pendingLyrics, session);
   void finishProcessingInBackground(trackId, lyrics, session, persistTrack);
-  return [{ ...lyrics, fromCache: false }, 200];
+  return [{ ...pendingLyrics, fromCache: false }, 200];
 }
 
 type OverrideRestore =

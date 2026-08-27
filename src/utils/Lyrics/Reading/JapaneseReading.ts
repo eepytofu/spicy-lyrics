@@ -434,7 +434,6 @@ export async function prepareJapaneseLineAnalysis(
   options: JapaneseAnalysisOptions = {},
 ): Promise<PreparedJapaneseLineAnalysis | undefined> {
   const sourceText = text || "";
-  if (options.disableKuromoji) return undefined;
   const baseProjection =
     options.authoredReadingProjection?.sourceText === sourceText
       ? options.authoredReadingProjection

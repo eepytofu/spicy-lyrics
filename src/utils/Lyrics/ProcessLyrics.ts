@@ -4,7 +4,6 @@ import langs from "langs";
 import Logger from "../Logger.ts";
 import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
-import { isExperimentEnabled } from "../experiments.ts";
 import {
   chineseTones,
   chineseTranslitMode,
@@ -167,10 +166,7 @@ const projectMandarinRun = (text: string): CjkRunReadingProjection => {
   };
 };
 
-const projectKanaRun = async (
-  text: string,
-  disableKuromoji: boolean,
-): Promise<CjkRunReadingProjection> => {
+const projectKanaRun = async (text: string): Promise<CjkRunReadingProjection> => {
   const segments: CjkRunReadingProjection["segments"][number][] = [];
   let output = "";
   let sourceCursorUtf16 = 0;
@@ -180,9 +176,7 @@ const projectKanaRun = async (
     const matchStartUtf16 = match.index;
     const kana = match[0];
     output += text.slice(sourceCursorUtf16, matchStartUtf16);
-    const reading = disableKuromoji
-      ? undefined
-      : (await analyzeJapaneseLine(kana))?.romaji?.trim();
+    const reading = (await analyzeJapaneseLine(kana))?.romaji?.trim();
     if (!reading || JapaneseTextTest.test(reading)) {
       valid = false;
       output += kana;
@@ -203,10 +197,10 @@ const projectKanaRun = async (
   return { text: output, segments, valid: valid && segments.length > 0 };
 };
 
-const projectChineseAboveReading = (text: string, disableKuromoji: boolean) =>
+const projectChineseAboveReading = (text: string) =>
   projectChineseDominantCjkReadings(text, {
     projectHan: projectMandarinRun,
-    projectKana: (run) => projectKanaRun(run, disableKuromoji),
+    projectKana: projectKanaRun,
   });
 
 const romanizeKoreanText = (text: string): string =>
@@ -476,7 +470,6 @@ const romanizeLineText = async (
   docContext: ScriptBranchDocContext,
   language: string,
   arabicReadings: ReadonlyMap<string, string>,
-  disableKuromoji: boolean,
 ): Promise<{ text: string; aboveReadingSegments?: AboveReadingSegment[] } | undefined> => {
   const textProjection = buildTextAnalysisProjection(text);
   const entry: RomanizeEntry = {
@@ -493,7 +486,6 @@ const romanizeLineText = async (
     false,
     false,
     undefined,
-    disableKuromoji,
   );
   return changed
     ? {
@@ -526,8 +518,6 @@ const postProcessSyllableRomanization = async (
   arabicReadings: ReadonlyMap<string, string>,
   allowChineseProviderJapaneseRepair: boolean,
   providerEvidence: ProviderReadingEvidence | undefined,
-  disableKuromoji: boolean,
-  disableProviderReadings: boolean,
 ) => {
   if (lyrics.Type !== "Syllable") return;
 
@@ -563,14 +553,6 @@ const postProcessSyllableRomanization = async (
         cjkLineRoute !== "Japanese" && hasStructuredProviderReading;
       const isJapaneseLine = cjkLineRoute === "Japanese" || directStructuredProviderLine;
       const isChineseLine = cjkLineRoute === "Chinese" || cjkLineRoute === "MixedChinese";
-      if (disableProviderReadings && isJapaneseLine) {
-        delete group.RomanizedText;
-        delete group.TransliteratedText;
-        for (const syllable of syllables) {
-          delete syllable.RomanizedText;
-          delete syllable.TransliteratedText;
-        }
-      }
       if (isJapaneseLine) group.ReadingPrimaryScript = "Japanese";
       else if (isChineseLine) group.ReadingPrimaryScript = "Chinese";
 
@@ -635,21 +617,6 @@ const postProcessSyllableRomanization = async (
           }
           return;
         }
-        if (disableKuromoji) {
-          clearJapaneseSyllableReadingOutput(group, syllables);
-          const reading = buildProviderOnlyJapaneseReading(japaneseMap.sourceText, provider);
-          if (reading) {
-            const plan = buildProviderOnlyJapaneseRenderPlan(
-              japaneseMap.sourceText,
-              japaneseMap.spans,
-              syllables,
-              reading,
-            );
-            group.JapaneseReading = reading;
-            if (plan) group.ReadingRenderPlan = plan;
-          }
-          return;
-        }
         try {
           const packageResult = await processJapanesePackageLine(
             japaneseMap.sourceText,
@@ -689,7 +656,6 @@ const postProcessSyllableRomanization = async (
           for (const syllable of syllables) {
             delete syllable.JapaneseRomajiTiming;
           }
-          if (disableProviderReadings) throw error;
           const restoredGroup = restoreProviderReading(group);
           const restoredSyllables = syllables.map(restoreProviderReading).some(Boolean);
           if (!restoredGroup && !restoredSyllables) throw error;
@@ -718,7 +684,6 @@ const postProcessSyllableRomanization = async (
         docContext,
         language,
         arabicReadings,
-        disableKuromoji,
       );
       const reading = selectTimedLineReading(
         isArabicLine,
@@ -797,8 +762,6 @@ const romanizeEntry = async (
   annotateJapanese: boolean = true,
   allowChineseProviderJapaneseRepair: boolean = false,
   providerEvidence?: ProviderReadingEvidence,
-  disableKuromoji: boolean = false,
-  disableProviderReadings: boolean = false,
 ): Promise<boolean> => {
   const { target, line } = entry;
   const analysisText = entry.textProjection.analysisText;
@@ -813,11 +776,6 @@ const romanizeEntry = async (
     targetScripts
   );
   const providerReading = preserveUsableProviderReading(target, targetScripts);
-  const suppressProviderReading = disableProviderReadings && cjkLineRoute === "Japanese";
-  if (suppressProviderReading) {
-    delete target.RomanizedText;
-    delete target.TransliteratedText;
-  }
   const providerJapaneseReading = getProviderJapaneseLineReading(
     providerEvidence,
     entry.providerRowOrdinal,
@@ -828,7 +786,7 @@ const romanizeEntry = async (
     allowChineseProviderJapaneseRepair &&
     allowsChineseProviderJapaneseRepair(entry.lineText || target.Text || "");
 
-  if (!suppressProviderReading && providerReading && !preferGeneratedReading) {
+  if (providerReading && !preferGeneratedReading) {
     restoreUsableProviderReading(target, targetScripts);
     return true;
   }
@@ -842,24 +800,6 @@ const romanizeEntry = async (
     targetScripts.includes("Japanese") &&
     ItemJapaneseTest.test(analysisText)
   ) {
-    if (disableKuromoji) {
-      delete target.JapaneseReading;
-      delete target.ReadingRenderPlan;
-      delete target.RomanizedText;
-      delete target.TransliteratedText;
-      const reading = buildProviderOnlyJapaneseReading(target.Text || "", providerJapaneseReading);
-      if (!reading) return false;
-      target.JapaneseReading = reading;
-      const plan = buildProviderOnlyJapaneseRenderPlan(
-        target.Text || "",
-        sourceOwnerSpans(target.Text || ""),
-        [target],
-        reading,
-      );
-      if (plan) target.ReadingRenderPlan = plan;
-      line.HasTransliterations = true;
-      return true;
-    }
     const packageRomaji = await processJapanesePackageTextTarget(target, {
       textProjection: repairJapaneseDisplay
         ? ChineseProviderJapaneseTextProjection
@@ -881,7 +821,7 @@ const romanizeEntry = async (
     (ItemChineseTest.test(text) || JapaneseTextTest.test(text));
   if (chineseDominantCjk) {
     if (chineseTranslitMode === "pinyin" && pinyinPlacement === "above") {
-      const projection = await projectChineseAboveReading(text, disableKuromoji);
+      const projection = await projectChineseAboveReading(text);
       if (projection.valid && projection.aboveReadingSegments.length > 0) {
         text = projection.text;
         const mappedSegments = projection.aboveReadingSegments.flatMap((segment) => {
@@ -904,18 +844,14 @@ const romanizeEntry = async (
         delete target.AboveReadingSegments;
         text = await romanizeChineseDominantCjkText(text, {
           romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
-          romanizeKana: async (run) => disableKuromoji
-            ? undefined
-            : (await analyzeJapaneseLine(run))?.romaji,
+          romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
         });
       }
     } else {
       delete target.AboveReadingSegments;
       text = await romanizeChineseDominantCjkText(text, {
         romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
-        romanizeKana: async (run) => disableKuromoji
-          ? undefined
-          : (await analyzeJapaneseLine(run))?.romaji,
+        romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
       });
     }
     changed = text !== analysisText;
@@ -971,22 +907,20 @@ const romanizeEntry = async (
         targetScripts.map((script) => ScriptResidualTests[script])
       )
     ) {
-      return suppressProviderReading ? false : restoreUsableProviderReading(target, targetScripts);
+      return restoreUsableProviderReading(target, targetScripts);
     }
     target.TransliteratedText = text;
     target.RomanizedText = text;
     line.HasTransliterations = true;
   }
 
-  return changed || (!suppressProviderReading && restoreUsableProviderReading(target, targetScripts));
+  return changed || restoreUsableProviderReading(target, targetScripts);
 };
 
 type ProcessLyricsOptions = {
   awaitTranslation?: boolean;
   signal?: AbortSignal;
   allowRemoteRomanization?: boolean;
-  disableKuromoji?: boolean;
-  disableProviderReadings?: boolean;
 };
 
 export const ProcessLyrics = async (
@@ -1003,13 +937,7 @@ export const ProcessLyrics = async (
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   const awaitTranslation = options.awaitTranslation !== false;
-  const disableKuromoji = options.disableKuromoji
-    ?? isExperimentEnabled("disableKuromoji");
-  const disableProviderReadings = options.disableProviderReadings
-    ?? isExperimentEnabled("disableProviderReadings");
-  const providerReadingEvidence = disableProviderReadings
-    ? undefined
-    : sourceDocument.document?.providerReadings;
+  const providerReadingEvidence = sourceDocument.document?.providerReadings;
   const hadApiTransliterations = lyrics.HasTransliterations === true;
   let gathered = gatherText(lyrics);
 
@@ -1126,8 +1054,6 @@ export const ProcessLyrics = async (
           lyrics.Type !== "Syllable",
           allowChineseProviderJapaneseRepair,
           providerReadingEvidence,
-          disableKuromoji,
-          disableProviderReadings,
         )
       )
     );
@@ -1142,8 +1068,6 @@ export const ProcessLyrics = async (
       arabicReadings,
       allowChineseProviderJapaneseRepair,
       providerReadingEvidence,
-      disableKuromoji,
-      disableProviderReadings,
     );
     if (lyrics.Type !== "Syllable") {
       entries.forEach((entry, index) => {

@@ -1,5 +1,9 @@
 import { useStore } from "@nanostores/react";
-import { $developerMode, $playbackOffset } from "../../../utils/stores.ts";
+import {
+  $developerMode,
+  $highlightProviderReadings,
+  $playbackOffset,
+} from "../../../utils/stores.ts";
 import {
   RemoveCurrentLyrics_AllCaches,
   RemoveCurrentLyrics_StateCache,
@@ -17,6 +21,7 @@ interface Props {
 export default function AdvancedSection({ query, sectionFilter }: Props) {
   const offset = useStore($playbackOffset);
   const developerMode = useStore($developerMode);
+  const highlightProviderReadings = useStore($highlightProviderReadings);
   if (sectionFilter !== "All" && sectionFilter !== SECTION_NAME) return null;
   const playback = matches(query, "Playback Offset", "Shift lyrics timing earlier or later."),
     currentCaches = matches(
@@ -35,8 +40,21 @@ export default function AdvancedSection({ query, sectionFilter }: Props) {
       "Remove the current song from in-memory state."
     ),
     developer = matches(query, "Developer Mode", "Enable extra logging and debug utilities."),
+    providerReadingHighlight = developerMode && matches(
+      query,
+      "Highlight Provider Readings",
+      "Tint provider-supplied Japanese readings gold for diagnostics.",
+    ),
     marker = matches(query, "Build Marker", SPICY_LYRICS_BUILD_MARKER);
-  if (![playback, currentCaches, storedCache, stateCache, developer, marker].some(Boolean))
+  if (![
+    playback,
+    currentCaches,
+    storedCache,
+    stateCache,
+    developer,
+    providerReadingHighlight,
+    marker,
+  ].some(Boolean))
     return null;
 
   return (
@@ -103,10 +121,23 @@ export default function AdvancedSection({ query, sectionFilter }: Props) {
         </Row>
       )}
 
-      {(developer || marker) && <SubsectionTitle>Diagnostics</SubsectionTitle>}
+      {(developer || providerReadingHighlight || marker) && (
+        <SubsectionTitle>Diagnostics</SubsectionTitle>
+      )}
       {developer && (
         <Row label="Developer Mode" description="Enable extra logging and debug utilities.">
           <Toggle checked={developerMode} onChange={(value) => $developerMode.set(value)} />
+        </Row>
+      )}
+      {providerReadingHighlight && (
+        <Row
+          label="Highlight Provider Readings"
+          description="Tint provider-supplied Japanese readings gold for diagnostics."
+        >
+          <Toggle
+            checked={highlightProviderReadings}
+            onChange={(value) => $highlightProviderReadings.set(value)}
+          />
         </Row>
       )}
       {marker && (

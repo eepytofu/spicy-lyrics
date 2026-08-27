@@ -70,24 +70,16 @@ test("Pinyin placement rebuilds processed readings through the guarded queue", (
   assert.match(pageSource, /\$pinyinPlacement\.listen\(queueProcessingSettingsRefresh\)/u);
 });
 
-test("Japanese reading diagnostic experiments invalidate processing and reprocess current lyrics", () => {
+test("provider-reading highlight is a developer diagnostic, not a product experiment", () => {
   const pageSource = readSource("../src/components/Pages/PageView.ts");
-  const fetchSource = readSource("../src/utils/Lyrics/fetchLyrics.ts");
-  const processSource = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
-  assert.match(
-    pageSource,
-    /experiment\.id === "disableKuromoji" \|\|[\s\S]*?experiment\.id === "disableProviderReadings"[\s\S]*?queueProcessingSettingsRefresh\(\)/u,
+  const advancedSource = readSource(
+    "../src/components/ReactComponents/SettingsPanel/AdvancedSection.tsx",
   );
-  assert.match(
-    fetchSource,
-    /disableKuromoji: isExperimentEnabled\("disableKuromoji"\)/u,
-  );
-  assert.match(
-    fetchSource,
-    /disableProviderReadings: isExperimentEnabled\("disableProviderReadings"\)/u,
-  );
-  assert.match(
-    processSource,
-    /const providerReadingEvidence = disableProviderReadings\s*\? undefined\s*:\s*sourceDocument\.document\?\.providerReadings;/u,
-  );
+  const experimentsSource = readSource("../src/utils/experiments.ts");
+  assert.match(advancedSource, /providerReadingHighlight = developerMode && matches/u);
+  assert.match(advancedSource, /label="Highlight Provider Readings"/u);
+  assert.match(pageSource, /\$developerMode\.get\(\) && \$highlightProviderReadings\.get\(\)/u);
+  assert.match(pageSource, /\$developerMode\.listen\(applyProviderReadingHighlight\)/u);
+  assert.match(pageSource, /\$highlightProviderReadings\.listen/u);
+  assert.doesNotMatch(experimentsSource, /highlightProviderReadings/u);
 });

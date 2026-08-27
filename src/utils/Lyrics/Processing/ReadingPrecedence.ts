@@ -92,6 +92,46 @@ export function preserveProviderReading(entry: ReadingEntry): string | undefined
   return current;
 }
 
+function suspendProviderReadingEntry(entry: ReadingEntry | undefined): void {
+  if (!entry) return;
+  preserveProviderReading(entry);
+  delete entry.RomanizedText;
+  delete entry.TransliteratedText;
+}
+
+/**
+ * Fresh lyrics are rendered once while local reading work runs in the
+ * background. Keep provider text as immutable evidence, but do not expose its
+ * display aliases during that pending frame: the configured processor owns the
+ * first visible reading.
+ */
+export function suspendPendingProviderReadings(lyrics: any): void {
+  if (lyrics?.Type === "Static") {
+    for (const line of lyrics.Lines || []) suspendProviderReadingEntry(line);
+    return;
+  }
+  if (lyrics?.Type === "Line") {
+    for (const line of lyrics.Content || []) {
+      suspendProviderReadingEntry(line);
+      for (const background of line.Background || []) suspendProviderReadingEntry(background);
+    }
+    return;
+  }
+  if (lyrics?.Type !== "Syllable") return;
+  for (const vocalGroup of lyrics.Content || []) {
+    for (const group of [vocalGroup.Lead, ...(vocalGroup.Background || [])]) {
+      suspendProviderReadingEntry(group);
+      for (const syllable of group?.Syllables || []) suspendProviderReadingEntry(syllable);
+    }
+  }
+}
+
+export function pendingLyricsPresentation(lyrics: any): any {
+  const pending = structuredClone(lyrics);
+  suspendPendingProviderReadings(pending);
+  return pending;
+}
+
 export function preserveProviderReadingWithoutResidual(
   entry: ReadingEntry,
   residualScript: RegExp,

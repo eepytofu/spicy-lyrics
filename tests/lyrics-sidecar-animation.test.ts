@@ -222,7 +222,7 @@ test("static and Simple Line sidecars use completed paint without a stale sweep"
   assert.match(mainCss, /rgba\(255,\s*207,\s*128,\s*0\.9\)/u);
 });
 
-test("provider reading tint is opt-in through its experiment class", () => {
+test("provider reading tint is opt-in through its diagnostic class", () => {
   const tintRules = [...mainCss.matchAll(
     /([^{}]*reading-origin-provider-explicit[^{}]*)\{([^{}]*255,\s*207,\s*128[^{}]*)\}/gu,
   )];

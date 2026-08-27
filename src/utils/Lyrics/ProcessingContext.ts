@@ -11,8 +11,6 @@ export type ProcessingContext = {
   koreanDisplayMode: "wordTranslit" | "rrStandard" | "rrPronunciation" | "vnPronunciation";
   cyrillicRomanizationMode: "Russian" | "Ukrainian";
   cyrillicKeepSigns: boolean;
-  disableKuromoji: boolean;
-  disableProviderReadings: boolean;
 };
 
 export function buildProcessingContextKey(context: ProcessingContext): string {
@@ -26,7 +24,5 @@ export function buildProcessingContextKey(context: ProcessingContext): string {
     koreanDisplayMode: context.koreanDisplayMode,
     cyrillicRomanizationMode: context.cyrillicRomanizationMode,
     cyrillicKeepSigns: context.cyrillicKeepSigns,
-    disableKuromoji: context.disableKuromoji,
-    disableProviderReadings: context.disableProviderReadings,
   });
 }

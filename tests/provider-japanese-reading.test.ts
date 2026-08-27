@@ -372,15 +372,7 @@ test("NetEase line romanization remains evidence-only and local analysis owns re
   );
 });
 
-test("Disable Kuromoji returns before even an injected throwing analyzer", async () => {
-  let calls = 0;
-  const throwingAnalyzer: JapaneseAnalyzer = {
-    id: "throwing",
-    async analyze() {
-      calls += 1;
-      throw new Error("analyzer must not run");
-    },
-  };
+test("provider-only projection derives display from exact Kana evidence", () => {
   const source = "明日";
   const provider = getProviderJapaneseLineReading(
     qqEvidence("ignored raw Latin", [{ start: 0, end: 2, source, reading: "あす" }]),
@@ -389,12 +381,6 @@ test("Disable Kuromoji returns before even an injected throwing analyzer", async
     sourceOwnerSpans(source),
   );
 
-  assert.equal(await analyzeJapaneseLine(source, {
-    analyzer: throwingAnalyzer,
-    providerReading: provider,
-    disableKuromoji: true,
-  }), undefined);
-  assert.equal(calls, 0);
   assert.equal(buildProviderOnlyJapaneseReading(source, provider)?.romaji, "asu");
   assert.equal(buildProviderOnlyJapaneseReading(source, undefined), undefined);
 });
