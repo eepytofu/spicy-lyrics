@@ -1452,16 +1452,6 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
     color: var(--color-text-primary);
   }
 
-  .sl-chooser-spinner {
-    width: 12px;
-    height: 12px;
-    box-sizing: border-box;
-    border: 1.5px solid var(--hairline-strong);
-    border-top-color: currentColor;
-    border-radius: 50%;
-    animation: sl-chooser-spin 0.75s linear infinite;
-  }
-
   .sl-chooser-root .sl-sp-btn:disabled {
     cursor: default;
     opacity: 0.5;
@@ -1559,12 +1549,6 @@ sl-generic-modal.SpicyLyricsModal .sl-modal-overlay {
   @keyframes sl-chooser-progress {
     to {
       transform: translateX(310%);
-    }
-  }
-
-  @keyframes sl-chooser-spin {
-    to {
-      transform: rotate(360deg);
     }
   }
 

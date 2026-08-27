@@ -46,6 +46,8 @@ type CurrentLyrics = {
 
 type RequestKind = "initial" | "search";
 
+const APPLY_FEEDBACK_DELAY_MS = 300;
+
 function parseCurrentLyrics(raw: string, uri: string): CurrentLyrics | null {
   if (!raw || raw.startsWith("NO_LYRICS:")) return null;
   try {
@@ -213,6 +215,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
   const [automaticRecord, setAutomaticRecord] = useState<LyricsCandidateRecord | null>(null);
   const [requestKind, setRequestKind] = useState<RequestKind | null>(null);
   const [busyRevisionId, setBusyRevisionId] = useState<string | null>(null);
+  const [visibleBusyRevisionId, setVisibleBusyRevisionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const requestController = useRef<AbortController | null>(null);
 
@@ -305,6 +308,17 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
     setTitle(restoredSearchOverrides.title);
     setArtist(restoredSearchOverrides.artist);
   }, [uri, restoredSearchOverrides?.title, restoredSearchOverrides?.artist]);
+
+  useEffect(() => {
+    setVisibleBusyRevisionId(null);
+    if (!busyRevisionId) return;
+
+    const timeout = window.setTimeout(
+      () => setVisibleBusyRevisionId(busyRevisionId),
+      APPLY_FEEDBACK_DELAY_MS
+    );
+    return () => window.clearTimeout(timeout);
+  }, [busyRevisionId]);
 
   async function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -460,6 +474,7 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
               const busy = automaticOption
                 ? busyRevisionId === "auto"
                 : record.revision.id === busyRevisionId;
+              const showBusyFeedback = busy && visibleBusyRevisionId === busyRevisionId;
               const unavailable = selected || busyRevisionId !== null || requestKind !== null;
               const metadata = candidateMetadata(record, resultFallback);
               const metadataLine = [metadata.artist, metadata.album].filter(Boolean).join(" · ");
@@ -480,8 +495,9 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                     }
                   }}
                   aria-disabled={unavailable}
+                  aria-busy={busy}
                   aria-pressed={selected}
-                  aria-label={`${selected ? "Current" : automaticOption ? "Return to Automatic" : "Select"} ${providerLabel} lyrics for ${metadata.title}. ${signalSummary}`}
+                  aria-label={`${busy ? "Applying" : selected ? "Current" : automaticOption ? "Return to Automatic" : "Select"} ${providerLabel} lyrics for ${metadata.title}. ${signalSummary}`}
                   title={metadata.title}
                 >
                   <span className="sl-chooser-result-main">
@@ -519,11 +535,8 @@ export default function LyricsChooser({ onClose }: { onClose: () => void }) {
                         </svg>
                         <span>Current</span>
                       </>
-                    ) : busy ? (
-                      <>
-                        <span className="sl-chooser-spinner" />
-                        <span>Applying</span>
-                      </>
+                    ) : showBusyFeedback ? (
+                      <span>Applying…</span>
                     ) : (
                       <svg viewBox="0 0 16 16">
                         <path d="m6 3 5 5-5 5" />

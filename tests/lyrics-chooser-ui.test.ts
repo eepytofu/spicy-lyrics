@@ -123,6 +123,20 @@ test("chooser uses accessible compact rows instead of a clipped action table", (
   assert.doesNotMatch(css, /sl-chooser[^}]*880px/su);
 });
 
+test("chooser delays apply feedback without flashing a spinner", () => {
+  assert.match(chooser, /const APPLY_FEEDBACK_DELAY_MS = 300/);
+  assert.match(
+    chooser,
+    /window\.setTimeout\([\s\S]*setVisibleBusyRevisionId\(busyRevisionId\)[\s\S]*APPLY_FEEDBACK_DELAY_MS/
+  );
+  assert.match(chooser, /const showBusyFeedback = busy && visibleBusyRevisionId === busyRevisionId/);
+  assert.match(chooser, /aria-busy=\{busy\}/);
+  assert.match(chooser, /busy \? "Applying" : selected/);
+  assert.match(chooser, /showBusyFeedback \? \([\s\S]*<span>Applying…<\/span>/);
+  assert.doesNotMatch(chooser, /sl-chooser-spinner/);
+  assert.doesNotMatch(css, /sl-chooser-spinner|sl-chooser-spin/);
+});
+
 test("chooser summarizes selector-owned confidence and gates diagnostics to developer mode", () => {
   assert.match(chooser, /const \{ signals \} = record\.assessment/);
   assert.match(chooser, /function confidenceLabel\(record: LyricsCandidateRecord\)/);
