@@ -90,7 +90,7 @@ test("cache reprocessing advances without changing reading-plan schema", () => {
     "utf8",
   );
 
-  assert.match(processSource, /LYRICS_PROCESSING_VERSION = 80/u);
+  assert.match(processSource, /LYRICS_PROCESSING_VERSION = 81/u);
   assert.match(processSource, /READING_PLAN_SCHEMA_VERSION = 5/u);
   assert.match(fetchSource, /lyrics\.ProcessingVersion === LYRICS_PROCESSING_VERSION/u);
   assert.doesNotMatch(copySource, /normalize\(["']NFKC["']\)/u);

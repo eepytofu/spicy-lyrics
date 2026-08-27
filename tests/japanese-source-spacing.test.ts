@@ -274,6 +274,19 @@ test("Japanese local romaji joins a token that starts with sokuon", () => {
   assert.deepEqual(boundaryPlan[1].reasons, ["phonetic"]);
 });
 
+test("Japanese split sokuon preserves the converter's Hepburn spelling", () => {
+  const entries: MergeableEntry[] = [
+    { surface: "まっ", readingKana: "まっ", romaji: romanizeJapaneseKana("まっ"), consumed: false },
+    { surface: "ちゃ", readingKana: "ちゃ", romaji: romanizeJapaneseKana("ちゃ"), consumed: false },
+  ];
+  const tokens = [analyzerToken("まっ", "まっ"), analyzerToken("ちゃ", "ちゃ")];
+
+  applyPhoneticMerges(entries, tokens, romanizeJapaneseKana);
+
+  assert.equal(entries.map((entry) => entry.romaji).join(""), romanizeJapaneseKana("まっちゃ"));
+  assert.equal(entries.map((entry) => entry.romaji).join(""), "matcha");
+});
+
 test("Japanese sokuon merging never duplicates trailing punctuation", () => {
   const chantEntries: MergeableEntry[] = [
     { surface: "はっ", romaji: "hatsu", consumed: false },

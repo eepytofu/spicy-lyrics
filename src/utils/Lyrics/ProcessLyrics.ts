@@ -104,7 +104,7 @@ import {
 export { clearTranslationCache };
 export { acceptRomanization };
 // v80: rebuild refined hybrid Japanese reading boundaries.
-export const LYRICS_PROCESSING_VERSION = 80;
+export const LYRICS_PROCESSING_VERSION = 81;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 

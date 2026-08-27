@@ -11,7 +11,7 @@ import type {
 
 export interface MergeableEntry extends JapaneseAnalyzerReadingState {}
 
-const SMALL_TSU_ROMAJI = /(?:xtsu|ltsu|tsu)$/i;
+const TERMINAL_SOKUON_ROMAJI = /(?:xtsu|ltsu|tsu|')$/i;
 const PROLONGED_SOUND_MARK = /^ー+$/u;
 const LEADING_PROLONGED_SOUND_MARK = /^ー+/u;
 const LEADING_SMALL_KANA = /^[ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ]/u;
@@ -26,7 +26,7 @@ const doubledSokuon = (romaji: string): string => {
   if (!romaji) return romaji;
   const lower = romaji.toLowerCase();
   if (!/^[a-z]/.test(lower) || /^[aeioun]/.test(lower)) return romaji;
-  return `${romaji[0]}${romaji}`;
+  return `${lower.startsWith("ch") ? "t" : romaji[0]}${romaji}`;
 };
 
 export function applyPhoneticMerges(
@@ -99,12 +99,12 @@ export function applyPhoneticMerges(
     const currentIsJapanesePhonetic =
       JapanesePhoneticText.test(currSf) || JapanesePhoneticText.test(currReading);
     if (currentIsJapanesePhonetic) {
-      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
+      entries[pi].romaji = entries[pi].romaji.replace(TERMINAL_SOKUON_ROMAJI, "");
       entries[i].romaji = doubledSokuon(entries[i].romaji);
     } else if (/^\p{Script=Latin}/u.test(currSf)) {
-      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "'");
+      entries[pi].romaji = entries[pi].romaji.replace(TERMINAL_SOKUON_ROMAJI, "'");
     } else {
-      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
+      entries[pi].romaji = entries[pi].romaji.replace(TERMINAL_SOKUON_ROMAJI, "");
     }
   }
 }

@@ -539,7 +539,8 @@ test("partial QQ readings retain local lyric boundaries around numbers and Latin
 
 test("internal Modified Hepburn keeps focused Kana and punctuation behavior", () => {
   assert.equal(romanizeJapaneseKana("がっこう"), "gakkou");
-  assert.equal(romanizeJapaneseKana("っ"), "tsu");
+  assert.equal(romanizeJapaneseKana("っ"), "'");
+  assert.equal(romanizeJapaneseKana("わんっつーさんしっ"), "wanttsuusanshi'");
   assert.equal(romanizeJapaneseKana("しんえつ"), "shin'etsu");
   assert.equal(romanizeJapaneseKana("スーパー"), "suupaa");
   assert.equal(romanizeJapaneseKana("ﾌｧｲﾙ"), "fairu");

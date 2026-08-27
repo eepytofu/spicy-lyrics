@@ -84,9 +84,9 @@ export function romanizeJapaneseKana(input: string): string {
         output += following.startsWith("ch") ? "t" : following[0];
       } else if (!following) {
         // A tokenizer may isolate sokuon from the Kana it doubles. Preserve
-        // the existing merge contract, which removes this fallback and
-        // doubles the following token's initial consonant.
-        output += "tsu";
+        // the cutoff until the merge stage can either consume it before the
+        // following token or retain it at the end of the utterance.
+        output += "'";
       }
       index += 1;
       continue;
