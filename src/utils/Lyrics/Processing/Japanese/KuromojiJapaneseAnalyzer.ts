@@ -25,6 +25,7 @@ function normalizePartOfSpeech(raw: string, detail1: string): JapanesePartOfSpee
   if (raw === "動詞") return "verb";
   if (raw === "助動詞") return "auxiliaryVerb";
   if (raw === "助詞") return "particle";
+  if (raw === "接頭詞") return "prefix";
   if (raw === "接尾辞" || raw === "接尾") return "suffix";
   return "other";
 }

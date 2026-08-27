@@ -4,6 +4,7 @@ import {
   prepareJapaneseLineAnalysis,
   type FuriganaSegment,
   type JapaneseAnalysisOptions,
+  type JapaneseRomajiSegment,
   type JapaneseReadable,
   type JapaneseTimedTextSpan,
 } from "../../Reading/JapaneseReading.ts";
@@ -49,7 +50,13 @@ export async function processJapanesePackageLine(
   spans: JapaneseTimedTextSpan[],
   times: Array<{ StartTime?: number; EndTime?: number }>,
   options: JapaneseAnalysisOptions = {}
-): Promise<{ plan: RenderPlan; romaji: string; furigana: FuriganaSegment[]; displayText: string }> {
+): Promise<{
+  plan: RenderPlan;
+  romaji: string;
+  romajiSegments?: JapaneseRomajiSegment[];
+  furigana: FuriganaSegment[];
+  displayText: string;
+}> {
   const projection = addStructuredProviderRubyReadings(
     projectProviderAuthoredJapaneseReadings(displayText, spans),
     spans.map((span) => ({
@@ -91,7 +98,13 @@ export async function processJapanesePackageLine(
   const plan = buildRenderPlan(parsed, canonical, [annotation]);
   const validation = validateRenderPlan(plan);
   if (!validation.valid) throw new Error(validation.errors.join("; "));
-  return { plan, romaji, furigana: reading?.furigana || [], displayText: finalDisplayText };
+  return {
+    plan,
+    romaji,
+    ...(reading?.romajiSegments ? { romajiSegments: reading.romajiSegments } : {}),
+    furigana: reading?.furigana || [],
+    displayText: finalDisplayText,
+  };
 }
 
 export async function processJapanesePackageTextTarget(

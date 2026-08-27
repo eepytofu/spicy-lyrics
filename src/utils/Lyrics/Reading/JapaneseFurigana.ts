@@ -300,7 +300,14 @@ export function buildFuriganaFromContext(
       const key = `${start}:${end}:${segment.text}`;
       if (!segment.text || seen.has(key)) continue;
       seen.add(key);
-      segments.push({ start, end, reading: segment.text });
+      segments.push({
+        start,
+        end,
+        reading: segment.text,
+        ...(entry.readingProvenance
+          ? { provenance: entry.readingProvenance }
+          : {}),
+      });
     }
   }
 

@@ -69,3 +69,25 @@ test("Pinyin placement rebuilds processed readings through the guarded queue", (
   const pageSource = readSource("../src/components/Pages/PageView.ts");
   assert.match(pageSource, /\$pinyinPlacement\.listen\(queueProcessingSettingsRefresh\)/u);
 });
+
+test("Japanese reading diagnostic experiments invalidate processing and reprocess current lyrics", () => {
+  const pageSource = readSource("../src/components/Pages/PageView.ts");
+  const fetchSource = readSource("../src/utils/Lyrics/fetchLyrics.ts");
+  const processSource = readSource("../src/utils/Lyrics/ProcessLyrics.ts");
+  assert.match(
+    pageSource,
+    /experiment\.id === "disableKuromoji" \|\|[\s\S]*?experiment\.id === "disableProviderReadings"[\s\S]*?queueProcessingSettingsRefresh\(\)/u,
+  );
+  assert.match(
+    fetchSource,
+    /disableKuromoji: isExperimentEnabled\("disableKuromoji"\)/u,
+  );
+  assert.match(
+    fetchSource,
+    /disableProviderReadings: isExperimentEnabled\("disableProviderReadings"\)/u,
+  );
+  assert.match(
+    processSource,
+    /const providerReadingEvidence = disableProviderReadings\s*\? undefined\s*:\s*sourceDocument\.document\?\.providerReadings;/u,
+  );
+});

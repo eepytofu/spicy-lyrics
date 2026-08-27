@@ -468,6 +468,80 @@ test("canonical particle behavior remains shared without raw analyzer POS labels
   assert.equal(reading?.reading.romaji, "watashi wa");
 });
 
+test("Kuromoji adapter exposes prefixes as analyzer-neutral morphology", () => {
+  const [prefix] = normalizeKuromojiTokens("お", [{
+    surface_form: "お",
+    reading: "オ",
+    pronunciation: "オ",
+    pos: "接頭詞",
+    pos_detail_1: "名詞接続",
+    basic_form: "お",
+  }]);
+
+  assert.equal(prefix.partOfSpeech, "prefix");
+});
+
+test("leading repeated Kana is romanized literally across analyzer boundaries", async () => {
+  const source = "はぴはぴだーりん";
+  const analyzer: JapaneseAnalyzer = {
+    id: "fixture-analyzer",
+    async analyze() {
+      return [
+        token("は", 0, "は", { partOfSpeech: "particle" }),
+        token("ぴはぴだ", 1, "ぴはぴだ"),
+        token("ー", 5, "ー"),
+        token("りん", 6, "りん"),
+      ];
+    },
+  };
+
+  const reading = await prepareJapaneseLineAnalysis(source, { analyzer });
+
+  assert.equal(reading?.reading.romaji, "hapi hapi daarin");
+});
+
+test("Kana repetition inside punctuation is segmented independently of analyzer tokens", async () => {
+  const source = "うーーー(うまぴょいうまぴょい)";
+  const analyzer: JapaneseAnalyzer = {
+    id: "fixture-analyzer",
+    async analyze() {
+      return [
+        token("う", 0, "う"),
+        token("ーーー", 1, "ーーー"),
+        token("(", 4, ""),
+        token("うま", 5, "うま"),
+        token("ぴょいうまぴょい", 7, "ぴょいうまぴょい"),
+        token(")", 15, ""),
+      ];
+    },
+  };
+
+  const reading = await prepareJapaneseLineAnalysis(source, { analyzer });
+
+  assert.equal(reading?.reading.romaji, "uuuu (umapyoi umapyoi)");
+});
+
+test("context-free particle-shaped Kana stays literal at line and parenthetical starts", async () => {
+  const source = "はちゃめちゃ(はいっ)";
+  const analyzer: JapaneseAnalyzer = {
+    id: "fixture-analyzer",
+    async analyze() {
+      return [
+        token("は", 0, "は", { partOfSpeech: "particle" }),
+        token("ちゃめちゃ", 1, "ちゃめちゃ"),
+        token("(", 6, ""),
+        token("は", 7, "は", { partOfSpeech: "particle" }),
+        token("いっ", 8, "いっ"),
+        token(")", 10, ""),
+      ];
+    },
+  };
+
+  const reading = await prepareJapaneseLineAnalysis(source, { analyzer });
+
+  assert.equal(reading?.reading.romaji, "hachamecha (hai)");
+});
+
 test("analyzer tokens must match their declared source ranges", async () => {
   const analyzer: JapaneseAnalyzer = {
     id: "misaligned-experiment",

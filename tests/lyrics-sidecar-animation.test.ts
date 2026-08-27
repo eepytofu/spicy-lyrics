@@ -222,6 +222,16 @@ test("static and Simple Line sidecars use completed paint without a stale sweep"
   assert.match(mainCss, /rgba\(255,\s*207,\s*128,\s*0\.9\)/u);
 });
 
+test("provider reading tint is opt-in through its experiment class", () => {
+  const tintRules = [...mainCss.matchAll(
+    /([^{}]*reading-origin-provider-explicit[^{}]*)\{([^{}]*255,\s*207,\s*128[^{}]*)\}/gu,
+  )];
+  assert.ok(tintRules.length > 0);
+  for (const [_, selector] of tintRules) {
+    assert.match(selector, /#SpicyLyricsPage\.Exp_HighlightProviderReadings/u);
+  }
+});
+
 test("timed romaji and line sidecars follow paint-only extra gradient state", () => {
   assert.match(
     animatorSource,

@@ -5,6 +5,7 @@ export type JapanesePartOfSpeech =
   | "verb"
   | "auxiliaryVerb"
   | "particle"
+  | "prefix"
   | "suffix"
   | "other";
 export type JapaneseMorphologyFeature =
@@ -51,6 +52,9 @@ export type JapaneseAnalyzerReadingState = {
   consumed: boolean;
   /** Stable derived lexical group used by the reading boundary planner. */
   readingGroupId?: string;
+  /** Leading/trailing groups for a token that crosses an internal display boundary. */
+  readingGroupStartId?: string;
+  readingGroupEndId?: string;
   surface?: string;
   readingKana?: string;
   start?: number;

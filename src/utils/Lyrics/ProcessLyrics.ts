@@ -4,6 +4,7 @@ import langs from "langs";
 import Logger from "../Logger.ts";
 import { convertChineseLyricsText } from "./ChineseCharacterConversion.ts";
 import { $chineseCharacterForm } from "../uiState.ts";
+import { isExperimentEnabled } from "../experiments.ts";
 import {
   chineseTones,
   chineseTranslitMode,
@@ -87,6 +88,13 @@ import {
 } from "./Processing/ReadingPrecedence.ts";
 import type { AboveReadingSegment, ParsedLine } from "./Processing/Model.ts";
 import { ensureSourceLyricDocument } from "./Processing/SourceLyricDocument.ts";
+import {
+  buildProviderOnlyJapaneseReading,
+  buildProviderOnlyJapaneseRenderPlan,
+  getProviderJapaneseLineReading,
+  sourceOwnerSpans,
+} from "./Processing/Japanese/ProviderJapaneseReading.ts";
+import type { ProviderReadingEvidence } from "./ProviderReadingEvidence.ts";
 import { shouldSkipGeneratedLyricsProcessing } from "./LyricsSemanticPolicy.ts";
 import {
   buildTextAnalysisProjection,
@@ -96,8 +104,8 @@ import {
 
 export { clearTranslationCache };
 export { acceptRomanization };
-// v74: retain timed Japanese furigana when its exact source owner has edge whitespace.
-export const LYRICS_PROCESSING_VERSION = 74;
+// v80: rebuild refined hybrid Japanese reading boundaries.
+export const LYRICS_PROCESSING_VERSION = 80;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -159,7 +167,10 @@ const projectMandarinRun = (text: string): CjkRunReadingProjection => {
   };
 };
 
-const projectKanaRun = async (text: string): Promise<CjkRunReadingProjection> => {
+const projectKanaRun = async (
+  text: string,
+  disableKuromoji: boolean,
+): Promise<CjkRunReadingProjection> => {
   const segments: CjkRunReadingProjection["segments"][number][] = [];
   let output = "";
   let sourceCursorUtf16 = 0;
@@ -169,7 +180,9 @@ const projectKanaRun = async (text: string): Promise<CjkRunReadingProjection> =>
     const matchStartUtf16 = match.index;
     const kana = match[0];
     output += text.slice(sourceCursorUtf16, matchStartUtf16);
-    const reading = (await analyzeJapaneseLine(kana))?.romaji?.trim();
+    const reading = disableKuromoji
+      ? undefined
+      : (await analyzeJapaneseLine(kana))?.romaji?.trim();
     if (!reading || JapaneseTextTest.test(reading)) {
       valid = false;
       output += kana;
@@ -190,10 +203,10 @@ const projectKanaRun = async (text: string): Promise<CjkRunReadingProjection> =>
   return { text: output, segments, valid: valid && segments.length > 0 };
 };
 
-const projectChineseAboveReading = (text: string) =>
+const projectChineseAboveReading = (text: string, disableKuromoji: boolean) =>
   projectChineseDominantCjkReadings(text, {
     projectHan: projectMandarinRun,
-    projectKana: projectKanaRun,
+    projectKana: (run) => projectKanaRun(run, disableKuromoji),
   });
 
 const romanizeKoreanText = (text: string): string =>
@@ -212,6 +225,7 @@ type RomanizeEntry = {
   line: any;
   lineText: string;
   textProjection: TextAnalysisProjection;
+  providerRowOrdinal?: number;
 };
 
 const projectLyricsText = (target: any): TextAnalysisProjection => {
@@ -248,6 +262,16 @@ const projectedSyllableLine = (
   return { text, projections };
 };
 
+const providerLeadRowOrdinals = (lines: readonly any[]): ReadonlyMap<any, number> => {
+  const ordinals = new Map<any, number>();
+  let ordinal = 0;
+  for (const line of lines) {
+    if (line?.Type === "Instrumental") continue;
+    ordinals.set(line, ordinal++);
+  }
+  return ordinals;
+};
+
 const gatherText = (
   lyrics: any
 ): {
@@ -259,22 +283,34 @@ const gatherText = (
   const entries: RomanizeEntry[] = [];
   const textLines: string[] = [];
   const bgTextLines: string[] = [];
-
   if (lyrics.Type === "Static") {
+    const staticRowOrdinals = new Map(
+      lyrics.Lines.map((line: any, index: number) => [line, index]),
+    );
     for (const line of lyrics.Lines) {
       if (shouldSkipGeneratedLyricsProcessing(line)) continue;
       const textProjection = projectLyricsText(line);
+      const rowOrdinal = staticRowOrdinals.get(line);
       const lineText = textProjection.analysisText;
-      entries.push({ target: line, line, lineText, textProjection });
+      entries.push({ target: line, line, lineText, textProjection, providerRowOrdinal: rowOrdinal });
       textLines.push(lineText);
     }
   } else if (lyrics.Type === "Line") {
+    const rowOrdinals = providerLeadRowOrdinals(lyrics.Content);
     for (const vocalGroup of lyrics.Content) {
       if (shouldSkipGeneratedLyricsProcessing(vocalGroup)) continue;
+      if (vocalGroup.Type === "Instrumental") continue;
+      const rowOrdinal = rowOrdinals.get(vocalGroup);
       if (vocalGroup.Type === "Vocal" || vocalGroup.Text) {
         const textProjection = projectLyricsText(vocalGroup);
         const lineText = textProjection.analysisText;
-        entries.push({ target: vocalGroup, line: vocalGroup, lineText, textProjection });
+        entries.push({
+          target: vocalGroup,
+          line: vocalGroup,
+          lineText,
+          textProjection,
+          providerRowOrdinal: rowOrdinal,
+        });
         textLines.push(lineText);
       }
       for (const background of vocalGroup.Background || []) {
@@ -285,7 +321,10 @@ const gatherText = (
       }
     }
   } else if (lyrics.Type === "Syllable") {
+    const rowOrdinals = providerLeadRowOrdinals(lyrics.Content);
     for (const vocalGroup of lyrics.Content) {
+      if (vocalGroup.Type === "Instrumental") continue;
+      const rowOrdinal = rowOrdinals.get(vocalGroup);
       if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
       if (shouldSkipGeneratedLyricsProcessing(vocalGroup.Lead)) continue;
 
@@ -297,6 +336,7 @@ const gatherText = (
           line: vocalGroup,
           lineText: "",
           textProjection: projected.projections[index],
+          providerRowOrdinal: rowOrdinal,
         }));
         for (const entry of lineEntries) entry.lineText = projected.text;
         entries.push(...lineEntries);
@@ -436,6 +476,7 @@ const romanizeLineText = async (
   docContext: ScriptBranchDocContext,
   language: string,
   arabicReadings: ReadonlyMap<string, string>,
+  disableKuromoji: boolean,
 ): Promise<{ text: string; aboveReadingSegments?: AboveReadingSegment[] } | undefined> => {
   const textProjection = buildTextAnalysisProjection(text);
   const entry: RomanizeEntry = {
@@ -444,7 +485,16 @@ const romanizeLineText = async (
     lineText: textProjection.analysisText,
     textProjection,
   };
-  const changed = await romanizeEntry(entry, docContext, language, arabicReadings, false);
+  const changed = await romanizeEntry(
+    entry,
+    docContext,
+    language,
+    arabicReadings,
+    false,
+    false,
+    undefined,
+    disableKuromoji,
+  );
   return changed
     ? {
         text: entry.target.TransliteratedText,
@@ -455,20 +505,40 @@ const romanizeLineText = async (
     : undefined;
 };
 
+const clearJapaneseSyllableReadingOutput = (group: any, syllables: any[]): void => {
+  delete group.JapaneseReading;
+  delete group.ReadingRenderPlan;
+  delete group.RomanizedText;
+  delete group.TransliteratedText;
+  for (const syllable of syllables) {
+    delete syllable.JapaneseReading;
+    delete syllable.RomanizedText;
+    delete syllable.TransliteratedText;
+    delete syllable.RomajiSpaceBefore;
+    delete syllable.JapaneseRomajiTiming;
+  }
+};
+
 const postProcessSyllableRomanization = async (
   lyrics: any,
   docContext: ScriptBranchDocContext,
   language: string,
   arabicReadings: ReadonlyMap<string, string>,
-  allowChineseProviderJapaneseRepair: boolean
+  allowChineseProviderJapaneseRepair: boolean,
+  providerEvidence: ProviderReadingEvidence | undefined,
+  disableKuromoji: boolean,
+  disableProviderReadings: boolean,
 ) => {
   if (lyrics.Type !== "Syllable") return;
 
+  const rowOrdinals = providerLeadRowOrdinals(lyrics.Content || []);
   for (const vocalGroup of lyrics.Content || []) {
+    if (vocalGroup.Type === "Instrumental") continue;
+    const leadRowOrdinal = rowOrdinals.get(vocalGroup);
     if (vocalGroup.Type !== undefined && vocalGroup.Type !== "Vocal") continue;
     if (shouldSkipGeneratedLyricsProcessing(vocalGroup.Lead)) continue;
 
-    const processGroup = async (group: any) => {
+    const processGroup = async (group: any, rowOrdinal?: number) => {
       const syllables = group?.Syllables;
       if (!Array.isArray(syllables) || syllables.length === 0) return;
       preserveProviderReading(group);
@@ -476,8 +546,31 @@ const postProcessSyllableRomanization = async (
 
       const spacedLineText = joinSyllables(syllables);
       const cjkLineRoute = resolveCjkLineRoute(spacedLineText, docContext);
-      const isJapaneseLine = cjkLineRoute === "Japanese";
+      const groupHasKorean = syllables.some((s: any) => KoreanTextTest.test(s.Text || ""));
+      const providerCandidateMap = !groupHasKorean
+        ? buildJapaneseLineTextMap(syllables)
+        : undefined;
+      const providerCandidate = providerCandidateMap
+        ? getProviderJapaneseLineReading(
+            providerEvidence,
+            rowOrdinal,
+            providerCandidateMap.sourceText,
+            providerCandidateMap.spans,
+          )
+        : undefined;
+      const hasStructuredProviderReading = (providerCandidate?.furigana.length ?? 0) > 0;
+      const directStructuredProviderLine =
+        cjkLineRoute !== "Japanese" && hasStructuredProviderReading;
+      const isJapaneseLine = cjkLineRoute === "Japanese" || directStructuredProviderLine;
       const isChineseLine = cjkLineRoute === "Chinese" || cjkLineRoute === "MixedChinese";
+      if (disableProviderReadings && isJapaneseLine) {
+        delete group.RomanizedText;
+        delete group.TransliteratedText;
+        for (const syllable of syllables) {
+          delete syllable.RomanizedText;
+          delete syllable.TransliteratedText;
+        }
+      }
       if (isJapaneseLine) group.ReadingPrimaryScript = "Japanese";
       else if (isChineseLine) group.ReadingPrimaryScript = "Chinese";
 
@@ -486,9 +579,8 @@ const postProcessSyllableRomanization = async (
         : isJapaneseLine
           ? joinSyllables(syllables, true)
           : spacedLineText;
-      const groupHasKorean = syllables.some((s: any) => KoreanTextTest.test(s.Text || ""));
       const japaneseMap =
-        isJapaneseLine && !groupHasKorean ? buildJapaneseLineTextMap(syllables) : undefined;
+        isJapaneseLine && !groupHasKorean ? providerCandidateMap : undefined;
       const effectiveLineText = japaneseMap?.lineText ?? lineText;
       const isArabicLine = ItemArabicTest.test(effectiveLineText);
       const repairJapaneseDisplay =
@@ -525,6 +617,39 @@ const postProcessSyllableRomanization = async (
         }
       }
       if (isJapaneseLine && !groupHasKorean && japaneseMap) {
+        const provider = providerCandidate;
+        if (directStructuredProviderLine) {
+          clearJapaneseSyllableReadingOutput(group, syllables);
+          const reading = buildProviderOnlyJapaneseReading(japaneseMap.sourceText, provider);
+          const plan = reading
+            ? buildProviderOnlyJapaneseRenderPlan(
+                japaneseMap.sourceText,
+                japaneseMap.spans,
+                syllables,
+                reading,
+              )
+            : undefined;
+          if (reading && plan) {
+            group.JapaneseReading = reading;
+            group.ReadingRenderPlan = plan;
+          }
+          return;
+        }
+        if (disableKuromoji) {
+          clearJapaneseSyllableReadingOutput(group, syllables);
+          const reading = buildProviderOnlyJapaneseReading(japaneseMap.sourceText, provider);
+          if (reading) {
+            const plan = buildProviderOnlyJapaneseRenderPlan(
+              japaneseMap.sourceText,
+              japaneseMap.spans,
+              syllables,
+              reading,
+            );
+            group.JapaneseReading = reading;
+            if (plan) group.ReadingRenderPlan = plan;
+          }
+          return;
+        }
         try {
           const packageResult = await processJapanesePackageLine(
             japaneseMap.sourceText,
@@ -535,6 +660,7 @@ const postProcessSyllableRomanization = async (
               textProjection: repairJapaneseDisplay
                 ? ChineseProviderJapaneseTextProjection
                 : undefined,
+              providerReading: provider,
             }
           );
           for (const syllable of syllables) {
@@ -549,6 +675,9 @@ const postProcessSyllableRomanization = async (
               ? { displayText: packageResult.displayText }
               : {}),
             romaji: packageResult.romaji,
+            ...(packageResult.romajiSegments
+              ? { romajiSegments: packageResult.romajiSegments }
+              : {}),
             furigana: packageResult.furigana,
           };
           group.ReadingRenderPlan = packageResult.plan;
@@ -560,6 +689,7 @@ const postProcessSyllableRomanization = async (
           for (const syllable of syllables) {
             delete syllable.JapaneseRomajiTiming;
           }
+          if (disableProviderReadings) throw error;
           const restoredGroup = restoreProviderReading(group);
           const restoredSyllables = syllables.map(restoreProviderReading).some(Boolean);
           if (!restoredGroup && !restoredSyllables) throw error;
@@ -588,6 +718,7 @@ const postProcessSyllableRomanization = async (
         docContext,
         language,
         arabicReadings,
+        disableKuromoji,
       );
       const reading = selectTimedLineReading(
         isArabicLine,
@@ -651,7 +782,7 @@ const postProcessSyllableRomanization = async (
       }
     };
 
-    await processGroup(vocalGroup.Lead);
+    await processGroup(vocalGroup.Lead, leadRowOrdinal);
     for (const bg of vocalGroup.Background || []) {
       await processGroup(bg);
     }
@@ -664,7 +795,10 @@ const romanizeEntry = async (
   primaryLanguage: string,
   arabicReadings: ReadonlyMap<string, string>,
   annotateJapanese: boolean = true,
-  allowChineseProviderJapaneseRepair: boolean = false
+  allowChineseProviderJapaneseRepair: boolean = false,
+  providerEvidence?: ProviderReadingEvidence,
+  disableKuromoji: boolean = false,
+  disableProviderReadings: boolean = false,
 ): Promise<boolean> => {
   const { target, line } = entry;
   const analysisText = entry.textProjection.analysisText;
@@ -679,11 +813,22 @@ const romanizeEntry = async (
     targetScripts
   );
   const providerReading = preserveUsableProviderReading(target, targetScripts);
+  const suppressProviderReading = disableProviderReadings && cjkLineRoute === "Japanese";
+  if (suppressProviderReading) {
+    delete target.RomanizedText;
+    delete target.TransliteratedText;
+  }
+  const providerJapaneseReading = getProviderJapaneseLineReading(
+    providerEvidence,
+    entry.providerRowOrdinal,
+    target.Text || "",
+    sourceOwnerSpans(target.Text || ""),
+  );
   const repairJapaneseDisplay =
     allowChineseProviderJapaneseRepair &&
     allowsChineseProviderJapaneseRepair(entry.lineText || target.Text || "");
 
-  if (providerReading && !preferGeneratedReading) {
+  if (!suppressProviderReading && providerReading && !preferGeneratedReading) {
     restoreUsableProviderReading(target, targetScripts);
     return true;
   }
@@ -697,10 +842,29 @@ const romanizeEntry = async (
     targetScripts.includes("Japanese") &&
     ItemJapaneseTest.test(analysisText)
   ) {
+    if (disableKuromoji) {
+      delete target.JapaneseReading;
+      delete target.ReadingRenderPlan;
+      delete target.RomanizedText;
+      delete target.TransliteratedText;
+      const reading = buildProviderOnlyJapaneseReading(target.Text || "", providerJapaneseReading);
+      if (!reading) return false;
+      target.JapaneseReading = reading;
+      const plan = buildProviderOnlyJapaneseRenderPlan(
+        target.Text || "",
+        sourceOwnerSpans(target.Text || ""),
+        [target],
+        reading,
+      );
+      if (plan) target.ReadingRenderPlan = plan;
+      line.HasTransliterations = true;
+      return true;
+    }
     const packageRomaji = await processJapanesePackageTextTarget(target, {
       textProjection: repairJapaneseDisplay
         ? ChineseProviderJapaneseTextProjection
         : undefined,
+      providerReading: providerJapaneseReading,
     });
     if (
       packageRomaji &&
@@ -717,7 +881,7 @@ const romanizeEntry = async (
     (ItemChineseTest.test(text) || JapaneseTextTest.test(text));
   if (chineseDominantCjk) {
     if (chineseTranslitMode === "pinyin" && pinyinPlacement === "above") {
-      const projection = await projectChineseAboveReading(text);
+      const projection = await projectChineseAboveReading(text, disableKuromoji);
       if (projection.valid && projection.aboveReadingSegments.length > 0) {
         text = projection.text;
         const mappedSegments = projection.aboveReadingSegments.flatMap((segment) => {
@@ -740,14 +904,18 @@ const romanizeEntry = async (
         delete target.AboveReadingSegments;
         text = await romanizeChineseDominantCjkText(text, {
           romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
-          romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
+          romanizeKana: async (run) => disableKuromoji
+            ? undefined
+            : (await analyzeJapaneseLine(run))?.romaji,
         });
       }
     } else {
       delete target.AboveReadingSegments;
       text = await romanizeChineseDominantCjkText(text, {
         romanizeHan: (run) => romanizeChineseText(run, primaryLanguage),
-        romanizeKana: async (run) => (await analyzeJapaneseLine(run))?.romaji,
+        romanizeKana: async (run) => disableKuromoji
+          ? undefined
+          : (await analyzeJapaneseLine(run))?.romaji,
       });
     }
     changed = text !== analysisText;
@@ -803,20 +971,22 @@ const romanizeEntry = async (
         targetScripts.map((script) => ScriptResidualTests[script])
       )
     ) {
-      return restoreUsableProviderReading(target, targetScripts);
+      return suppressProviderReading ? false : restoreUsableProviderReading(target, targetScripts);
     }
     target.TransliteratedText = text;
     target.RomanizedText = text;
     line.HasTransliterations = true;
   }
 
-  return changed || restoreUsableProviderReading(target, targetScripts);
+  return changed || (!suppressProviderReading && restoreUsableProviderReading(target, targetScripts));
 };
 
 type ProcessLyricsOptions = {
   awaitTranslation?: boolean;
   signal?: AbortSignal;
   allowRemoteRomanization?: boolean;
+  disableKuromoji?: boolean;
+  disableProviderReadings?: boolean;
 };
 
 export const ProcessLyrics = async (
@@ -833,6 +1003,13 @@ export const ProcessLyrics = async (
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   const awaitTranslation = options.awaitTranslation !== false;
+  const disableKuromoji = options.disableKuromoji
+    ?? isExperimentEnabled("disableKuromoji");
+  const disableProviderReadings = options.disableProviderReadings
+    ?? isExperimentEnabled("disableProviderReadings");
+  const providerReadingEvidence = disableProviderReadings
+    ? undefined
+    : sourceDocument.document?.providerReadings;
   const hadApiTransliterations = lyrics.HasTransliterations === true;
   let gathered = gatherText(lyrics);
 
@@ -947,7 +1124,10 @@ export const ProcessLyrics = async (
           language,
           arabicReadings,
           lyrics.Type !== "Syllable",
-          allowChineseProviderJapaneseRepair
+          allowChineseProviderJapaneseRepair,
+          providerReadingEvidence,
+          disableKuromoji,
+          disableProviderReadings,
         )
       )
     );
@@ -960,7 +1140,10 @@ export const ProcessLyrics = async (
       docContext,
       language,
       arabicReadings,
-      allowChineseProviderJapaneseRepair
+      allowChineseProviderJapaneseRepair,
+      providerReadingEvidence,
+      disableKuromoji,
+      disableProviderReadings,
     );
     if (lyrics.Type !== "Syllable") {
       entries.forEach((entry, index) => {

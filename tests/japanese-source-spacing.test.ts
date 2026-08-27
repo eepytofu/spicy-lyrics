@@ -8,6 +8,7 @@ import {
   type MergeableEntry,
 } from "../src/utils/Lyrics/Fork/JukujikunMerge.ts";
 import type { JapaneseAnalyzerToken } from "../src/utils/Lyrics/Processing/Japanese/JapaneseAnalyzer.ts";
+import { romanizeJapaneseKana } from "../src/utils/Lyrics/Processing/Japanese/JapaneseRomanizer.ts";
 
 function analyzerToken(
   surface: string,
@@ -84,7 +85,7 @@ test("Japanese local romaji uses Latin spacing around parentheticals", () => {
     ["linguistic"],
     ["punctuation"],
     ["linguistic"],
-    ["phonetic", "punctuation"],
+    ["punctuation"],
     ["punctuation"],
   ]);
 
@@ -149,6 +150,84 @@ test("Japanese local romaji joins a separately tokenized long-vowel mark", () =>
     ["sore", "ike", "e", "", "!"]
   );
   assert.equal(rendered, "sore ikee!");
+});
+
+test("Japanese local romaji separates generated numeric readings from adjacent Japanese", () => {
+  const plan = boundaryPlanFor("うま3 2 1おりゃ", ["うま", "3", " ", "2", " ", "1", "おりゃ"]);
+  assert.deepEqual(joins(plan), [false, false, true, false, true, false, false]);
+  assert.deepEqual(plan[1].reasons, ["mixedScript"]);
+  assert.deepEqual(plan[6].reasons, ["mixedScript"]);
+});
+
+test("Japanese long marks do not swallow opening punctuation or following Latin", () => {
+  const parenthetical = boundaryPlanFor("うーー(うま)", ["う", "ーー", "(", "うま", ")"]);
+  assert.deepEqual(joins(parenthetical), [false, true, false, true, true]);
+
+  const latin = boundaryPlanFor("うーーfight", ["う", "ーー", "fight"]);
+  assert.deepEqual(joins(latin), [false, true, false]);
+  assert.deepEqual(latin[2].reasons, ["linguistic"]);
+});
+
+test("Japanese trailing sokuon before literal Latin remains a separated cutoff", () => {
+  const entries: MergeableEntry[] = [
+    { surface: "そーわっ", readingKana: "そーわっ", romaji: "soowatsu", consumed: false },
+    { surface: "so", romaji: "so", consumed: false },
+  ];
+  const tokens = [analyzerToken("そーわっ", "そーわっ"), analyzerToken("so")];
+  applyPhoneticMerges(entries, tokens);
+  const plan = buildJapaneseBoundaryPlan(entries, tokens, "そーわっso");
+  assert.deepEqual(entries.map((entry) => entry.romaji), ["soowa'", "so"]);
+  assert.deepEqual(joins(plan), [false, false]);
+});
+
+test("Japanese morphological prefixes stay attached to their lexical token", () => {
+  const entries: MergeableEntry[] = [
+    { surface: "お", romaji: "o", consumed: false, start: 0, end: 1 },
+    { surface: "ねだり", romaji: "nedari", consumed: false, start: 1, end: 4 },
+  ];
+  const tokens = [
+    analyzerToken("お", "お", { partOfSpeech: "prefix" }),
+    analyzerToken("ねだり", "ねだり", { partOfSpeech: "verb" }),
+  ];
+  assert.deepEqual(joins(buildJapaneseBoundaryPlan(entries, tokens, "おねだり")), [false, true]);
+});
+
+test("Japanese phonetic merging repairs leading long marks and split small Kana", () => {
+  const longEntries: MergeableEntry[] = [
+    { surface: "こんな", readingKana: "こんな", romaji: "konna", consumed: false },
+    { surface: "ーレースー", readingKana: "ーれーすー", romaji: "-reesuu", consumed: false },
+    { surface: "はー", readingKana: "はー", romaji: "haa", consumed: false },
+  ];
+  const longTokens = [
+    analyzerToken("こんな", "こんな"),
+    analyzerToken("ーレースー", "ーれーすー"),
+    analyzerToken("はー", "はー"),
+  ];
+  applyPhoneticMerges(longEntries, longTokens, romanizeJapaneseKana);
+  const longPlan = buildJapaneseBoundaryPlan(longEntries, longTokens);
+  assert.equal(
+    longEntries.map((entry, index) =>
+      `${index > 0 && !japaneseTokenJoinsPrevious(longPlan, index) ? " " : ""}${entry.romaji}`
+    ).join(""),
+    "konnaa reesuu haa",
+  );
+
+  const smallEntries: MergeableEntry[] = [
+    { surface: "ずき", readingKana: "ずき", romaji: "zuki", consumed: false },
+    { surface: "ゅんどきゅん", readingKana: "ゅんどきゅん", romaji: "yundokyun", consumed: false },
+  ];
+  const smallTokens = [
+    analyzerToken("ずき", "ずき"),
+    analyzerToken("ゅんどきゅん", "ゅんどきゅん"),
+  ];
+  applyPhoneticMerges(smallEntries, smallTokens, romanizeJapaneseKana);
+  const smallPlan = buildJapaneseBoundaryPlan(smallEntries, smallTokens);
+  assert.equal(
+    smallEntries.map((entry, index) =>
+      `${index > 0 && !japaneseTokenJoinsPrevious(smallPlan, index) ? " " : ""}${entry.romaji}`
+    ).join(""),
+    "zukyundokyun",
+  );
 });
 
 test("Japanese local romaji formats combined punctuation tokens", () => {

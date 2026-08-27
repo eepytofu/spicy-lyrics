@@ -13,8 +13,9 @@ export function entryRomaji(
   entry: JapaneseTokenEntry,
   token: JapaneseAnalyzerToken,
   kanaToRomaji: (kana: string) => string,
+  literalKana: boolean = false,
 ): string {
-  if (token.partOfSpeech === "particle") {
+  if (!literalKana && token.partOfSpeech === "particle") {
     if (entry.surface === "は") return "wa";
     if (entry.surface === "へ") return "e";
     if (entry.surface === "を") return "wo";

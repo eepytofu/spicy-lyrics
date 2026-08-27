@@ -6,15 +6,16 @@
  * reading contract used by processors and renderers.
  */
 
-import Kuroshiro from "kuroshiro";
 import {
   applyPhoneticMerges,
   buildJapaneseBoundaryPlan,
 } from "../Fork/JukujikunMerge.ts";
 import {
   projectProviderAuthoredJapaneseReadings,
+  projectProviderSourceOffset,
   type ProviderAuthoredReadingHint,
 } from "../Processing/Japanese/ProviderAuthoredReading.ts";
+import { romanizeJapaneseKana } from "../Processing/Japanese/JapaneseRomanizer.ts";
 import {
   assertJapaneseAnalyzerTokens,
 } from "../Processing/Japanese/JapaneseAnalyzer.ts";
@@ -185,6 +186,140 @@ function applyExplicitReadingOverrides(
   return explicitReadings;
 }
 
+function applyCompleteExplicitTokenReadings(
+  lineText: string,
+  entries: JapaneseTokenEntry[],
+  hints: readonly ProviderAuthoredReadingHint[],
+): void {
+  for (const entry of entries) {
+    if (entry.consumed || !KanjiTextTest.test(entry.surface)) continue;
+    const contained = hints
+      .filter((hint) =>
+        hint.displayRange.start >= entry.start && hint.displayRange.end <= entry.end
+      )
+      .sort((left, right) => left.displayRange.start - right.displayRange.start);
+    if (contained.length === 0) continue;
+
+    let cursor = entry.start;
+    let readingKana = "";
+    let complete = true;
+    for (const hint of contained) {
+      const gap = lineText.slice(cursor, hint.displayRange.start);
+      if (KanjiTextTest.test(gap)) {
+        complete = false;
+        break;
+      }
+      readingKana += `${kataToHira(gap)}${kataToHira(hint.reading.normalize("NFKC"))}`;
+      cursor = hint.displayRange.end;
+    }
+    const tail = lineText.slice(cursor, entry.end);
+    if (KanjiTextTest.test(tail)) complete = false;
+    if (!complete) continue;
+    readingKana += kataToHira(tail);
+    if (!readingKana) continue;
+    entry.readingKana = readingKana;
+    entry.furigana = kanaReadingForToken(entry.surface, readingKana);
+    entry.readingProvenance = "providerExplicit";
+  }
+}
+
+type KanaReduplication = {
+  start: number;
+  boundaries: readonly number[];
+  end: number;
+};
+
+function kanaReduplications(
+  text: string,
+): KanaReduplication[] {
+  const result: KanaReduplication[] = [];
+  const KanaRun = /[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]{4,}/gu;
+  for (const match of text.matchAll(KanaRun)) {
+    const run = match[0];
+    const runStart = match.index;
+    const characters = Array.from(run);
+    const offsets = [0];
+    for (const character of characters) offsets.push(offsets.at(-1)! + character.length);
+
+    for (
+      let unitLength = 2;
+      unitLength <= 6 && unitLength * 2 <= characters.length;
+      unitLength += 1
+    ) {
+      const unit = characters.slice(0, unitLength).join("");
+      const second = characters.slice(unitLength, unitLength * 2).join("");
+      if (unit !== second) continue;
+      let repeatCount = 2;
+      while (
+        unitLength * (repeatCount + 1) <= characters.length &&
+        characters
+          .slice(unitLength * repeatCount, unitLength * (repeatCount + 1))
+          .join("") === unit
+      ) repeatCount += 1;
+      const endIndex = unitLength * repeatCount;
+      result.push({
+        start: runStart,
+        boundaries: Array.from(
+          { length: repeatCount - 1 },
+          (_, index) => runStart + offsets[unitLength * (index + 1)],
+        ),
+        end: runStart + offsets[endIndex],
+      });
+      break;
+    }
+  }
+  return result;
+}
+
+function repetitionGroupAt(
+  repetitions: readonly KanaReduplication[],
+  offset: number,
+): string | undefined {
+  const repetition = repetitions.find((candidate) =>
+    offset >= candidate.start && offset < candidate.end
+  );
+  if (!repetition) return undefined;
+  const unitIndex = repetition.boundaries.filter((boundary) => boundary <= offset).length;
+  return `kana-reduplication:${repetition.start}:${repetition.end}:${unitIndex}`;
+}
+
+function particleHasNoGrammaticalLeftContext(
+  text: string,
+  token: JapaneseAnalyzerToken,
+): boolean {
+  if (token.partOfSpeech !== "particle" || !/^[はへを]$/u.test(token.surface)) return false;
+  const prefix = text.slice(0, token.start).trimEnd();
+  return prefix.length === 0 || /(?:\p{Ps}|\p{Pi})$/u.test(prefix);
+}
+
+function groupContextFreeParticleKana(
+  text: string,
+  entries: JapaneseTokenEntry[],
+  tokens: readonly JapaneseAnalyzerToken[],
+): void {
+  for (let index = 0; index + 1 < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = tokens[index + 1];
+    if (
+      entries[index].consumed ||
+      entries[index + 1].consumed ||
+      !particleHasNoGrammaticalLeftContext(text, token) ||
+      token.end !== next.start ||
+      !/^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]/u.test(next.surface)
+    ) continue;
+    let endIndex = index + 1;
+    while (
+      endIndex + 1 < tokens.length &&
+      tokens[endIndex].end === tokens[endIndex + 1].start &&
+      /^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]+$/u.test(tokens[endIndex + 1].surface)
+    ) endIndex += 1;
+    const groupId = `context-free-particle:${token.start}:${tokens[endIndex].end}`;
+    for (let groupIndex = index; groupIndex <= endIndex; groupIndex += 1) {
+      entries[groupIndex].readingGroupId = groupId;
+    }
+  }
+}
+
 async function buildJapaneseTokenContext(
   lineText: string,
   options: JapaneseAnalysisOptions = {},
@@ -194,9 +329,8 @@ async function buildJapaneseTokenContext(
   const analyzer = options.analyzer || kuromojiJapaneseAnalyzer;
   const tokens = [...(await analyzer.analyze(analysisText))];
   assertJapaneseAnalyzerTokens(analysisText, tokens);
-  const kanaToRomaji =
-    options.kanaRomanizer ||
-    ((kana: string) => (Kuroshiro as any).Util.kanaToRomaji(kana));
+  const kanaToRomaji = options.kanaRomanizer || romanizeJapaneseKana;
+  const reduplications = kanaReduplications(analysisText);
   const entries: JapaneseTokenEntry[] = [];
 
   for (const token of tokens) {
@@ -226,15 +360,50 @@ async function buildJapaneseTokenContext(
     entries,
     explicitHints,
   );
+  applyCompleteExplicitTokenReadings(lineText, entries, explicitHints);
   if (analyzer.id === kuromojiJapaneseAnalyzer.id) {
     await resolveJapaneseDeinflectionReadings(analysisText, tokens, entries);
     await resolveJapaneseDictionaryCoverage(analysisText, tokens, entries);
   }
   for (let index = 0; index < entries.length; index += 1) {
     if (entries[index].consumed) continue;
-    entries[index].romaji = entryRomaji(entries[index], tokens[index], kanaToRomaji);
+    const literalReduplicationKana = reduplications.some((reduplication) =>
+      entries[index].start < reduplication.end &&
+      entries[index].end > reduplication.start
+    ) &&
+      /^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]+$/u.test(entries[index].surface);
+    entries[index].romaji = entryRomaji(
+      entries[index],
+      tokens[index],
+      kanaToRomaji,
+      literalReduplicationKana || particleHasNoGrammaticalLeftContext(analysisText, tokens[index]),
+    );
   }
-  applyPhoneticMerges(entries, tokens);
+  if (reduplications.length > 0) {
+    for (const entry of entries) {
+      if (
+        entry.consumed ||
+        !/^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]+$/u.test(entry.surface)
+      ) continue;
+      const internalBoundaries = reduplications.flatMap((reduplication) =>
+        [...reduplication.boundaries, reduplication.end]
+      ).filter((boundary) => boundary > entry.start && boundary < entry.end)
+        .sort((left, right) => left - right);
+      if (internalBoundaries.length > 0) {
+        const boundaries = [entry.start, ...internalBoundaries, entry.end];
+        entry.romaji = boundaries.slice(0, -1).map((start, boundaryIndex) =>
+          kanaToRomaji(analysisText.slice(start, boundaries[boundaryIndex + 1]))
+        ).join(" ");
+      }
+      entry.readingGroupStartId = repetitionGroupAt(reduplications, entry.start);
+      entry.readingGroupEndId = repetitionGroupAt(
+        reduplications,
+        Math.max(entry.start, entry.end - 1),
+      );
+    }
+  }
+  groupContextFreeParticleKana(analysisText, entries, tokens);
+  applyPhoneticMerges(entries, tokens, kanaToRomaji);
 
   for (let index = 0; index < entries.length; index += 1) {
     if (entries[index].consumed) continue;
@@ -265,10 +434,31 @@ export async function prepareJapaneseLineAnalysis(
   options: JapaneseAnalysisOptions = {},
 ): Promise<PreparedJapaneseLineAnalysis | undefined> {
   const sourceText = text || "";
-  const authoredProjection =
+  if (options.disableKuromoji) return undefined;
+  const baseProjection =
     options.authoredReadingProjection?.sourceText === sourceText
       ? options.authoredReadingProjection
       : projectProviderAuthoredJapaneseReadings(sourceText);
+  const providerHints: ProviderAuthoredReadingHint[] = (options.providerReading?.furigana ?? [])
+    .flatMap((segment) => {
+      const start = projectProviderSourceOffset(baseProjection, segment.start);
+      const end = projectProviderSourceOffset(baseProjection, segment.end);
+      return end > start
+        ? [{
+            sourceRange: { start: segment.start, end: segment.end },
+            displayRange: { start, end },
+            annotationRange: { start: segment.end, end: segment.end },
+            reading: segment.reading,
+          }]
+        : [];
+    });
+  const authoredProjection = providerHints.length > 0
+    ? {
+        ...baseProjection,
+        hints: [...baseProjection.hints, ...providerHints]
+          .sort((left, right) => left.displayRange.start - right.displayRange.start),
+      }
+    : baseProjection;
   const displayText = projectJapaneseText(authoredProjection.displayText, options);
   const textProjection = buildTextAnalysisProjection(displayText);
   const analysisText = textProjection.analysisText;

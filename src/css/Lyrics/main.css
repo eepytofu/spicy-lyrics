@@ -459,10 +459,9 @@ body:has(.Root:not(.global-nav))
   -webkit-text-fill-color: var(--furigana-fill-dim);
 }
 
-/* A source-authored reading such as 天(そら) is pronunciation evidence, not
-   lyric or karaoke state. Tint only the derived reading while the provider's
-   base word keeps its ordinary styling and timing. */
-#SpicyLyricsPage
+/* Optional diagnostic tint for provider-supplied pronunciation evidence.
+   Keep the base word on ordinary lyric styling and timing. */
+#SpicyLyricsPage.Exp_HighlightProviderReadings
   .LyricsContainer
   .LyricsContent
   .furigana-reading.reading-origin-provider-explicit {
@@ -593,7 +592,7 @@ body:has(.Root:not(.global-nav))
   text-shadow: inherit;
 }
 
-#SpicyLyricsPage
+#SpicyLyricsPage.Exp_HighlightProviderReadings
   .LyricsContainer
   .LyricsContent
   .romanized-below
@@ -602,7 +601,7 @@ body:has(.Root:not(.global-nav))
   -webkit-text-fill-color: rgba(255, 207, 128, 0.72);
 }
 
-#SpicyLyricsPage
+#SpicyLyricsPage.Exp_HighlightProviderReadings
   .LyricsContainer
   .LyricsContent
   .romanized-below
@@ -696,11 +695,11 @@ body:has(.Root:not(.global-nav))
   background-image: none;
 }
 
-#SpicyLyricsPage
+#SpicyLyricsPage.Exp_HighlightProviderReadings
   .SpicyLyricsScrollContainer[data-lyrics-type="Static"]
   .romanized-below
   > .reading-origin-provider-explicit,
-#SpicyLyricsPage.SimpleLyricsMode
+#SpicyLyricsPage.Exp_HighlightProviderReadings.SimpleLyricsMode
   .SpicyLyricsScrollContainer[data-lyrics-type="Line"]
   .romanized-below
   > .reading-origin-provider-explicit {

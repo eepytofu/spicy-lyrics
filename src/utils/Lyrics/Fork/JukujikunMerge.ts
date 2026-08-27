@@ -13,8 +13,12 @@ export interface MergeableEntry extends JapaneseAnalyzerReadingState {}
 
 const SMALL_TSU_ROMAJI = /(?:xtsu|ltsu|tsu)$/i;
 const PROLONGED_SOUND_MARK = /^ー+$/u;
+const LEADING_PROLONGED_SOUND_MARK = /^ー+/u;
+const LEADING_SMALL_KANA = /^[ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ]/u;
 const LeadingClosingPunctuation = /^(?:\p{Pe}|\p{Pf}|[。、？！…・.?!,\s])+/u;
 const TrailingOpeningPunctuation = /(?:\p{Ps}|\p{Pi})+$/u;
+const LeadingOpeningPunctuation = /^(?:\p{Ps}|\p{Pi})+/u;
+const JapanesePhoneticText = /^[\p{Script=Hiragana}\p{Script=Katakana}ーｰ]/u;
 const ClosingBeforeOpeningPunctuation =
   /((?:\p{Pe}|\p{Pf}|[。、？！…・.?!,]))(?=(?:\p{Ps}|\p{Pi}))/gu;
 
@@ -27,7 +31,8 @@ const doubledSokuon = (romaji: string): string => {
 
 export function applyPhoneticMerges(
   entries: MergeableEntry[],
-  tokens: readonly JapaneseAnalyzerToken[]
+  tokens: readonly JapaneseAnalyzerToken[],
+  kanaToRomaji?: (kana: string) => string,
 ): void {
   for (const entry of entries) {
     entry.romaji = entry.romaji.replace(ClosingBeforeOpeningPunctuation, "$1 ");
@@ -43,23 +48,64 @@ export function applyPhoneticMerges(
     const prevSf = tokens[pi].surface || "";
     const prevPron = tokens[pi].pronunciationKana || tokens[pi].readingKana || "";
     const currSf = tokens[i].surface || "";
-    if (PROLONGED_SOUND_MARK.test(currSf)) {
+    const currReading = entries[i].readingKana ||
+      tokens[i].pronunciationKana || tokens[i].readingKana || currSf;
+    const leadingMarks = LEADING_PROLONGED_SOUND_MARK.exec(currSf)?.[0] ||
+      LEADING_PROLONGED_SOUND_MARK.exec(currReading)?.[0];
+    if (leadingMarks) {
       const vowel = entries[pi].romaji.match(/[aeiou]$/i)?.[0];
-      if (vowel) entries[i].romaji = vowel.repeat(Array.from(currSf).length);
+      if (vowel) {
+        const markCount = Array.from(leadingMarks).length;
+        const restKana = Array.from(currReading).slice(markCount).join("");
+        const restRomaji = !restKana
+          ? ""
+          : kanaToRomaji
+            ? kanaToRomaji(restKana)
+            : entries[i].romaji.replace(/^-+/u, "");
+        entries[i].romaji = `${vowel.repeat(markCount)}${restRomaji ? ` ${restRomaji}` : ""}`;
+      }
     }
-    if (
-      !(
-        prevPron.endsWith("ッ") ||
-        prevPron.endsWith("っ") ||
-        prevSf.endsWith("っ") ||
-        prevSf.endsWith("ッ")
-      )
-    ) {
+    if (kanaToRomaji && LEADING_SMALL_KANA.test(currReading)) {
+      const previousKana = Array.from(entries[pi].readingKana || prevPron);
+      const currentKana = Array.from(currReading);
+      const previousLast = previousKana.pop();
+      const currentFirst = currentKana.shift();
+      if (previousLast && currentFirst) {
+        const previousBase = kanaToRomaji(previousLast);
+        const combined = kanaToRomaji(`${previousLast}${currentFirst}`);
+        let shared = 0;
+        while (
+          shared < previousBase.length &&
+          shared < combined.length &&
+          previousBase[shared] === combined[shared]
+        ) {
+          shared += 1;
+        }
+        if (shared > 0) {
+          entries[pi].romaji = `${kanaToRomaji(previousKana.join(""))}${combined.slice(0, shared)}`;
+          entries[i].romaji = `${combined.slice(shared)}${kanaToRomaji(currentKana.join(""))}`;
+        }
+      }
+    }
+    const previousEndsWithSokuon =
+      prevPron.endsWith("ッ") ||
+      prevPron.endsWith("っ") ||
+      prevSf.endsWith("っ") ||
+      prevSf.endsWith("ッ");
+    if (!previousEndsWithSokuon) {
       continue;
     }
 
-    entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
-    entries[i].romaji = doubledSokuon(entries[i].romaji);
+    const currentIsJapanesePhonetic =
+      JapanesePhoneticText.test(currSf) || JapanesePhoneticText.test(currReading);
+    if (currentIsJapanesePhonetic) {
+      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
+      entries[i].romaji = doubledSokuon(entries[i].romaji);
+    } else if (/^\p{Script=Latin}/u.test(currSf)) {
+      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "'");
+    } else {
+      entries[pi].romaji = entries[pi].romaji.replace(SMALL_TSU_ROMAJI, "");
+    }
   }
 }
 
@@ -127,15 +173,19 @@ export function buildJapaneseBoundaryPlan(
 
     // っ/ッ split onto either side of a token boundary still belongs to the
     // same romanized word.
-    if (
+    const previousEndsWithSokuon =
       prevPron.endsWith("ッ") ||
       prevPron.endsWith("っ") ||
       prevSf.endsWith("っ") ||
-      prevSf.endsWith("ッ") ||
+      prevSf.endsWith("ッ");
+    const currentStartsWithSokuon =
       currPron.startsWith("ッ") ||
       currPron.startsWith("っ") ||
       currSf.startsWith("っ") ||
-      currSf.startsWith("ッ")
+      currSf.startsWith("ッ");
+    if (
+      currentStartsWithSokuon ||
+      (previousEndsWithSokuon && JapanesePhoneticText.test(currSf || currPron))
     ) {
       joinFor("phonetic");
     }
@@ -157,7 +207,17 @@ export function buildJapaneseBoundaryPlan(
     }
 
     // A separately tokenized chōonpu still extends the preceding mora.
-    if (PROLONGED_SOUND_MARK.test(currSf)) {
+    if (LEADING_PROLONGED_SOUND_MARK.test(currSf)) {
+      joinFor("phonetic");
+    }
+    if (LEADING_SMALL_KANA.test(currSf) || LEADING_SMALL_KANA.test(currPron)) {
+      joinFor("phonetic");
+    }
+    if (
+      PROLONGED_SOUND_MARK.test(prevSf) &&
+      JapanesePhoneticText.test(currSf) &&
+      !LeadingOpeningPunctuation.test(currSf)
+    ) {
       joinFor("phonetic");
     }
 
@@ -180,11 +240,13 @@ export function buildJapaneseBoundaryPlan(
       if (currPos === "auxiliaryVerb" && !/^(?:でしょ|です|だろ)/.test(currSf))
         joinFor("linguistic");
     }
+    if (prevPos === "prefix") joinFor("linguistic");
 
-    if (
-      entries[pi].readingGroupId &&
-      entries[pi].readingGroupId === entries[i].readingGroupId
-    ) {
+    const previousReadingGroup =
+      entries[pi].readingGroupEndId ?? entries[pi].readingGroupId;
+    const currentReadingGroup =
+      entries[i].readingGroupStartId ?? entries[i].readingGroupId;
+    if (previousReadingGroup && previousReadingGroup === currentReadingGroup) {
       joinFor("linguistic");
     }
 
@@ -214,11 +276,23 @@ export function buildJapaneseBoundaryPlan(
     // directly to a Latin/number label (for example 暁Records). Ordinary
     // Japanese token boundaries still use grammatical romaji spacing.
     const JapaneseText = /[぀-ヿ一-鿿々]/u;
-    const LatinOrNumberText = /[\p{Script=Latin}\p{N}]/u;
+    const LatinText = /\p{Script=Latin}/u;
+    const NumberText = /\p{N}/u;
+    const previousIsPhoneticMark = /^[ーｰ]+$/u.test(prevSf);
+    const currentIsPhoneticMark = /^[ーｰ]+$/u.test(currSf);
     if (
       adjacentInSource &&
-      ((JapaneseText.test(prevSf) && LatinOrNumberText.test(currSf)) ||
-        (LatinOrNumberText.test(prevSf) && JapaneseText.test(currSf)))
+      ((JapaneseText.test(prevSf) && NumberText.test(currSf)) ||
+        (NumberText.test(prevSf) && JapaneseText.test(currSf)))
+    ) {
+      addReason(reasons, "mixedScript");
+    } else if (
+      adjacentInSource &&
+      !previousEndsWithSokuon &&
+      !previousIsPhoneticMark &&
+      !currentIsPhoneticMark &&
+      ((JapaneseText.test(prevSf) && LatinText.test(currSf)) ||
+        (LatinText.test(prevSf) && JapaneseText.test(currSf)))
     ) {
       joinFor("mixedScript");
     }

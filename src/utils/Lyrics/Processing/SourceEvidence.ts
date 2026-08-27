@@ -18,7 +18,7 @@ import {
   type VocalCue,
 } from "../VocalSemantics.ts";
 
-export const SOURCE_EVIDENCE_SCHEMA_VERSION = 8;
+export const SOURCE_EVIDENCE_SCHEMA_VERSION = 9;
 
 export type SourceTimingOwner = {
   readonly id: string;

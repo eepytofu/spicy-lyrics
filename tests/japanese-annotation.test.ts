@@ -347,6 +347,16 @@ test("Japanese timed-unit alignment keeps spaces in mixed title and credit lines
   }
 });
 
+test("Japanese timed-unit alignment removes already-owned Latin suffix duplicates", () => {
+  const display = "san ni ichi (uuufight)";
+  const aligned = alignJapaneseReadingUnitTexts(
+    ["san", "ni", "ichi", "(uuufight)", "fight)"],
+    display,
+  );
+  assert.equal(aligned.join(""), display);
+  assert.equal(aligned.at(-1), "");
+});
+
 test("Japanese mixed title analysis follows authored cross-script and parenthetical boundaries", async () => {
   const syllables = [
     { Text: "Shout ", IsPartOfWord: false },

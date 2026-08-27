@@ -42,6 +42,7 @@ import {
 } from "./Fork/Translation.ts";
 import { $chineseCharacterForm, $romanization } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
+import { isExperimentEnabled } from "../experiments.ts";
 import {
   clearLyricsCandidateSessionForTrackChange,
   fetchLyricsFromProviders,
@@ -124,6 +125,8 @@ function currentProcessingContextKey(): string {
     koreanDisplayMode,
     cyrillicRomanizationMode,
     cyrillicKeepSigns,
+    disableKuromoji: isExperimentEnabled("disableKuromoji"),
+    disableProviderReadings: isExperimentEnabled("disableProviderReadings"),
   });
 }
 

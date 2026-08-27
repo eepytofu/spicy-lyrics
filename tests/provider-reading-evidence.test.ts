@@ -6,7 +6,10 @@ import {
   cloneProviderReadingEvidenceForProvider,
   isProviderReadingEvidence,
 } from "../src/utils/Lyrics/ProviderReadingEvidence.ts";
-import { ensureSourceEvidence } from "../src/utils/Lyrics/Processing/SourceEvidence.ts";
+import {
+  ensureSourceEvidence,
+  SOURCE_EVIDENCE_SCHEMA_VERSION,
+} from "../src/utils/Lyrics/Processing/SourceEvidence.ts";
 import {
   compareSourceDocumentToEvidence,
   sourceLyricDocumentFromEvidence,
@@ -98,4 +101,31 @@ test("provider readings survive JSON and structured-clone cache boundaries", () 
   const cloned = cloneProviderReadingEvidence(roundTripped)!;
   assert.deepEqual(cloned, lineEvidence());
   assert.equal(Object.isFrozen(cloned.lineReadings?.[0].rows[0]), true);
+});
+
+test("stale source evidence is rebuilt with top-level provider readings", () => {
+  const lyrics = {
+    Type: "Line",
+    source: "netease",
+    ProviderReadingEvidence: lineEvidence(),
+    SourceEvidence: {
+      schemaVersion: SOURCE_EVIDENCE_SCHEMA_VERSION - 1,
+      lyricsType: "Line",
+      providerId: "netease",
+      lines: [{
+        id: "0",
+        providerText: "明日",
+        startTime: 1,
+        endTime: 2,
+        role: "lead",
+        timingOwners: [],
+      }],
+    },
+    Content: [{ Text: "明日", StartTime: 1, EndTime: 2 }],
+  };
+
+  const evidence = ensureSourceEvidence(lyrics)!;
+  assert.equal(evidence.schemaVersion, SOURCE_EVIDENCE_SCHEMA_VERSION);
+  assert.equal(evidence.providerReadings?.lineReadings?.[0].rows[0].exactValue, "  ashita  ");
+  assert.equal(lyrics.SourceEvidence, evidence);
 });

@@ -87,6 +87,15 @@ test("experiments are persisted and the final slider style defaults on", async (
 
   const experiments = await import("../src/utils/experiments.ts?fresh-experiments");
   assert.equal(experiments.isExperimentEnabled("newProgressBarStyling"), true);
+  assert.equal(experiments.isExperimentEnabled("disableKuromoji"), false);
+  assert.equal(experiments.isExperimentEnabled("disableProviderReadings"), false);
+  assert.equal(experiments.isExperimentEnabled("highlightProviderReadings"), false);
+  experiments.$experiment("highlightProviderReadings").set(true);
+  assert.equal(JSON.parse(settingsBlob ?? "{}")["experiment:highlightProviderReadings"], true);
+  experiments.$experiment("disableKuromoji").set(true);
+  assert.equal(JSON.parse(settingsBlob ?? "{}")["experiment:disableKuromoji"], true);
+  experiments.$experiment("disableProviderReadings").set(true);
+  assert.equal(JSON.parse(settingsBlob ?? "{}")["experiment:disableProviderReadings"], true);
   experiments.$experiment("newProgressBarStyling").set(false);
   assert.equal(JSON.parse(settingsBlob ?? "{}")["experiment:newProgressBarStyling"], false);
 });

@@ -19,7 +19,14 @@ export function alignJapaneseReadingUnitTexts(texts: string[], display: string):
     const text = out[index];
     if (!text) continue;
     const found = display.indexOf(text, cursor);
-    if (found < 0) return texts;
+    if (found < 0) {
+      const previous = display.lastIndexOf(text, Math.max(0, cursor - 1));
+      if (previous >= 0 && previous + text.length <= cursor) {
+        out[index] = "";
+        continue;
+      }
+      return texts;
+    }
     out[index] = `${display.slice(cursor, found)}${text}`;
     cursor = found + text.length;
   }
@@ -57,8 +64,16 @@ export async function annotateJapaneseLine(
     options,
     analysis,
   );
-  const aligned = alignJapaneseReadingUnitTexts(temp.map((entry) => entry.RomanizedText || entry.TransliteratedText ||
-    (/\p{Script=Latin}/u.test(entry.Text || "") ? entry.Text || "" : "")), reading.romaji);
+  const aligned = alignJapaneseReadingUnitTexts(temp.map((entry) =>
+    entry.RomanizedText || entry.TransliteratedText ||
+    // An opaque token projection can already own this timed span while placing
+    // its visible text on an earlier span. Reusing the literal Latin here would
+    // duplicate suffixes such as `fight)` and make alignment discard the
+    // authoritative spaces from the complete reading.
+    (!entry.JapaneseRomajiTiming && /\p{Script=Latin}/u.test(entry.Text || "")
+      ? entry.Text || ""
+      : "")
+  ), reading.romaji);
   if (!aligned.some(Boolean) && aligned.length > 0) aligned[0] = reading.romaji;
   let group = 0;
   const units: ReadingUnit[] = canonical.spanMappings.map((mapping, index) => {

@@ -994,10 +994,6 @@ $showVolumeSlider.listen((value) => {
   PageContainer?.classList.toggle("ShowVolumeSlider", value);
 });
 
-onExperimentChange(() => {
-  if (PageContainer) ApplyExperimentClasses(PageContainer);
-});
-
 $skipSpicyFont.listen((v) => {
   if (!PageContainer) return;
   PageContainer.classList.toggle("UseSpicyFont", !v);
@@ -1100,6 +1096,14 @@ const queueProcessingSettingsRefresh = (): void => {
   processingSettingsRevision++;
   void runQueuedProcessingSettingsRefresh();
 };
+
+onExperimentChange((experiment) => {
+  if (PageContainer) ApplyExperimentClasses(PageContainer);
+  if (
+    experiment.id === "disableKuromoji" ||
+    experiment.id === "disableProviderReadings"
+  ) queueProcessingSettingsRefresh();
+});
 
 bindCoalescedSourceSettingsRefresh(queueProcessingSettingsRefresh);
 

@@ -11,6 +11,7 @@ import type {
 import type {
   ProviderAuthoredReadingProjection,
 } from "../Processing/Japanese/ProviderAuthoredReading.ts";
+import type { ProviderJapaneseLineReading } from "../Processing/Japanese/ProviderJapaneseReading.ts";
 import type { ProviderRubyReadable } from "../ProviderRuby.ts";
 
 export type FuriganaSegment = {
@@ -72,9 +73,13 @@ export type JapaneseAnalysisOptions = {
    */
   textProjection?: JapaneseTextProjection;
   authoredReadingProjection?: ProviderAuthoredReadingProjection;
+  /** Immutable provider evidence selected for this exact source line. */
+  providerReading?: ProviderJapaneseLineReading;
+  /** Diagnostic hard-off. No Japanese analyzer may run while this is true. */
+  disableKuromoji?: boolean;
   /** Explicit analyzer seam for tests and isolated experiments. */
   analyzer?: JapaneseAnalyzer;
-  /** Optional replacement for Kuroshiro's deterministic kana-to-romaji utility. */
+  /** Explicit deterministic kana-to-romaji seam for characterization tests. */
   kanaRomanizer?: JapaneseKanaRomanizer;
 };
 
