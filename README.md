@@ -24,7 +24,7 @@ Personal, experimental fork of [amarinne/spicy-lyrics](https://github.com/amarin
 
 ### Readings and display
 
-- Japanese reading hints from the lyrics, such as `天(そら)`, become furigana and romaji, override inferred readings, and appear in amber.
+- Structured Japanese readings embedded in lyrics, including inline hints such as `天(そら)` and exact Kana ranges from QQ Music or KuGou, are preserved as furigana and used to generate romaji. On those exact source ranges they override local inference, so gikun and other nonstandard readings are not overwritten; uncovered text still uses local analysis.
 - Improved local Pinyin for Mandarin word grouping and context-dependent pronunciations, plus an option to show readings above Han characters.
 - **Show Vocalist Labels** and **Show Song Sections** independently control vocalist and song-section labels under Display modes; both are shown by default.
 
@@ -104,7 +104,7 @@ The optional Worker has open CORS and no built-in authentication or rate limitin
 - [iPixelGalaxy/spicy-lyrics](https://github.com/iPixelGalaxy/spicy-lyrics): source-manager, custom-server, and custom-font references.
 - [Robotxm/ESLyric-LyricsSource](https://github.com/Robotxm/ESLyric-LyricsSource) and [WXRIW/Lyricify-Lyrics-Helper](https://github.com/WXRIW/Lyricify-Lyrics-Helper): external-provider compatibility, search, matching, retrieval, and timed-lyrics parsing references.
 - [MuttonString/Furigana](https://github.com/MuttonString/Furigana) and [Hxjjxg/Furigana-api-fixed](https://github.com/Hxjjxg/Furigana-api-fixed): references for repairing Japanese text from Chinese lyric services.
-- [Kuroshiro](https://github.com/hexenq/kuroshiro), [Kuromoji.js](https://github.com/takuyaa/kuromoji.js), [Pinyin Pro](https://github.com/zh-lx/pinyin-pro), and [OpenCC.js](https://github.com/nk2028/opencc-js) provide local reading analysis and CJK conversion. [Jitendex](https://jitendex.org/), [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana), and EDRDG's [JMdict/KANJIDIC](https://www.edrdg.org/edrdg/licence.html) provide source and validation data for generated Japanese readings.
+- [Kuromoji.js](https://github.com/takuyaa/kuromoji.js) provides local Japanese morphological analysis. [Pinyin Pro](https://github.com/zh-lx/pinyin-pro) and [OpenCC.js](https://github.com/nk2028/opencc-js) provide local Chinese readings and CJK conversion. [Jitendex](https://jitendex.org/), [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana), and EDRDG's [JMdict/KANJIDIC](https://www.edrdg.org/edrdg/licence.html) provide source and validation data for generated Japanese readings.
 - [amll-dev/amll-ttml-db](https://github.com/amll-dev/amll-ttml-db) provides the community TTML database; [yeahnangua/beautiful-lyrics-reborn](https://github.com/yeahnangua/beautiful-lyrics-reborn) is a Worker architecture reference.
 - [chenmozhijin/LDDC](https://github.com/chenmozhijin/LDDC): referenced by compatibility code kept from upstream.
 
