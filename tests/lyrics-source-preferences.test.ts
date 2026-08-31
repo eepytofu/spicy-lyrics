@@ -40,6 +40,8 @@ test("external provider labels use canonical service names", () => {
   assert.equal(resolveLyricsSourceLabel("netease", "NetEase", "netease"), "NetEase Cloud Music");
   assert.equal(resolveLyricsSourceLabel("kugou", "Kugou", "kugou"), "KuGou");
   assert.equal(resolveLyricsSourceLabel("soda", "Qishui", "soda"), "Soda Music");
+  assert.equal(resolveLyricsSourceLabel("qq", "Spicy Lyrics (qq)", "spicy"), "Spicy Lyrics (qq)");
+  assert.equal(resolveLyricsSourceLabel("qq", "Untrusted label", "qq"), "QQ Music");
 });
 
 test("provider descriptions use canonical timing tier names", () => {

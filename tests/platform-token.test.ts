@@ -76,3 +76,48 @@ test("Spotify token requests retain the Session fallback for missing resolvers",
 
   assert.equal(await platform.GetSpotifyAccessToken(), "session-token");
 });
+
+test("Spotify token invalidation forces a new OAuth resolver read", async () => {
+  let calls = 0;
+  const platform = await loadPlatform(async () => ({
+    accessToken: `token-${++calls}`,
+    expiresAtTime: Date.now() + 60_000,
+    tokenType: "Bearer",
+  }));
+
+  assert.equal(await platform.GetSpotifyAccessToken(), "token-1");
+  assert.equal(await platform.GetSpotifyAccessToken(), "token-1");
+  platform.InvalidateSpotifyAccessToken();
+  assert.equal(await platform.GetSpotifyAccessToken(), "token-2");
+  assert.equal(calls, 2);
+});
+
+test("pre-invalidation token refresh cannot overwrite newer cached state", async () => {
+  const resolvers: Array<(value: unknown) => void> = [];
+  let calls = 0;
+  const platform = await loadPlatform(() => {
+    calls += 1;
+    return new Promise((resolve) => resolvers.push(resolve));
+  });
+
+  const stale = platform.GetSpotifyAccessToken();
+  platform.InvalidateSpotifyAccessToken();
+  const current = platform.GetSpotifyAccessToken();
+  assert.equal(calls, 2);
+
+  resolvers[0]({
+    accessToken: "stale-token",
+    expiresAtTime: Date.now() + 60_000,
+    tokenType: "Bearer",
+  });
+  resolvers[1]({
+    accessToken: "current-token",
+    expiresAtTime: Date.now() + 60_000,
+    tokenType: "Bearer",
+  });
+
+  assert.equal(await stale, "stale-token");
+  assert.equal(await current, "current-token");
+  assert.equal(await platform.GetSpotifyAccessToken(), "current-token");
+  assert.equal(calls, 2);
+});

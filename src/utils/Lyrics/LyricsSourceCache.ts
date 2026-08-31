@@ -1,3 +1,5 @@
+import { SPICY_API_CACHE_VERSION } from "../API/SpicyRequestContract.ts";
+
 export function isLyricsSourceCacheCompatible(
   lyrics: unknown,
   currentSourceSignature: string,
@@ -7,6 +9,12 @@ export function isLyricsSourceCacheCompatible(
   const entry = lyrics as Record<string, unknown>;
 
   if (typeof entry.fetchProvider === "string") {
+    if (
+      ["spicy", "apple"].includes(entry.fetchProvider) &&
+      entry.SpicyApiCacheVersion !== SPICY_API_CACHE_VERSION
+    ) {
+      return false;
+    }
     return entry.LyricsSourceCacheSignature === currentSourceSignature;
   }
   if (entry.source === "ldb") {

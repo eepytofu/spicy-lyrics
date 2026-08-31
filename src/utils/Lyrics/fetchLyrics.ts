@@ -8,10 +8,8 @@ import {
   $lyricsSelectionDiagnostics,
   $lyricsSelectionMode,
 } from "../stores.ts";
-import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
 import PageView, { PageContainer } from "../../components/Pages/PageView.ts";
-import { Query } from "../API/Query.ts";
 import {
   LYRICS_PROCESSING_VERSION,
   ProcessLyrics,
@@ -33,7 +31,6 @@ import Logger from "../Logger.ts";
 import { LocalLyricsManager } from "./manager/index.ts";
 import { LyricsQueueRetry } from "./LyricsQueueRetry.ts";
 import { GetExpireStore } from "../../modules/Store.ts";
-import { SLObjPack } from "../objpack.ts";
 import {
   captureSourceTranslations,
   normalizeProviderTranslations,
@@ -45,6 +42,7 @@ import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { pendingLyricsPresentation } from "./Processing/ReadingPrecedence.ts";
 import {
   clearLyricsCandidateSessionForTrackChange,
+  acquireSpicyLyricsById,
   fetchLyricsFromProviders,
   getLyricsCandidateSession,
   setActiveLyricsCandidateRevision,
@@ -102,8 +100,6 @@ export const LyricsStore = GetExpireStore<any>(
   },
   isDev as true
 );
-
-const lyricsPacker = new SLObjPack();
 
 function isSourceCacheCompatible(lyrics: any): boolean {
   return isLyricsSourceCacheCompatible(
@@ -671,33 +667,11 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
       });
       return;
     }
-    const Token = await Platform.GetSpotifyAccessToken();
-    const queries = await Query(
-      [
-        {
-          operation: "lyrics",
-          variables: {
-            id: trackId,
-            auth: "SpicyLyrics-WebAuth",
-          },
-        },
-      ],
-      {
-        "SpicyLyrics-WebAuth": `Bearer ${Token}`,
-      }
-    );
-
-    const lyricsQuery = queries.get("0");
-    if (!lyricsQuery || lyricsQuery.httpStatus !== 200) return;
-
-    const lyrics = lyricsPacker.unpack(lyricsQuery.data) as any;
-    if (lyrics === null || lyrics === undefined || lyrics === "") return;
-    const expectedSource = firstProvider === "spicy" ? "spl" : "aml";
-    if (lyrics.source !== expectedSource) return;
+    const outcome = await acquireSpicyLyricsById(trackId, firstProvider);
+    if (outcome.kind !== "lyrics") return;
+    const lyrics = outcome.result.lyrics;
     lyrics.id = trackId;
     lyrics.uri = uri;
-    lyrics.fetchProvider = firstProvider;
-    lyrics.sourceDisplayName = firstProvider === "spicy" ? "Spicy Lyrics" : "Apple Music";
     lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
 
     // Same entry schema as the main fetch path: sidecar the provider

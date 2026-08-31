@@ -7,6 +7,10 @@ import {
   summarizeQueryResponse,
   summarizeQueryResult,
 } from "./QueryLog.ts";
+import {
+  buildSpicyApiHeaders,
+  buildSpicyApiRequestBody,
+} from "./SpicyRequestContract.ts";
 
 export type Query = {
   operation: string;
@@ -31,10 +35,20 @@ export interface QueryResultGetter {
 
 const queryLogger = new Logger("API Query");
 
+export class QueryHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`Request failed with status ${status}`);
+    this.name = "QueryHttpError";
+    this.status = status;
+  }
+}
 
 export async function Query(
   queries: Query[],
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<QueryResultGetter> {
   const host = Defaults.lyrics.api.url;
   const clientVersion = Session.SpicyLyrics.GetCurrentVersion();
@@ -49,24 +63,19 @@ export async function Query(
   try {
     const res = await fetch(`${host}/query`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "SpicyLyrics-Version": clientVersion?.Text ?? "",
-        ...headers,
-      },
-      body: JSON.stringify({
+      signal,
+      headers: buildSpicyApiHeaders(clientVersion?.Text ?? "", headers),
+      body: buildSpicyApiRequestBody(
         queries,
-        client: {
-          version: clientVersion?.Text ?? "unknown",
-        },
-      }),
+        clientVersion?.Text ?? "unknown",
+      ),
     });
 
     queryLogger.info("Received response", { status: res.status });
 
     if (!res.ok) {
       queryLogger.error(`Request failed with status ${res.status}`);
-      throw new Error(`Request failed with status ${res.status}`);
+      throw new QueryHttpError(res.status);
     }
 
     const data = await res.json();

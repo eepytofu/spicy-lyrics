@@ -122,6 +122,9 @@ const CANONICAL_EXTERNAL_SOURCE_LABELS: Record<string, string> = {
 };
 
 export function resolveLyricsSourceLabel(source?: string, displayName?: string, fetchProvider?: string): string | null {
+  if (fetchProvider === "spicy" && source !== "spl" && displayName?.trim()) {
+    return displayName.trim();
+  }
   if (source && CANONICAL_EXTERNAL_SOURCE_LABELS[source]) return CANONICAL_EXTERNAL_SOURCE_LABELS[source];
   if (fetchProvider && CANONICAL_EXTERNAL_SOURCE_LABELS[fetchProvider]) return CANONICAL_EXTERNAL_SOURCE_LABELS[fetchProvider];
   if (displayName?.trim()) return displayName.trim();

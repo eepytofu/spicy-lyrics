@@ -1,6 +1,7 @@
 import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
-import { Query } from "../API/Query.ts";
+import { Query, QueryHttpError } from "../API/Query.ts";
+import { SPICY_API_CACHE_VERSION } from "../API/SpicyRequestContract.ts";
 import { SLObjPack } from "../objpack.ts";
 import {
   $customLyricsServers,
@@ -61,6 +62,15 @@ import {
   type NativeTitleHint,
 } from "./LyricsDiscoveryEnrichment.ts";
 import { cloneProviderReadingEvidenceForProvider } from "./ProviderReadingEvidence.ts";
+import {
+  acquireSpicyOutcomeWithBoundedAuthRetry,
+  isSpicyAuthRejectionStatus,
+  type SpicyQueryAttempt,
+} from "./SpicyAuthRetry.ts";
+import {
+  normalizeSpicyApiDocument,
+  type SpicyApiFetchProvider,
+} from "./SpicyLyricsResponse.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -121,6 +131,9 @@ function stamp(lyrics: any, provider: LyricsSourceProviderId, displayName?: stri
       SourceMatch: sourceMatch,
       source,
       fetchProvider: provider,
+      ...(["spicy", "apple"].includes(provider)
+        ? { SpicyApiCacheVersion: SPICY_API_CACHE_VERSION }
+        : {}),
       sourceDisplayName: resolveLyricsSourceLabel(
         source,
         displayName || lyrics.sourceDisplayName,
@@ -132,22 +145,91 @@ function stamp(lyrics: any, provider: LyricsSourceProviderId, displayName?: stri
   };
 }
 
-async function spicyRaw(id: string): Promise<{ data: any | null; status: number }> {
-  const token = await Platform.GetSpotifyAccessToken();
-  const results = await Query([{ operation: "lyrics", variables: { id, auth: "SpicyLyrics-WebAuth" } }], { "SpicyLyrics-WebAuth": `Bearer ${token}` });
+type SpicyRawPayload = { data: any };
+type SpicyRawOutcome = ProviderAcquisitionOutcome<SpicyRawPayload>;
+
+async function spicyQueryAttempt(
+  id: string,
+  token: string,
+  signal: AbortSignal,
+): Promise<SpicyQueryAttempt<SpicyRawOutcome>> {
+  let results: Awaited<ReturnType<typeof Query>>;
+  try {
+    results = await Query(
+      [{ operation: "lyrics", variables: { id, auth: "SpicyLyrics-WebAuth" } }],
+      { "SpicyLyrics-WebAuth": `Bearer ${token}` },
+      signal,
+    );
+  } catch (error) {
+    if (error instanceof QueryHttpError) {
+      if (isSpicyAuthRejectionStatus(error.status)) {
+        return { kind: "auth-rejected", status: error.status };
+      }
+      if (error.status === 429) {
+        return { kind: "settled", outcome: { kind: "rate-limited" } };
+      }
+      return {
+        kind: "settled",
+        outcome: { kind: "upstream-error", status: error.status },
+      };
+    }
+    throw error;
+  }
+
   const result = results.get("0");
-  if (!result) return { data: null, status: 0 };
-  if (result.httpStatus !== 200 || !result.data) return { data: null, status: result.httpStatus };
-  return { data: Array.isArray(result.data) ? packer.unpack(result.data) : result.data, status: 200 };
+  const status = Number(result?.httpStatus ?? 0);
+  if (isSpicyAuthRejectionStatus(status)) {
+    return { kind: "auth-rejected", status };
+  }
+  if (status === 503) return { kind: "settled", outcome: { kind: "queued" } };
+  if (status === 404 || status === 204) {
+    return { kind: "settled", outcome: { kind: "no-match" } };
+  }
+  if (status === 429) {
+    return { kind: "settled", outcome: { kind: "rate-limited" } };
+  }
+  if (status !== 200) {
+    return { kind: "settled", outcome: { kind: "upstream-error", status } };
+  }
+
+  const data = Array.isArray(result?.data) ? packer.unpack(result.data) : result?.data;
+  return data
+    ? { kind: "settled", outcome: { kind: "lyrics", result: { data } } }
+    : { kind: "settled", outcome: { kind: "no-match" } };
 }
 
-async function fetchSpicy(
-  id: string, expectedSource: "spl" | "aml", provider: "spicy" | "apple",
-  request: ReturnType<typeof spicyRaw> = spicyRaw(id),
-): Promise<ExternalLyricsResult | null> {
-  const result = await request;
-  if (result.status === 503) return { lyrics: null, status: 503 };
-  return result.data?.source === expectedSource ? stamp(result.data, provider) : null;
+function spicyRaw(id: string, signal: AbortSignal): Promise<SpicyRawOutcome> {
+  return acquireSpicyOutcomeWithBoundedAuthRetry({
+    signal,
+    resolveToken: () => Platform.GetSpotifyAccessToken(),
+    invalidateToken: () => Platform.InvalidateSpotifyAccessToken(),
+    runAttempt: (token, attemptSignal) => spicyQueryAttempt(id, token, attemptSignal),
+  });
+}
+
+async function spicyOutcomeForProvider(
+  provider: SpicyApiFetchProvider,
+  request: ReturnType<typeof spicyRaw>,
+): Promise<ProviderAcquisitionOutcome<ExternalLyricsResult>> {
+  const outcome = await request;
+  if (outcome.kind !== "lyrics") return outcome;
+
+  const normalized = normalizeSpicyApiDocument(outcome.result.data);
+  if (!normalized || normalized.fetchProvider !== provider) return { kind: "no-match" };
+  const result = stamp(
+    normalized.lyrics,
+    provider,
+    normalized.sourceDisplayName,
+  );
+  return result ? { kind: "lyrics", result } : { kind: "no-match" };
+}
+
+export function acquireSpicyLyricsById(
+  id: string,
+  provider: SpicyApiFetchProvider,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<ProviderAcquisitionOutcome<ExternalLyricsResult>> {
+  return spicyOutcomeForProvider(provider, spicyRaw(id, signal));
 }
 
 async function fetchSpotify(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
@@ -346,12 +428,12 @@ async function asProviderOutcome(
 
 const BUILT_IN_PROVIDER_ADAPTERS: Record<BuiltInLyricsSourceId, ProviderAdapter> = {
   spicy: {
-    acquire: ({ info, getSpicyRequest }) =>
-      asProviderOutcome(fetchSpicy(info.id, "spl", "spicy", getSpicyRequest())),
+    acquire: ({ getSpicyRequest }) =>
+      spicyOutcomeForProvider("spicy", getSpicyRequest()),
   },
   apple: {
-    acquire: ({ info, getSpicyRequest }) =>
-      asProviderOutcome(fetchSpicy(info.id, "aml", "apple", getSpicyRequest())),
+    acquire: ({ getSpicyRequest }) =>
+      spicyOutcomeForProvider("apple", getSpicyRequest()),
   },
   spotify: {
     acquire: ({ info }) => asProviderOutcome(fetchSpotify(info)),
@@ -478,7 +560,10 @@ async function acquireEntries(
   if (!info) return null;
   let sharedSpicyRequest: ReturnType<typeof spicyRaw> | undefined;
   const getSpicyRequest = () => {
-    sharedSpicyRequest ??= spicyRaw(info.id);
+    sharedSpicyRequest ??= spicyRaw(
+      info.id,
+      parentSignal ?? new AbortController().signal,
+    );
     return sharedSpicyRequest;
   };
   const acquire = (
