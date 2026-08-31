@@ -1,6 +1,11 @@
 import Platform from "../../components/Global/Platform.ts";
 import { SpotifyPlayer } from "../../components/Global/SpotifyPlayer.ts";
-import { Query, QueryHttpError } from "../API/Query.ts";
+import {
+  Query,
+  QueryHttpError,
+  QueryNetworkError,
+} from "../API/Query.ts";
+import { ServiceUnavailableError } from "../API/CircuitBreaker.ts";
 import { SPICY_API_CACHE_VERSION } from "../API/SpicyRequestContract.ts";
 import { SLObjPack } from "../objpack.ts";
 import {
@@ -152,21 +157,40 @@ async function spicyQueryAttempt(
   id: string,
   token: string,
   signal: AbortSignal,
+  probe: boolean,
 ): Promise<SpicyQueryAttempt<SpicyRawOutcome>> {
   let results: Awaited<ReturnType<typeof Query>>;
   try {
     results = await Query(
       [{ operation: "lyrics", variables: { id, auth: "SpicyLyrics-WebAuth" } }],
       { "SpicyLyrics-WebAuth": `Bearer ${token}` },
-      signal,
+      { signal, probe },
     );
   } catch (error) {
+    if (error instanceof ServiceUnavailableError) {
+      return {
+        kind: "settled",
+        outcome: { kind: "rate-limited", retryAfterMs: error.retryAfterMs },
+      };
+    }
+    if (error instanceof QueryNetworkError) {
+      if (error.kind === "aborted") {
+        return { kind: "settled", outcome: { kind: "aborted" } };
+      }
+      if (error.kind === "timeout") {
+        return { kind: "settled", outcome: { kind: "timeout" } };
+      }
+      return { kind: "settled", outcome: { kind: "error", error } };
+    }
     if (error instanceof QueryHttpError) {
       if (isSpicyAuthRejectionStatus(error.status)) {
         return { kind: "auth-rejected", status: error.status };
       }
       if (error.status === 429) {
-        return { kind: "settled", outcome: { kind: "rate-limited" } };
+        return {
+          kind: "settled",
+          outcome: { kind: "rate-limited", retryAfterMs: error.retryAfterMs },
+        };
       }
       return {
         kind: "settled",
@@ -198,12 +222,21 @@ async function spicyQueryAttempt(
     : { kind: "settled", outcome: { kind: "no-match" } };
 }
 
-function spicyRaw(id: string, signal: AbortSignal): Promise<SpicyRawOutcome> {
+function spicyRaw(
+  id: string,
+  signal: AbortSignal,
+  probe: boolean,
+): Promise<SpicyRawOutcome> {
   return acquireSpicyOutcomeWithBoundedAuthRetry({
     signal,
     resolveToken: () => Platform.GetSpotifyAccessToken(),
     invalidateToken: () => Platform.InvalidateSpotifyAccessToken(),
-    runAttempt: (token, attemptSignal) => spicyQueryAttempt(id, token, attemptSignal),
+    runAttempt: (token, attemptSignal) => spicyQueryAttempt(
+      id,
+      token,
+      attemptSignal,
+      probe,
+    ),
   });
 }
 
@@ -228,8 +261,9 @@ export function acquireSpicyLyricsById(
   id: string,
   provider: SpicyApiFetchProvider,
   signal: AbortSignal = new AbortController().signal,
+  probe = false,
 ): Promise<ProviderAcquisitionOutcome<ExternalLyricsResult>> {
-  return spicyOutcomeForProvider(provider, spicyRaw(id, signal));
+  return spicyOutcomeForProvider(provider, spicyRaw(id, signal, probe));
 }
 
 async function fetchSpotify(info: TrackLyricsInfo): Promise<ExternalLyricsResult | null> {
@@ -563,6 +597,7 @@ async function acquireEntries(
     sharedSpicyRequest ??= spicyRaw(
       info.id,
       parentSignal ?? new AbortController().signal,
+      true,
     );
     return sharedSpicyRequest;
   };
