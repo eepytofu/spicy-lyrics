@@ -6,9 +6,16 @@ let moduleSequence = 0;
 async function loadPlatform(
   getToken: () => Promise<unknown>,
   session?: { accessToken: string; accessTokenExpirationTimestampMs: number },
+  authorizationState?: unknown,
 ) {
   (globalThis as any).Spicetify = {
-    Platform: { version: "1.2.3", Session: session },
+    Platform: {
+      version: "1.2.3",
+      Session: session,
+      ...(authorizationState === undefined
+        ? {}
+        : { AuthorizationAPI: { getState: () => authorizationState } }),
+    },
     CosmosAsync: { get: getToken },
   };
   (globalThis as any).requestAnimationFrame = (callback: () => void) => {
@@ -29,8 +36,8 @@ test("Spotify token requests reject cleanly, retry, deduplicate, and refresh nea
     failedCalls += 1;
     throw new Error("network down");
   });
-  await assert.rejects(failed.GetSpotifyAccessToken(), /network down/u);
-  await assert.rejects(failed.GetSpotifyAccessToken(), /network down/u);
+  await assert.rejects(failed.GetSpotifyAccessToken(), /any source/u);
+  await assert.rejects(failed.GetSpotifyAccessToken(), /any source/u);
   assert.equal(failedCalls, 2);
 
   let resolveToken!: (value: unknown) => void;
@@ -43,6 +50,7 @@ test("Spotify token requests reject cleanly, retry, deduplicate, and refresh nea
   });
   const first = concurrent.GetSpotifyAccessToken();
   const second = concurrent.GetSpotifyAccessToken();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(concurrentCalls, 1);
   resolveToken({
     accessToken: "shared-token",
@@ -60,7 +68,7 @@ test("Spotify token requests reject cleanly, retry, deduplicate, and refresh nea
       tokenType: "Bearer",
     };
   });
-  assert.equal(await refreshing.GetSpotifyAccessToken(), "token-1");
+  await assert.rejects(refreshing.GetSpotifyAccessToken(), /any source/u);
   assert.equal(await refreshing.GetSpotifyAccessToken(), "token-2");
   assert.equal(refreshCalls, 2);
 });
@@ -75,6 +83,27 @@ test("Spotify token requests retain the Session fallback for missing resolvers",
   );
 
   assert.equal(await platform.GetSpotifyAccessToken(), "session-token");
+});
+
+test("Spotify token requests prefer the modern AuthorizationAPI", async () => {
+  let cosmosCalls = 0;
+  const platform = await loadPlatform(
+    async () => {
+      cosmosCalls += 1;
+      return { accessToken: "legacy-token" };
+    },
+    undefined,
+    {
+      isAuthorized: true,
+      token: {
+        accessToken: "modern-token",
+        accessTokenExpirationTimestampMs: Date.now() + 60_000,
+      },
+    },
+  );
+
+  assert.equal(await platform.GetSpotifyAccessToken(), "modern-token");
+  assert.equal(cosmosCalls, 0);
 });
 
 test("Spotify token invalidation forces a new OAuth resolver read", async () => {
@@ -103,6 +132,7 @@ test("pre-invalidation token refresh cannot overwrite newer cached state", async
   const stale = platform.GetSpotifyAccessToken();
   platform.InvalidateSpotifyAccessToken();
   const current = platform.GetSpotifyAccessToken();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(calls, 2);
 
   resolvers[0]({

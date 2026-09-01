@@ -1,14 +1,22 @@
-// Spotify Types
-type TokenProviderResponse = {
-  accessToken: string;
-  expiresAtTime: number;
-  tokenType: "Bearer";
-};
+import {
+  createSpotifyTokenProvider,
+  type AuthorizationApiTokenState,
+  type CosmosTokenResponse,
+  type SessionTokenState,
+} from "./SpotifyTokenProvider.ts";
 
 // Store all our Spotify Services
 const Spotify: typeof Spicetify = (globalThis as any).Spicetify;
-let SpotifyPlatform: typeof Spicetify.Platform;
-let SpotifyInternalFetch: typeof Spicetify.CosmosAsync;
+let SpotifyPlatform: typeof Spicetify.Platform | undefined;
+let SpotifyInternalFetch: typeof Spicetify.CosmosAsync | undefined;
+
+type TokenPlatform = {
+  AuthorizationAPI?: { getState?: () => unknown };
+  Session?: SessionTokenState;
+};
+
+const tokenPlatform = (): TokenPlatform | undefined =>
+  SpotifyPlatform as unknown as TokenPlatform | undefined;
 
 // Spotify Ready Promise
 const OnSpotifyReady = new Promise<void>((resolve) => {
@@ -16,7 +24,9 @@ const OnSpotifyReady = new Promise<void>((resolve) => {
     SpotifyPlatform = Spotify.Platform;
     SpotifyInternalFetch = Spotify.CosmosAsync;
 
-    if (!SpotifyPlatform || !SpotifyInternalFetch) {
+    const hasAuthorizationApi = typeof tokenPlatform()?.AuthorizationAPI?.getState === "function";
+    const hasSession = Boolean(tokenPlatform()?.Session);
+    if (!SpotifyPlatform || (!hasAuthorizationApi && !SpotifyInternalFetch && !hasSession)) {
       requestAnimationFrame(() => setTimeout(CheckForServices, 0));
       return;
     }
@@ -27,62 +37,19 @@ const OnSpotifyReady = new Promise<void>((resolve) => {
   CheckForServices();
 });
 
-// Get Spotify Access Token Function
-const TOKEN_REFRESH_SKEW_MS = 2_000;
-let tokenProviderResponse: TokenProviderResponse | undefined;
-let accessTokenPromise: Promise<string> | undefined;
-let accessTokenEpoch = 0;
+const tokenProvider = createSpotifyTokenProvider({
+  now: Date.now,
+  sources: {
+    readAuthorizationApiState: () =>
+      tokenPlatform()?.AuthorizationAPI?.getState?.() as AuthorizationApiTokenState | undefined,
+    readLegacyCosmosToken: () =>
+      SpotifyInternalFetch?.get("sp://oauth/v2/token") as Promise<CosmosTokenResponse> | undefined,
+    readSessionTokenState: () => tokenPlatform()?.Session,
+  },
+});
 
-const GetSpotifyAccessToken = (): Promise<string> => {
-  if (
-    tokenProviderResponse &&
-    tokenProviderResponse.expiresAtTime - Date.now() > TOKEN_REFRESH_SKEW_MS
-  ) {
-    return Promise.resolve(tokenProviderResponse.accessToken);
-  }
-  tokenProviderResponse = undefined;
-
-  if (accessTokenPromise) {
-    return accessTokenPromise;
-  }
-
-  const epochAtStart = accessTokenEpoch;
-  const pending = SpotifyInternalFetch.get("sp://oauth/v2/token")
-    .then((result: TokenProviderResponse) => {
-      if (epochAtStart === accessTokenEpoch) tokenProviderResponse = result;
-      return result.accessToken;
-    })
-    .catch((error: unknown) => {
-      if (!(error instanceof Error) || !error.message.includes("Resolver not found")) {
-        throw error;
-      }
-
-      if (!SpotifyPlatform.Session) {
-        console.warn("Failed to find SpotifyPlatform.Session for fetching token");
-        throw error;
-      }
-
-      const fallback = {
-        accessToken: SpotifyPlatform.Session.accessToken,
-        expiresAtTime: SpotifyPlatform.Session.accessTokenExpirationTimestampMs,
-        tokenType: "Bearer",
-      } satisfies TokenProviderResponse;
-      if (epochAtStart === accessTokenEpoch) tokenProviderResponse = fallback;
-      return fallback.accessToken;
-    })
-    .finally(() => {
-      if (accessTokenPromise === pending) accessTokenPromise = undefined;
-    });
-  accessTokenPromise = pending;
-
-  return accessTokenPromise;
-};
-
-const InvalidateSpotifyAccessToken = (): void => {
-  accessTokenEpoch += 1;
-  tokenProviderResponse = undefined;
-  accessTokenPromise = undefined;
-};
+const GetSpotifyAccessToken = (): Promise<string> => tokenProvider.getToken();
+const InvalidateSpotifyAccessToken = (): void => tokenProvider.invalidate();
 
 const Platform = {
   OnSpotifyReady,
