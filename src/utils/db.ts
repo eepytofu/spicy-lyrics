@@ -1,5 +1,9 @@
-import { openDB } from "idb";
+import { openDB, type IDBPDatabase } from "idb";
 import Logger from "./Logger";
+import {
+  missingRequiredObjectStores,
+  nextCompatibleDatabaseVersion,
+} from "./DatabaseSchema.ts";
 
 const dbLogger = new Logger("Database");
 
@@ -9,23 +13,41 @@ export const ObjectStores = {
   LyricsOverrides: "lyricsOverrides",
 };
 
-export const dbPromise = openDB("spicylyrics", 3, {
-  upgrade(db) {
-    dbLogger.debug("Upgrade invoked");
-    if (!db.objectStoreNames.contains(ObjectStores.LyricsStore)) {
-      db.createObjectStore(ObjectStores.LyricsStore);
-      dbLogger.debug("Created '", ObjectStores.LyricsStore, "' store");
-    }
-    if (!db.objectStoreNames.contains(ObjectStores.JapaneseAssets)) {
-      db.createObjectStore(ObjectStores.JapaneseAssets);
-      dbLogger.debug("Created '", ObjectStores.JapaneseAssets, "' store");
-    }
-    if (!db.objectStoreNames.contains(ObjectStores.LyricsOverrides)) {
-      db.createObjectStore(ObjectStores.LyricsOverrides);
-      dbLogger.debug("Created '", ObjectStores.LyricsOverrides, "' store");
-    }
-  },
-});
+const DATABASE_NAME = "spicylyrics";
+const REQUIRED_OBJECT_STORES = Object.values(ObjectStores);
+
+function createMissingObjectStores(db: IDBPDatabase) {
+  for (const name of missingRequiredObjectStores(
+    db.objectStoreNames,
+    REQUIRED_OBJECT_STORES,
+  )) {
+    db.createObjectStore(name);
+    dbLogger.debug("Created '", name, "' store");
+  }
+}
+
+async function openCompatibleDatabase() {
+  const existing = await openDB(DATABASE_NAME);
+  const missing = missingRequiredObjectStores(
+    existing.objectStoreNames,
+    REQUIRED_OBJECT_STORES,
+  );
+  if (missing.length === 0) return existing;
+
+  const nextVersion = nextCompatibleDatabaseVersion(existing.version);
+  existing.close();
+  dbLogger.debug("Upgrading database without removing newer stores", {
+    nextVersion,
+    missing,
+  });
+  return openDB(DATABASE_NAME, nextVersion, {
+    upgrade(db) {
+      createMissingObjectStores(db);
+    },
+  });
+}
+
+export const dbPromise = openCompatibleDatabase();
 
 export async function ensurePersistence() {
   try {
@@ -38,7 +60,7 @@ export async function ensurePersistence() {
       dbLogger.debug("Data persistence request was accepted");
     }
     return granted;
-  } catch (e) {
+  } catch {
     dbLogger.warn("Persistence check failed");
     return false;
   }
