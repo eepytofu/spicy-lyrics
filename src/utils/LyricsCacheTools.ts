@@ -8,8 +8,12 @@ import {
   clearManualLyricsSelection,
 } from "./Lyrics/ManualLyricsSelection.ts";
 import { $currentLyricsData } from "./stores.ts";
+import {
+  performCacheOperation,
+  type CacheOperationOutcome,
+} from "./CacheOperation.ts";
 
-let cacheOperation: Promise<void> | null = null;
+let cacheOperation: Promise<CacheOperationOutcome> | null = null;
 
 async function refetchCurrentLyrics(): Promise<void> {
   if (!PageView.IsOpened) return;
@@ -23,27 +27,38 @@ async function runCacheOperation(
   operation: () => Promise<void>,
   successMessage: string,
   failureMessage: string,
+  refreshFailureMessage: string,
   ui: boolean
 ): Promise<void> {
   if (cacheOperation) {
     if (ui) toast.info("A lyrics cache refresh is already running");
-    return cacheOperation;
+    await cacheOperation;
+    return;
   }
 
-  const task = (async () => {
-    invalidateLyricsPipeline();
-    await operation();
-    $currentLyricsData.set("");
-    if (ui) toast.success(successMessage);
-    await refetchCurrentLyrics();
-  })();
+  const task = performCacheOperation(
+    async () => {
+      invalidateLyricsPipeline();
+      await operation();
+      $currentLyricsData.set("");
+    },
+    refetchCurrentLyrics,
+  );
 
   cacheOperation = task;
   try {
-    await task;
-  } catch (error) {
-    if (ui) toast.error(failureMessage);
-    console.error("SpicyLyrics:", error);
+    const outcome = await task;
+    if (outcome.kind === "success") {
+      if (ui) toast.success(successMessage);
+      return;
+    }
+    if (outcome.kind === "operation-failed") {
+      if (ui) toast.error(failureMessage);
+      console.error("SpicyLyrics: cache operation failed", outcome.error);
+      return;
+    }
+    if (ui) toast.warning(refreshFailureMessage);
+    console.error("SpicyLyrics: post-clear lyrics refresh failed", outcome.error);
   } finally {
     if (cacheOperation === task) cacheOperation = null;
   }
@@ -66,6 +81,7 @@ export const RemoveCurrentLyrics_AllCaches = async (ui: boolean = false) => {
     },
     "Cleared cached lyrics for the current song",
     "Could not clear cached lyrics for the current song. Check the console for details.",
+    "Cleared cached lyrics, but could not refresh the current song. Check the console for details.",
     ui
   );
 };
@@ -80,6 +96,7 @@ export const RemoveLyricsCache = async (ui: boolean = false) => {
     },
     "Cleared the stored lyrics cache",
     "Could not clear the stored lyrics cache. Check the console for details.",
+    "Cleared the stored lyrics cache, but could not refresh the current song. Check the console for details.",
     ui
   );
 };
@@ -89,6 +106,7 @@ export const RemoveCurrentLyrics_StateCache = async (ui: boolean = false) => {
     async () => {},
     "Cleared the current lyrics state",
     "Could not clear the current lyrics state. Check the console for details.",
+    "Cleared the current lyrics state, but could not refresh the song. Check the console for details.",
     ui
   );
 };
