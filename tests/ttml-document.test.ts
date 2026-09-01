@@ -133,6 +133,22 @@ test("a line-timed document keeps bare text nodes and its duet side", () => {
   assert.equal(document.Content[1].OppositeAligned, true);
 });
 
+test("itunes timing None becomes native Static lyrics without timing fields", () => {
+  const document = parse(`<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" xml:lang="en" itunes:timing="None"><head><metadata><ttm:agent type="person" xml:id="lead"><ttm:name>Lead</ttm:name></ttm:agent></metadata></head><body><div itunes:songPart="Verse"><p itunes:key="L1" ttm:agent="lead">Hello &amp; world<span ttm:role="x-translation" xml:lang="id">Halo dunia</span></p><p itunes:key="L2">Second</p></div></body></tt>`);
+
+  assert.equal(document.Type, "Static");
+  assert.deepEqual(document.Lines.map((line: any) => line.Text), ["Hello & world", "Second"]);
+  assert.equal(document.Lines[0].ProviderLineId, "L1");
+  assert.equal(document.Lines[0].SongPart, "Verse");
+  assert.equal(document.Lines[0].VocalAgentId, "lead");
+  assert.equal(document.Lines[0].ProviderTranslatedText, "Halo dunia");
+  assert.equal(document.IncludesTranslation, true);
+  assert.deepEqual(document.VocalAgents, { lead: { Type: "person", Names: ["Lead"] } });
+  assert.equal("Content" in document, false);
+  assert.equal("StartTime" in document, false);
+  assert.equal("EndTime" in document, false);
+});
+
 test("no fixture emits a zero-width space", () => {
   for (const name of ["a-ruby-bg-translation", "b-head-sidecar", "c-word-level-roman", "d-line-timed"]) {
     assert.ok(!allText(fixture(name)).includes("​"), `${name} contains U+200B`);

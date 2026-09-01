@@ -26,6 +26,17 @@ test("legacy TTML strings remain readable through the local source envelope", ()
   assert.equal(lyrics?.Content[0].Text, "legacy TTML");
 });
 
+test("local untimed TTML remains Static through the source envelope", () => {
+  const content = `<tt xmlns="http://www.w3.org/ns/ttml" xmlns:itunes="http://music.apple.com/lyric-ttml-internal" itunes:timing="None"><body><div><p>first</p><p>second</p></div></body></tt>`;
+  const envelope = createLocalLyricsEnvelope(content, 180_000);
+  const lyrics = parseLocalLyricsRaw(envelope);
+
+  assert.equal(envelope?.format, "ttml");
+  assert.equal(lyrics.Type, "Static");
+  assert.equal(lyrics.source, "ldb");
+  assert.deepEqual(lyrics.Lines.map((line: any) => line.Text), ["first", "second"]);
+});
+
 test("synced LRC uses the stored track duration for its final line", () => {
   const envelope = createLocalLyricsEnvelope("[00:01.000]first\n[00:03.000]last", 5_250);
   assert.deepEqual(envelope, {

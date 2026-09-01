@@ -194,6 +194,29 @@ function lineContent(
   return content;
 }
 
+function staticContent(
+  lines: readonly LyricLine[],
+  syntheticLineIds: ReadonlySet<string>,
+): Record<string, unknown>[] {
+  const content: Record<string, unknown>[] = [];
+  for (const line of lines) {
+    const timed = toLine(line);
+    if (!timed) continue;
+    const {
+      Type: _type,
+      StartTime: _startTime,
+      EndTime: _endTime,
+      OppositeAligned: _oppositeAligned,
+      Background: _background,
+      ...entry
+    } = timed;
+    applyLineSemantics(entry, line, syntheticLineIds);
+    if (line.agentId) entry.VocalAgentId = line.agentId;
+    content.push(entry);
+  }
+  return content;
+}
+
 /** Syllable entries carry their window on `Lead`; line entries carry it directly. */
 function entryTime(entry: Record<string, unknown>, edge: "StartTime" | "EndTime"): number {
   const lead = entry.Lead as NativeGroup | undefined;
@@ -262,6 +285,16 @@ function extractVocalAgents(
   return Object.keys(agents).length ? agents : undefined;
 }
 
+function extractAuthoredTimingMode(
+  ttml: string,
+  domParser?: ConstructorParameters<typeof TTMLParser>[0] extends { domParser?: infer P } ? P : never,
+): string | undefined {
+  const parser = domParser ?? (typeof DOMParser !== "undefined" ? new DOMParser() : undefined);
+  if (!parser) return undefined;
+  const document = parser.parseFromString(ttml, "application/xml");
+  return document.documentElement?.getAttribute("itunes:timing") ?? undefined;
+}
+
 /**
  * Converts a TTML document into the native lyric model, or `null` when it carries no
  * usable lines. A malformed document is a rejected candidate, never a degraded one.
@@ -286,8 +319,28 @@ export function parseTtmlDocument(
   const result = read(source);
   if (!result) return null;
   const VocalAgents = extractVocalAgents(source, domParser);
+  const authoredTimingMode = extractAuthoredTimingMode(source, domParser);
 
   const lines = result.lines ?? [];
+  if (authoredTimingMode?.toLowerCase() === "none") {
+    const Lines = staticContent(lines, keyed.syntheticLineIds);
+    if (!Lines.length) return null;
+    const includesTranslation = carries(Lines, "ProviderTranslatedText");
+    const includesRomanization = carries(Lines, "ProviderRomanizedText");
+    const document: Record<string, unknown> = {
+      Type: "Static",
+      Lines,
+      IncludesTranslation: includesTranslation,
+      HasProviderTranslations: includesTranslation,
+      IncludesRomanization: includesRomanization,
+      HasTransliterations: includesRomanization,
+    };
+    if (result.metadata.songwriters?.length) document.SongWriters = result.metadata.songwriters;
+    if (result.metadata.language) document.ProviderLanguage = result.metadata.language;
+    if (VocalAgents) document.VocalAgents = VocalAgents;
+    return document;
+  }
+
   const alignments = oppositeAlignment(lines, result.metadata.agents);
   const isLineTimed = result.metadata.timingMode === "Line"
     || lines.every((line) => !(line.words ?? []).length);
