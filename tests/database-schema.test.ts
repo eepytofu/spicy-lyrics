@@ -19,7 +19,7 @@ test("newer databases keep unknown stores when all local stores exist", () => {
       "japaneseAssets",
       "lyricsOverrides",
       "aiRefinements",
-      "communityReferences",
+      "futureForkStore",
     ]),
     ["lyricsStore", "japaneseAssets", "lyricsOverrides"],
   );
