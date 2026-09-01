@@ -37,6 +37,7 @@ import { requestPositionSync } from "./utils/Gets/GetProgress.ts";
 import { IntervalManager } from "./utils/IntervalManager.ts";
 import fetchLyrics, { PrefetchLyrics } from "./utils/Lyrics/fetchLyrics.ts";
 import ApplyLyrics from "./utils/Lyrics/Global/Applyer.ts";
+import { shouldRefetchAfterApply } from "./utils/Lyrics/PostApplyRefetch.ts";
 import { ScrollingIntervalTime } from "./utils/Lyrics/lyrics.ts";
 import { ScrollToActiveLine } from "./utils/Scrolling/ScrollToActiveLine.ts";
 import { ScrollSimplebar } from "./utils/Scrolling/Simplebar/ScrollSimplebar.ts";
@@ -1061,17 +1062,9 @@ async function main() {
         }
         lastTimeout = setTimeout(async () => {
           const currentSongLyrics = $currentLyricsData.get();
-          if (
-            currentSongLyrics &&
-            currentSongLyrics !== `NO_LYRICS:${SpotifyPlayer.GetUri()}`
-          ) {
-            const parsedLyrics = JSON.parse(currentSongLyrics);
-            if (parsedLyrics?.uri !== SpotifyPlayer.GetUri()) {
-              const refetchUri = SpotifyPlayer.GetUri();
-              if (refetchUri) {
-                fetchLyrics(refetchUri).then(ApplyLyrics);
-              }
-            }
+          const refetchUri = SpotifyPlayer.GetUri();
+          if (refetchUri && shouldRefetchAfterApply(currentSongLyrics, refetchUri)) {
+            fetchLyrics(refetchUri).then(ApplyLyrics);
           }
         }, 1000);
       });
