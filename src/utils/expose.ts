@@ -7,6 +7,18 @@ import { OpenLyricsDBPanel } from "./openLyricsDBPanel";
 import { DeepFreeze } from "./utils";
 import { triggerSpicyLyricsFakeUpdate } from "./version/CheckForUpdates";
 import { SPICY_LYRICS_BUILD_MARKER } from "./buildMarker";
+import { BreakerDebug } from "./API/CircuitBreaker";
+
+const inspectQueryBreaker = () => {
+    const state = BreakerDebug.state();
+    return {
+        open: state.open === true,
+        retryAfterMs: Math.max(0, Number(state.retryAfterMs) || 0),
+        ladderIndex: Math.max(0, Number(state.ladderIndex) || 0),
+        lastTripAt: Math.max(0, Number(state.lastTripAt) || 0),
+        lastProbeAt: Math.max(0, Number(state.lastProbeAt) || 0),
+    };
+};
 
 export function exposeToWindow() {
     (window as any).__spicyLyricsBuildMarker = SPICY_LYRICS_BUILD_MARKER;
@@ -34,6 +46,13 @@ export function exposeToWindow() {
         testing: {
             autoUpdate: {
                 triggerFakeUpdate: triggerSpicyLyricsFakeUpdate,
+            },
+            queryBreaker: {
+                inspect: inspectQueryBreaker,
+                reset: () => {
+                    BreakerDebug.reset();
+                    return inspectQueryBreaker();
+                },
             },
             toaster: toast,
         }
