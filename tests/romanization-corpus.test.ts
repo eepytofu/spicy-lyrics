@@ -48,6 +48,10 @@ test("invisible lyric markers are cleaned before processing", () => {
   assert.equal(cleanInvisibles("tell \u200Bme"), "tell me");
   assert.equal(cleanInvisibles("\uFEFFhello\u00A0world"), "hello world");
   assert.equal(cleanInvisibles("\u0915\u094D\u200D\u0937"), "\u0915\u094D\u200D\u0937");
+  assert.equal(
+    cleanInvisibles("a\u200Eb\u200Fc\u2060d\u200Ce\u200Df"),
+    "a\u200Eb\u200Fc\u2060d\u200Ce\u200Df",
+  );
   assert.equal(cleanInvisiblesPreserveEdges(" hello\u00A0 \u200Bworld "), " hello world ");
 });
 
