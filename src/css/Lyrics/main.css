@@ -99,7 +99,9 @@
     padding-left 0.4s;
   display: flex;
   flex-direction: column;
-  margin-bottom: 45cqh;
+  /* The virtualizer owns the half-viewport centering spacer. Keep only a
+     small residual tail here so the final line is not padded twice. */
+  margin-bottom: 6cqh;
   margin-top: 25cqh;
 }
 

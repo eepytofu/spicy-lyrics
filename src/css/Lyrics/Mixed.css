@@ -402,6 +402,11 @@
   display: inline-flex;
 }
 
+#SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line .letter.SpaceLetter {
+  white-space: pre;
+  min-width: 0.3ch;
+}
+
 /* Above-reading emphasis reuses each ruby/plain grid run as the animated
    glyph owner. Keep its two-row geometry after the generic .letter rule. */
 #SpicyLyricsPage.SpicyRenderer .LyricsContainer .LyricsContent .line .letter.furigana-cluster,

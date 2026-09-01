@@ -52,6 +52,9 @@ const applyEmphasisUnits = (
     const timing = timingWindows[index];
 
     letterElem.classList.add("letter", "Emphasis");
+    if ((letterElem.textContent ?? "").trim().length === 0) {
+      letterElem.classList.add("SpaceLetter");
+    }
     if (index === units.length - 1) {
       letterElem.classList.add("LastLetterInWord");
     }
