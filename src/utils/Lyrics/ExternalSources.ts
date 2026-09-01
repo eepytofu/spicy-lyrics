@@ -42,6 +42,7 @@ import {
 } from "./LyricsDocumentBuilders.ts";
 import {
   acquireProviderOutcomes,
+  resolveProviderAcquisition,
   runProviderAcquisition,
   type ProviderAcquisitionRecord,
   type ProviderAcquisitionOutcome,
@@ -80,7 +81,12 @@ import {
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
 };
-export type ExternalLyricsResult = { lyrics: any; status: number; match?: LyricsMatchMetadata };
+export type ExternalLyricsResult = {
+  lyrics: any;
+  status: number;
+  match?: LyricsMatchMetadata;
+  failure?: "no-match" | "queued" | "rate-limited" | "service-unavailable";
+};
 
 const DEFAULT_MUSIXMATCH_TOKEN = "21051986b9886beabe1ce01c3ce94c96319411f8f2c122676365e3";
 const MUSIXMATCH_HEADERS = { authority: "apic-desktop.musixmatch.com", cookie: "x-mxm-token-guid=" };
@@ -170,7 +176,7 @@ async function spicyQueryAttempt(
     if (error instanceof ServiceUnavailableError) {
       return {
         kind: "settled",
-        outcome: { kind: "rate-limited", retryAfterMs: error.retryAfterMs },
+        outcome: { kind: "service-unavailable", retryAfterMs: error.retryAfterMs },
       };
     }
     if (error instanceof QueryNetworkError) {
@@ -557,6 +563,8 @@ function reportProviderFailure(
     console.warn(`[SpicyLyrics] ${provider} acquisition timed out`);
   } else if (outcome.kind === "rate-limited") {
     console.warn(`[SpicyLyrics] ${provider} acquisition was rate limited`);
+  } else if (outcome.kind === "service-unavailable") {
+    console.warn(`[SpicyLyrics] ${provider} acquisition is temporarily unavailable`);
   } else if (outcome.kind === "upstream-error") {
     console.warn(`[SpicyLyrics] ${provider} upstream returned status ${outcome.status}`);
   } else if (outcome.kind === "error") {
@@ -800,17 +808,29 @@ export async function fetchLyricsFromProviders(
     { parentSignal, nativeTitleEnrichment: mode !== "strict" },
   );
   if (!acquired || parentSignal?.aborted) return null;
-  if (acquired.records.some(({ outcome }) => outcome.kind === "queued")) {
-    return { lyrics: null, status: 503 };
-  }
   const selected = selectProviderEntry(
     acquired.entries,
     acquired.durationMs,
     mode,
   );
-  if (!selected.chosen) return null;
-  await retainCandidateSession(uri, acquired, selected, {
-    alternativesLoaded: mode !== "strict",
-  });
-  return selected.chosen.result;
+  const resolved = resolveProviderAcquisition(
+    selected.chosen?.result ?? null,
+    acquired.records,
+  );
+  if (resolved.kind === "lyrics") {
+    await retainCandidateSession(uri, acquired, selected, {
+      alternativesLoaded: mode !== "strict",
+    });
+    return resolved.result;
+  }
+  if (resolved.kind === "queued") {
+    return { lyrics: null, status: 503, failure: "queued" };
+  }
+  if (resolved.kind === "rate-limited") {
+    return { lyrics: null, status: 429, failure: "rate-limited" };
+  }
+  if (resolved.kind === "service-unavailable") {
+    return { lyrics: null, status: 502, failure: "service-unavailable" };
+  }
+  return { lyrics: null, status: 404, failure: "no-match" };
 }

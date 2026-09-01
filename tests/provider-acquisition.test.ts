@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   acquireProviderOutcomes,
   ProviderResponseError,
+  resolveProviderAcquisition,
   runProviderAcquisition,
 } from "../src/utils/Lyrics/ProviderAcquisition.ts";
 
@@ -38,9 +39,42 @@ test("typed server failures keep their actionable acquisition outcome", async ()
   const upstream = await runProviderAcquisition(async () => {
     throw new ProviderResponseError({ kind: "upstream-error", status: 502 }, "failed");
   });
+  const unavailable = await runProviderAcquisition(async () => {
+    throw new ProviderResponseError(
+      { kind: "service-unavailable", retryAfterMs: 5000 },
+      "breaker open",
+    );
+  });
 
   assert.deepEqual(rateLimited, { kind: "rate-limited", retryAfterMs: 3000 });
   assert.deepEqual(upstream, { kind: "upstream-error", status: 502 });
+  assert.deepEqual(unavailable, { kind: "service-unavailable", retryAfterMs: 5000 });
+});
+
+test("a usable fallback wins over every temporary provider failure", () => {
+  const records = [
+    { provider: "spicy", orderIndex: 0, outcome: { kind: "queued" } as const },
+    { provider: "spotify", orderIndex: 1, outcome: { kind: "lyrics", result: "fallback" } as const },
+    { provider: "lrclib", orderIndex: 2, outcome: { kind: "timeout" } as const },
+  ];
+
+  assert.deepEqual(resolveProviderAcquisition("fallback", records), {
+    kind: "lyrics",
+    result: "fallback",
+  });
+});
+
+test("aggregate provider failures retain queued, service, rate, and no-match states", () => {
+  const record = (kind: "queued" | "no-match" | "timeout" | "rate-limited") => [{
+    provider: "provider",
+    orderIndex: 0,
+    outcome: { kind },
+  }];
+
+  assert.deepEqual(resolveProviderAcquisition(null, record("queued")), { kind: "queued" });
+  assert.deepEqual(resolveProviderAcquisition(null, record("timeout")), { kind: "service-unavailable" });
+  assert.deepEqual(resolveProviderAcquisition(null, record("rate-limited")), { kind: "rate-limited" });
+  assert.deepEqual(resolveProviderAcquisition(null, record("no-match")), { kind: "no-match" });
 });
 
 test("strict acquisition stops on an Apple queued outcome", async () => {

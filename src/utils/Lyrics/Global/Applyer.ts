@@ -61,6 +61,14 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
       noticeContent = `We don't have any lyrics for this song`
       break;
     }
+    case "service-unavailable": {
+      noticeContent = `Lyrics are temporarily unavailable — please try again in a moment`
+      break;
+    }
+    case "rate-limited": {
+      noticeContent = `You're going a little fast for us — give it a moment and try again`
+      break;
+    }
     case "dj": {
       noticeContent = `Viewing lyrics, while using the DJ, is not supported`
       break;

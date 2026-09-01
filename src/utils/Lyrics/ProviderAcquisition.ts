@@ -5,14 +5,22 @@ export type ProviderAcquisitionOutcome<Result> =
   | { kind: "timeout" }
   | { kind: "aborted" }
   | { kind: "rate-limited"; retryAfterMs?: number }
+  | { kind: "service-unavailable"; retryAfterMs?: number }
   | { kind: "upstream-error"; status: number }
   | { kind: "error"; error: unknown };
 
+export type ProviderAggregateOutcome<Result> =
+  | { kind: "lyrics"; result: Result }
+  | { kind: "queued" }
+  | { kind: "no-match" }
+  | { kind: "rate-limited" }
+  | { kind: "service-unavailable" };
+
 export class ProviderResponseError extends Error {
-  readonly outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "upstream-error" | "timeout" | "aborted" }>;
+  readonly outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "service-unavailable" | "upstream-error" | "timeout" | "aborted" }>;
 
   constructor(
-    outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "upstream-error" | "timeout" | "aborted" }>,
+    outcome: Extract<ProviderAcquisitionOutcome<never>, { kind: "rate-limited" | "service-unavailable" | "upstream-error" | "timeout" | "aborted" }>,
     message: string,
   ) {
     super(message);
@@ -26,6 +34,34 @@ export type ProviderAcquisitionRecord<Provider, Result> = {
   orderIndex: number;
   outcome: ProviderAcquisitionOutcome<Result>;
 };
+
+/**
+ * Resolves one foreground result without allowing a failed provider to hide a
+ * usable fallback. When no lyrics survived, preserve the most actionable
+ * aggregate state instead of collapsing temporary failures into "no match".
+ */
+export function resolveProviderAcquisition<Provider, Result>(
+  selected: Result | null,
+  records: readonly ProviderAcquisitionRecord<Provider, Result>[],
+): ProviderAggregateOutcome<Result> {
+  if (selected !== null) return { kind: "lyrics", result: selected };
+  if (records.some(({ outcome }) => outcome.kind === "queued")) return { kind: "queued" };
+  if (
+    records.some(({ outcome }) =>
+      outcome.kind === "service-unavailable"
+      || outcome.kind === "timeout"
+      || outcome.kind === "aborted"
+      || outcome.kind === "upstream-error"
+      || outcome.kind === "error"
+    )
+  ) {
+    return { kind: "service-unavailable" };
+  }
+  if (records.some(({ outcome }) => outcome.kind === "rate-limited")) {
+    return { kind: "rate-limited" };
+  }
+  return { kind: "no-match" };
+}
 
 function abortError(): DOMException {
   return new DOMException("Provider acquisition aborted", "AbortError");

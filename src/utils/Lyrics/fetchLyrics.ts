@@ -859,6 +859,16 @@ async function fetchLyricsForSession(
       return ["lyrics-queued", 503];
     }
 
+    if (providerResult?.failure === "rate-limited") {
+      HideLoaderContainer();
+      return ["rate-limited", providerResult.status];
+    }
+
+    if (providerResult?.failure === "service-unavailable") {
+      HideLoaderContainer();
+      return ["service-unavailable", providerResult.status];
+    }
+
     if (!providerResult || providerResult.status !== 200) {
       HideLoaderContainer();
       return ["lyrics-not-found", 404];
