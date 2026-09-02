@@ -25,6 +25,7 @@ for (const retiredKey of ["translationEnabled", "translationTargetLang", "showBu
 saveUiStateBlob(_uiState);
 try {
   localStorage.removeItem("spicy-lyrics:translationCache");
+  localStorage.removeItem("spicy-lyrics:googleRomanizationCache");
 } catch {
   // Browser storage may be unavailable during isolated tests.
 }

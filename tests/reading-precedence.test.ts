@@ -21,8 +21,8 @@ test("configured and structured scripts use local readings", () => {
   assert.equal(shouldUseConfiguredLocalReading("remix", ["Chinese"]), false);
 });
 
-test("Arabic-script Google readings precede provider fallback", () => {
-  assert.equal(shouldPreferGeneratedReading("سيدي منصور", ["Arabic"]), true);
+test("Arabic script no longer requests a generated reading", () => {
+  assert.equal(shouldPreferGeneratedReading("سيدي منصور", ["Arabic"]), false);
   assert.equal(shouldPreferGeneratedReading("sidi mansour", ["Arabic"]), false);
   assert.equal(shouldPreferGeneratedReading("Αγάπη", ["Greek"]), false);
 });
@@ -37,11 +37,7 @@ test("Apple timing chunks cannot group locally generated Pinyin", () => {
   );
 });
 
-test("Arabic timed readings retain generated-first provider fallback", () => {
-  assert.deepEqual(
-    selectTimedLineReading(true, "sidi mansour", "provider line", "provider chunks"),
-    { text: "sidi mansour", provenance: "remoteFallback", usesLineContext: true },
-  );
+test("Arabic timed readings retain provider-authored fallback", () => {
   assert.deepEqual(
     selectTimedLineReading(true, undefined, "provider line", "provider chunks"),
     { text: "provider line", provenance: "provider", usesLineContext: true },

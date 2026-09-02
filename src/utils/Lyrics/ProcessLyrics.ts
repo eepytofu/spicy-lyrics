@@ -40,12 +40,6 @@ import {
   romanizeCyrillic,
   romanizeKoreanForDisplay,
 } from "./Fork/Romanization.ts";
-import {
-  ARABIC_ROMANIZATION_ATTEMPT_VERSION,
-  applyArabicScriptRomanizations,
-  collectArabicScriptPhrases,
-} from "./Fork/ArabicRomanization.ts";
-import { batchRomanizeArabicScriptPhrases } from "./Fork/GoogleRomanizationClient.ts";
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
 import { analyzeJapaneseLine, buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
 import { buildCanonicalLine } from "./Processing/Canonical.ts";
@@ -101,8 +95,8 @@ import {
 } from "./Processing/TextAnalysisProjection.ts";
 
 export { acceptRomanization };
-// v82: retire the persisted built-in machine-translation lane.
-export const LYRICS_PROCESSING_VERSION = 82;
+// v83: remove persisted built-in translation and remote Arabic-reading output.
+export const LYRICS_PROCESSING_VERSION = 83;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -467,7 +461,6 @@ const romanizeLineText = async (
   text: string,
   docContext: ScriptBranchDocContext,
   language: string,
-  arabicReadings: ReadonlyMap<string, string>,
 ): Promise<{ text: string; aboveReadingSegments?: AboveReadingSegment[] } | undefined> => {
   const textProjection = buildTextAnalysisProjection(text);
   const entry: RomanizeEntry = {
@@ -480,7 +473,6 @@ const romanizeLineText = async (
     entry,
     docContext,
     language,
-    arabicReadings,
     false,
     false,
     undefined,
@@ -513,7 +505,6 @@ const postProcessSyllableRomanization = async (
   lyrics: any,
   docContext: ScriptBranchDocContext,
   language: string,
-  arabicReadings: ReadonlyMap<string, string>,
   allowChineseProviderJapaneseRepair: boolean,
   providerEvidence: ProviderReadingEvidence | undefined,
 ) => {
@@ -681,7 +672,6 @@ const postProcessSyllableRomanization = async (
         effectiveLineText,
         docContext,
         language,
-        arabicReadings,
       );
       const reading = selectTimedLineReading(
         isArabicLine,
@@ -756,7 +746,6 @@ const romanizeEntry = async (
   entry: RomanizeEntry,
   docContext: ScriptBranchDocContext,
   primaryLanguage: string,
-  arabicReadings: ReadonlyMap<string, string>,
   annotateJapanese: boolean = true,
   allowChineseProviderJapaneseRepair: boolean = false,
   providerEvidence?: ProviderReadingEvidence,
@@ -880,14 +869,6 @@ const romanizeEntry = async (
         text = romanizeGreekText(text);
         changed = true;
       }
-    } else if (script === "Arabic") {
-      if (ItemArabicTest.test(text)) {
-        const romanized = applyArabicScriptRomanizations(text, arabicReadings);
-        if (romanized !== text) {
-          text = romanized;
-          changed = true;
-        }
-      }
     }
   }
 
@@ -915,15 +896,7 @@ const romanizeEntry = async (
   return changed || restoreUsableProviderReading(target, targetScripts);
 };
 
-type ProcessLyricsOptions = {
-  signal?: AbortSignal;
-  allowRemoteRomanization?: boolean;
-};
-
-export const ProcessLyrics = async (
-  lyrics: any,
-  options: ProcessLyricsOptions = {}
-) => {
+export const ProcessLyrics = async (lyrics: any) => {
   const sourceDocument = ensureSourceLyricDocument(lyrics);
   if (!sourceDocument.parity.valid) {
     romanizationLogger.warn(
@@ -1009,24 +982,6 @@ export const ProcessLyrics = async (
     }
   }
 
-  let arabicPhrases: string[] = [];
-  if (presentScripts.includes("Arabic")) {
-    const sourceTexts = lyrics.Type === "Syllable"
-      ? new Set(entries.map((entry) => entry.lineText))
-      : new Set(entries.map((entry) => entry.textProjection.analysisText));
-    arabicPhrases = Array.from(
-      new Set(Array.from(sourceTexts).flatMap(collectArabicScriptPhrases)),
-    );
-  }
-  const shouldRequestRemoteRomanization =
-    options.allowRemoteRomanization === true && arabicPhrases.length > 0;
-  const arabicReadings = shouldRequestRemoteRomanization
-    ? await batchRomanizeArabicScriptPhrases(arabicPhrases, { signal: options.signal })
-    : new Map<string, string>();
-  if (shouldRequestRemoteRomanization) {
-    lyrics.RemoteRomanizationAttemptVersion = ARABIC_ROMANIZATION_ATTEMPT_VERSION;
-  }
-
   let appliedRomanization = false;
   const needsRomanizationOrJapaneseReading = entries.some(
     (entry) =>
@@ -1046,7 +1001,6 @@ export const ProcessLyrics = async (
           entry,
           docContext,
           language,
-          arabicReadings,
           lyrics.Type !== "Syllable",
           allowChineseProviderJapaneseRepair,
           providerReadingEvidence,
@@ -1061,7 +1015,6 @@ export const ProcessLyrics = async (
       lyrics,
       docContext,
       language,
-      arabicReadings,
       allowChineseProviderJapaneseRepair,
       providerReadingEvidence,
     );

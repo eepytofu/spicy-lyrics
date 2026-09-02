@@ -13,7 +13,6 @@ import {
   ProcessLyrics,
   READING_PLAN_SCHEMA_VERSION,
 } from "./ProcessLyrics.ts";
-import { ARABIC_ROMANIZATION_ATTEMPT_VERSION } from "./Fork/ArabicRomanization.ts";
 import {
   chineseTones,
   chineseTranslitMode,
@@ -32,7 +31,7 @@ import {
   normalizeProviderTranslations,
   TRANSLATION_SIDECAR_SCHEMA_VERSION,
 } from "./Fork/Translation.ts";
-import { $chineseCharacterForm, $romanization } from "../uiState.ts";
+import { $chineseCharacterForm } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
 import { pendingLyricsPresentation } from "./Processing/ReadingPrecedence.ts";
 import {
@@ -47,7 +46,7 @@ import { publishLyricsInteropSnapshot } from "./Interop.ts";
 import { isLyricsSourceCacheCompatible } from "./LyricsSourceCache.ts";
 import { ensureSourceEvidence } from "./Processing/SourceEvidence.ts";
 import { LyricsRequestCoordinator, type LyricsRequestSession } from "./LyricsRequestSession.ts";
-import { ArabicTextTest, RomanizableScriptTextTest } from "./Fork/TextDetection.ts";
+import { RomanizableScriptTextTest } from "./Fork/TextDetection.ts";
 import { isChineseDocumentPendingReading } from "./Processing/PendingReadingPresentation.ts";
 import {
   getActiveLyricsSourceOrder,
@@ -172,10 +171,7 @@ async function finishProcessingInBackground(
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
-    await ProcessLyrics(lyrics, {
-      signal: session.signal,
-      allowRemoteRomanization: $romanization.get(),
-    });
+    await ProcessLyrics(lyrics);
     if (!session.isCurrent()) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
@@ -221,13 +217,6 @@ function detectChineseQuick(lyrics: any): boolean {
 
 function hasRomanizationWorkQuick(lyrics: any): boolean {
   return RomanizableScriptTextTest.test(collectLyricsText(lyrics).join(""));
-}
-
-function hasRemoteRomanizationWorkQuick(lyrics: any): boolean {
-  return (
-    ArabicTextTest.test(collectLyricsText(lyrics).join("")) &&
-    lyrics?.RemoteRomanizationAttemptVersion !== ARABIC_ROMANIZATION_ATTEMPT_VERSION
-  );
 }
 
 function markProcessedWithoutBackground(lyrics: any): void {
@@ -287,8 +276,6 @@ async function ensureProcessingVersion(
   if (!lyrics) return { lyrics, translationPending: false };
 
   const processingContextKey = currentProcessingContextKey();
-  const needsRemoteRomanization = $romanization.get() && hasRemoteRomanizationWorkQuick(lyrics);
-
   // ProcessingPending === true means a previous session cached raw lyrics and
   // died before its background processing finished — treat as stale and
   // reprocess below instead of serving unprocessed lyrics forever.
@@ -296,8 +283,7 @@ async function ensureProcessingVersion(
     lyrics.ProcessingPending !== true &&
     lyrics.ProcessingVersion === LYRICS_PROCESSING_VERSION &&
     lyrics.ReadingPlanSchemaVersion === READING_PLAN_SCHEMA_VERSION &&
-    lyrics.ProcessingContextKey === processingContextKey &&
-    !needsRemoteRomanization
+    lyrics.ProcessingContextKey === processingContextKey
   ) {
     return {
       lyrics,
@@ -319,10 +305,7 @@ async function ensureProcessingVersion(
     fromContext: lyrics.ProcessingContextKey,
     toContext: processingContextKey,
   });
-  await ProcessLyrics(lyrics, {
-    signal: session.signal,
-    allowRemoteRomanization: $romanization.get(),
-  });
+  await ProcessLyrics(lyrics);
   if (!session.isCurrent()) return { lyrics, translationPending: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
@@ -581,7 +564,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
       markLyricsOverridePreference(lyrics, preference);
       captureSourceTranslations(lyrics);
       if (hasRomanizationWorkQuick(lyrics)) {
-        await ProcessLyrics(lyrics, { allowRemoteRomanization: $romanization.get() });
+        await ProcessLyrics(lyrics);
       } else {
         markProcessedWithoutBackground(lyrics);
       }
@@ -613,15 +596,13 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     lyrics.uri = uri;
     lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
 
-    // Same entry schema as the main fetch path: sidecar the provider
-    // Capture provider-authored translations before processing so the source
-    // sidecar and rendered meaning lane stay consistent.
+    // Same entry schema as the main fetch path: capture provider-authored
+    // translations before processing so the source sidecar and rendered
+    // meaning lane stay consistent.
     captureSourceTranslations(lyrics);
 
     if (hasRomanizationWorkQuick(lyrics)) {
-      await ProcessLyrics(lyrics, {
-        allowRemoteRomanization: $romanization.get(),
-      });
+      await ProcessLyrics(lyrics);
     } else {
       markProcessedWithoutBackground(lyrics);
     }
