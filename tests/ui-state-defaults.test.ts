@@ -26,14 +26,12 @@ const {
   $chineseTones,
   $joinMandarinWords,
   $pinyinPlacement,
-  $showBuiltInTranslationButton,
-  $translationEnabled,
   $npvLyricsExpanded,
   $npvLyricsOpen,
   $prefetchNextLyrics,
 } = await import("../src/utils/uiState.ts");
 
-test("Chinese tones default on while built-in translation stays off", () => {
+test("Chinese tones and provider translations retain their defaults", () => {
   assert.equal($providerTranslationsEnabled.get(), true);
   assert.equal($hideEmbeddedProviderInfo.get(), false);
   assert.equal($showVocalistLabels.get(), true);
@@ -41,21 +39,19 @@ test("Chinese tones default on while built-in translation stays off", () => {
   assert.equal($chineseTones.get(), true);
   assert.equal($joinMandarinWords.get(), false);
   assert.equal($pinyinPlacement.get(), "below");
-  assert.equal($translationEnabled.get(), false);
-  assert.equal($showBuiltInTranslationButton.get(), true);
   assert.equal($npvLyricsOpen.get(), true);
   assert.equal($npvLyricsExpanded.get(), false);
   assert.equal($prefetchNextLyrics.get(), false);
 });
 
-test("built-in translation button visibility and tone preference persist independently", () => {
+test("retired built-in translation settings are scrubbed while tone preference persists", () => {
   $chineseTones.set(false);
-  $showBuiltInTranslationButton.set(false);
 
   const persisted = JSON.parse(storage.get(UI_STATE_KEY) ?? "{}");
   assert.equal(persisted.chineseTones, false);
-  assert.equal(persisted.showBuiltInTranslationButton, false);
+  assert.equal(persisted.showBuiltInTranslationButton, undefined);
   assert.equal(persisted.translationEnabled, undefined);
+  assert.equal(persisted.translationTargetLang, undefined);
 });
 
 test("vocalist and song-section visibility persist independently", () => {

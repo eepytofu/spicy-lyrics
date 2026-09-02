@@ -19,6 +19,16 @@ function saveUiStateBlob(obj: Record<string, any>) {
 
 const _uiState: Record<string, any> = readUiStateBlob();
 
+for (const retiredKey of ["translationEnabled", "translationTargetLang", "showBuiltInTranslationButton"]) {
+  delete _uiState[retiredKey];
+}
+saveUiStateBlob(_uiState);
+try {
+  localStorage.removeItem("spicy-lyrics:translationCache");
+} catch {
+  // Browser storage may be unavailable during isolated tests.
+}
+
 function persistAtom<T>(key: string, defaultValue: T) {
   const store = atom<T>(_uiState[key] !== undefined ? _uiState[key] : defaultValue);
   store.listen((v) => {
@@ -44,8 +54,6 @@ export type KoreanDisplayMode = "wordTranslit" | "rrStandard" | "rrPronunciation
 export const $koreanDisplayMode = persistAtom<KoreanDisplayMode>("koreanDisplayMode", "rrStandard");
 export const $cyrillicRomanizationMode = persistAtom<"Russian" | "Ukrainian">("cyrillicRomanizationMode", "Russian");
 export const $cyrillicKeepSigns = persistAtom<boolean>("cyrillicKeepSigns", false);
-export const $translationEnabled = persistAtom<boolean>("translationEnabled", false);
-export const $translationTargetLang = persistAtom<string>("translationTargetLang", "en");
 export const $providerTranslationsEnabled = persistAtom<boolean>("providerTranslationsEnabled", true);
 export const $hideEmbeddedProviderInfo = persistAtom<boolean>("hideEmbeddedProviderInfo", false);
 export const $showVocalistLabels = persistAtom<boolean>("showVocalistLabels", true);
@@ -55,7 +63,6 @@ export const $flatViewControls = persistAtom<boolean>("flatViewControls", true);
 export const $forceDarkBackground = persistAtom<boolean>("forceDarkBackground", false);
 export const $prefetchNextLyrics = persistAtom<boolean>("prefetchNextLyrics", false);
 export const $showChineseTranslitButton = persistAtom<boolean>("showChineseTranslitButton", true);
-export const $showBuiltInTranslationButton = persistAtom<boolean>("showBuiltInTranslationButton", true);
 export const $fromVersion = persistAtom<string>("fromVersion", "");
 export const $lastFetchedUri = persistAtom<string | null>("lastFetchedUri", null);
 export const $previousVersion = persistAtom<string>("previousVersion", "");

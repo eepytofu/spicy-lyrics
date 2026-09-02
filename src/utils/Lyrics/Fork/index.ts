@@ -4,7 +4,7 @@
  * Exports all fork-specific features for easy importing.
  * These modules extend upstream's functionality with:
  * - Additional romanization systems (Cantonese, improved Cyrillic)
- * - Google Translate integration
+ * - Provider translation sidecar support
  * - Per-syllable karaoke sync
  * - Extended text detection
  * 
@@ -52,10 +52,3 @@ export {
   romanizeCantonese,
   romanizeCyrillic,
 } from "./Romanization.ts";
-
-// Translation (Google Translate integration)
-export {
-  clearTranslationCache,
-  batchTranslate,
-  translateLyrics,
-} from "./Translation.ts";

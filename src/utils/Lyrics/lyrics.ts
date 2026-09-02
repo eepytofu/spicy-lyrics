@@ -8,8 +8,6 @@ import {
   $pinyinPlacement,
   $koreanDisplayMode,
   $romanization,
-  $translationEnabled,
-  $translationTargetLang,
   type KoreanDisplayMode,
 } from "../uiState.ts";
 import Global from "../../components/Global/Global.ts";
@@ -406,23 +404,6 @@ export let cyrillicKeepSigns = $cyrillicKeepSigns.get();
 $cyrillicKeepSigns.listen((val) => {
   cyrillicKeepSigns = val;
 });
-
-export let translationEnabled = $translationEnabled.get();
-$translationEnabled.listen((val) => {
-  translationEnabled = val;
-});
-export let translationTargetLang = $translationTargetLang.get();
-$translationTargetLang.listen((val) => {
-  translationTargetLang = val;
-});
-export const setTranslationEnabled = (val: boolean) => {
-  translationEnabled = val;
-  $translationEnabled.set(val);
-};
-export const setTranslationTargetLang = (val: string) => {
-  translationTargetLang = val;
-  $translationTargetLang.set(val);
-};
 
 export const preHiddenDotLineMs = 500;
 export const getInterludeTimePadding = () => (preHiddenDotLineMs + 50) * -1;

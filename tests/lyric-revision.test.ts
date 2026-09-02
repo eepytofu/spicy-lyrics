@@ -56,7 +56,7 @@ test("derived mutations do not rewrite an established source revision", async ()
   const lyrics = lineLyrics();
   const revision = await ensureLyricRevision("spotify:track:one", lyrics, "qq:a");
   lyrics.Content[0].Text = "display projection";
-  (lyrics.Content[0] as any).TranslatedText = "google translation";
+  (lyrics.Content[0] as any).TranslatedText = "derived translation";
 
   assert.equal((await ensureLyricRevision("spotify:track:one", lyrics, "qq:a")).id, revision.id);
   assert.equal(isLyricsRevisionCacheCompatible(lyrics, revision.id), true);

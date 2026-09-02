@@ -8,7 +8,6 @@ import {
 import {
   $hideEmbeddedProviderInfo,
   $lyricsCopyFormat,
-  $showBuiltInTranslationButton,
   $showChineseTranslitButton,
   $showSongSections,
   $showVocalistLabels,
@@ -37,7 +36,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
   const hideEmbeddedProviderInfo = useStore($hideEmbeddedProviderInfo);
   const showVocalistLabels = useStore($showVocalistLabels);
   const showSongSections = useStore($showSongSections);
-  const showTranslationButton = useStore($showBuiltInTranslationButton);
   const showChineseButton = useStore($showChineseTranslitButton);
 
   if (sectionFilter !== "All" && sectionFilter !== SECTION_NAME) return null;
@@ -76,11 +74,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
     ),
   };
   const controlRows = {
-    translation: matches(
-      query,
-      "Show Translation Button",
-      "Show the Google fallback control in lyrics view controls."
-    ),
     chinese: matches(
       query,
       "Show Chinese Reading Button",
@@ -174,17 +167,6 @@ export default function LyricsControlsSection({ query, sectionFilter }: Props) {
 
       {Object.values(controlRows).some(Boolean) && (
         <SubsectionTitle>Controls and output</SubsectionTitle>
-      )}
-      {controlRows.translation && (
-        <Row
-          label="Show Translation Button"
-          description="Show the Google fallback control in lyrics view controls."
-        >
-          <Toggle
-            checked={showTranslationButton}
-            onChange={(value) => $showBuiltInTranslationButton.set(value)}
-          />
-        </Row>
       )}
       {controlRows.chinese && (
         <Row

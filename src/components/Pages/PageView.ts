@@ -19,12 +19,9 @@ import {
   $joinMandarinWords,
   $koreanDisplayMode,
   $pinyinPlacement,
-  $showBuiltInTranslationButton,
   $showChineseTranslitButton,
   $showSongSections,
   $showVocalistLabels,
-  $translationEnabled,
-  $translationTargetLang,
   $providerTranslationsEnabled,
 } from "../../utils/uiState.ts";
 import "../../css/Loaders/DotLoader.css";
@@ -39,8 +36,6 @@ import {
   removeLinesEvListener,
   setChineseTranslitMode,
   setRomanizedStatus,
-  setTranslationEnabled,
-  translationEnabled,
 } from "../../utils/Lyrics/lyrics.ts";
 import {
   CleanupScrollEvents,
@@ -537,13 +532,6 @@ function AppendViewControls(ReAppend: boolean = false) {
             : ""
         }
         ${
-          $showBuiltInTranslationButton.get()
-            ? `<button id="TranslationToggle" class="ViewControl">
-                ${translationEnabled ? Icons.DisableTranslation : Icons.EnableTranslation}
-              </button>`
-            : ""
-        }
-        ${
           !Fullscreen.IsOpen &&
           !Fullscreen.CinemaViewOpen
             ? IsPIP ? "" : `<button id="NowBarToggle" class="ViewControl">${Icons.NowBar}</button>`
@@ -703,23 +691,6 @@ function AppendViewControls(ReAppend: boolean = false) {
         });
       } catch (err) {
         controlsLogger.warn("Failed to setup Chinese transliteration tooltip", err);
-      }
-    }
-
-    const translationToggle = elem.querySelector("#TranslationToggle");
-    if (translationToggle) {
-      try {
-        if (!isPip) {
-          Tooltips.Close = Spicetify.Tippy(translationToggle, {
-            ...Spicetify.TippyProps,
-            content: translationEnabled ? "Disable Google Translation Fallback" : "Enable Google Translation Fallback",
-          });
-        }
-        translationToggle.addEventListener("click", () => {
-          setTranslationEnabled(!translationEnabled);
-        });
-      } catch (err) {
-        controlsLogger.warn("Failed to setup Translation tooltip", err);
       }
     }
 
@@ -1032,11 +1003,6 @@ $showChineseTranslitButton.listen(() => {
   AppendViewControls(true);
 });
 
-$showBuiltInTranslationButton.listen(() => {
-  if (!PageContainer) return;
-  AppendViewControls(true);
-});
-
 const reprocessCurrentLyricsFromSource = async () => {
   if (!PageContainer || !PageView.IsOpened) return;
   const uri = SpotifyPlayer.GetUri();
@@ -1127,7 +1093,6 @@ $pinyinPlacement.listen(queueProcessingSettingsRefresh);
 $koreanDisplayMode.listen(queueProcessingSettingsRefresh);
 $cyrillicRomanizationMode.listen(queueProcessingSettingsRefresh);
 $cyrillicKeepSigns.listen(queueProcessingSettingsRefresh);
-$translationEnabled.listen(queueProcessingSettingsRefresh);
 $providerTranslationsEnabled.listen(() => {
   queueDisplaySettingsRefresh();
 });
@@ -1140,10 +1105,6 @@ $showVocalistLabels.listen(() => {
 $showSongSections.listen(() => {
   queueDisplaySettingsRefresh();
 });
-$translationTargetLang.listen(() => {
-  if ($translationEnabled.get()) queueProcessingSettingsRefresh();
-});
-
 
 $japaneseReadingMode.listen(() => {
   queueDisplaySettingsRefresh();

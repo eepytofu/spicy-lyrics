@@ -1,8 +1,6 @@
 import type { ChineseCharacterForm } from "./ChineseCharacterConversion.ts";
 
 export type ProcessingContext = {
-  translationEnabled: boolean;
-  translationTargetLang: string;
   chineseTranslitMode: "pinyin" | "jyutping";
   chineseTones: boolean;
   joinMandarinWords: boolean;
@@ -15,7 +13,6 @@ export type ProcessingContext = {
 
 export function buildProcessingContextKey(context: ProcessingContext): string {
   return JSON.stringify({
-    translation: context.translationEnabled ? context.translationTargetLang || "" : false,
     chineseTranslitMode: context.chineseTranslitMode,
     chineseTones: context.chineseTones,
     joinMandarinWords: context.joinMandarinWords,

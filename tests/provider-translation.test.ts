@@ -87,18 +87,19 @@ test("a normalized provider payload remains raw and preference-independent", () 
   assert.equal((lyrics as any).HasProviderTranslations, true);
 });
 
-test("a distinct built-in translation is preserved for any lyrics source", () => {
+test("retired generic translations are scrubbed while provider translations remain", () => {
   const lyrics = chineseProviderLine() as any;
   lyrics.source = "spicy";
   lyrics.fetchProvider = "spicy";
   lyrics.Content[0].TranslatedText = "This is a separate built-in translation";
   normalizeProviderTranslations(lyrics);
 
-  assert.equal(lyrics.Content[0].TranslatedText, "This is a separate built-in translation");
+  assert.equal(lyrics.Content[0].TranslatedText, undefined);
+  assert.equal(lyrics.Content[0].ProviderTranslatedText, "反正水是干旱的土地上的");
   assert.equal(lyrics.IncludesTranslation, true);
 });
 
-test("fresh AMLL or custom-server translations are captured before Google runs", () => {
+test("fresh AMLL or custom-server translations are captured at the source boundary", () => {
   const lyrics = {
     Type: "Line",
     source: "amlldb",

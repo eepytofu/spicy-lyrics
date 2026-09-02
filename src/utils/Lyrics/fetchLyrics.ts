@@ -1,5 +1,3 @@
-import { franc } from "franc-all";
-import langs from "langs";
 import { isDev } from "../../components/Global/Defaults.ts";
 import {
   $currentLyricsData,
@@ -24,8 +22,6 @@ import {
   joinMandarinWords,
   koreanDisplayMode,
   pinyinPlacement,
-  translationEnabled,
-  translationTargetLang,
 } from "./lyrics.ts";
 import Logger from "../Logger.ts";
 import { LocalLyricsManager } from "./manager/index.ts";
@@ -35,7 +31,6 @@ import {
   captureSourceTranslations,
   normalizeProviderTranslations,
   TRANSLATION_SIDECAR_SCHEMA_VERSION,
-  translateLyrics,
 } from "./Fork/Translation.ts";
 import { $chineseCharacterForm, $romanization } from "../uiState.ts";
 import { buildProcessingContextKey } from "./ProcessingContext.ts";
@@ -111,8 +106,6 @@ function isSourceCacheCompatible(lyrics: any): boolean {
 
 function currentProcessingContextKey(): string {
   return buildProcessingContextKey({
-    translationEnabled,
-    translationTargetLang,
     chineseTranslitMode,
     chineseTones,
     joinMandarinWords,
@@ -170,43 +163,23 @@ function dispatchProcessingReady(
   );
 }
 
-async function finishTranslationInBackground(
-  trackId: string,
-  lyrics: any,
-  session: LyricsRequestSession,
-  persistTrack = true
-): Promise<void> {
-  try {
-    await translateLyrics(lyrics, { signal: session.signal });
-  } catch (error) {
-    if (session.signal.aborted) return;
-    lyricsCacheLogger.error("Background lyrics translation failed", error);
-  }
-  if (!session.isCurrent()) return;
-  lyrics.TranslationPending = false;
-  await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
-  dispatchProcessingReady(trackId, lyrics, session);
-}
-
 async function finishProcessingInBackground(
   trackId: string,
   lyrics: any,
   session: LyricsRequestSession,
   persistTrack = true
 ): Promise<void> {
-  const shouldTranslate = lyrics.TranslationPending === true;
   const shouldRerenderAfterRomanization = lyrics.RomanizationPending === true;
 
   try {
     await ProcessLyrics(lyrics, {
-      awaitTranslation: false,
       signal: session.signal,
       allowRemoteRomanization: $romanization.get(),
     });
     if (!session.isCurrent()) return;
     lyrics.ProcessingPending = false;
     lyrics.RomanizationPending = false;
-    lyrics.TranslationPending = shouldTranslate;
+    lyrics.TranslationPending = false;
     await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
     if (shouldRerenderAfterRomanization) dispatchProcessingReady(trackId, lyrics, session);
   } catch (error) {
@@ -216,12 +189,7 @@ async function finishProcessingInBackground(
     lyricsCacheLogger.error("Background lyrics romanization failed", error);
     return;
   }
-
-  if (!shouldTranslate) return;
-  await finishTranslationInBackground(trackId, lyrics, session, persistTrack);
 }
-
-const NonAsciiLatinQuickTest = /[À-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
 function collectLyricsText(lyrics: any): string[] {
   const parts: string[] = [];
@@ -260,26 +228,6 @@ function hasRemoteRomanizationWorkQuick(lyrics: any): boolean {
     ArabicTextTest.test(collectLyricsText(lyrics).join("")) &&
     lyrics?.RemoteRomanizationAttemptVersion !== ARABIC_ROMANIZATION_ATTEMPT_VERSION
   );
-}
-
-function hasTranslationWorkQuick(lyrics: any): boolean {
-  if (!translationEnabled || !translationTargetLang) return false;
-  const text = collectLyricsText(lyrics).join(" ").trim();
-  if (!text) return false;
-
-  if (translationTargetLang === "en") {
-    if (RomanizableScriptTextTest.test(text) || NonAsciiLatinQuickTest.test(text)) return true;
-    const compact = text
-      .replace(/[^\p{L}\s']/gu, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (compact.length < 24) return false;
-    const detected = franc(compact);
-    if (detected === "und") return false;
-    return langs.where("3", detected)?.["1"] !== "en";
-  }
-
-  return true;
 }
 
 function markProcessedWithoutBackground(lyrics: any): void {
@@ -357,7 +305,7 @@ async function ensureProcessingVersion(
     };
   }
 
-  if (!hasRomanizationWorkQuick(lyrics) && !hasTranslationWorkQuick(lyrics)) {
+  if (!hasRomanizationWorkQuick(lyrics)) {
     markProcessedWithoutBackground(lyrics);
     lyrics.id = lyrics.id || trackId;
     await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
@@ -371,18 +319,16 @@ async function ensureProcessingVersion(
     fromContext: lyrics.ProcessingContextKey,
     toContext: processingContextKey,
   });
-  const translationPending = hasTranslationWorkQuick(lyrics);
   await ProcessLyrics(lyrics, {
-    awaitTranslation: false,
     signal: session.signal,
     allowRemoteRomanization: $romanization.get(),
   });
   if (!session.isCurrent()) return { lyrics, translationPending: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
-  lyrics.TranslationPending = translationPending;
+  lyrics.TranslationPending = false;
   await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
-  return { lyrics, translationPending };
+  return { lyrics, translationPending: false };
 }
 
 function candidateDiagnostics(uri: string, selectedProvider: string): any {
@@ -423,10 +369,9 @@ async function processFreshLyrics(
   lyrics.DetectedChinese = detectChineseQuick(lyrics);
   captureSourceTranslations(lyrics);
   const needsRomanization = hasRomanizationWorkQuick(lyrics);
-  const needsTranslation = hasTranslationWorkQuick(lyrics);
   const persistTrack = options.persistTrack !== false;
 
-  if (!needsRomanization && !needsTranslation) {
+  if (!needsRomanization) {
     markProcessedWithoutBackground(lyrics);
     await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
     if (!session.isCurrent()) return null;
@@ -436,7 +381,7 @@ async function processFreshLyrics(
 
   lyrics.ProcessingPending = true;
   lyrics.RomanizationPending = needsRomanization;
-  lyrics.TranslationPending = needsTranslation;
+  lyrics.TranslationPending = false;
   const pendingLyrics = needsRomanization ? pendingLyricsPresentation(lyrics) : lyrics;
   presentLyrics(pendingLyrics, session);
   void finishProcessingInBackground(trackId, lyrics, session, persistTrack);
@@ -496,9 +441,6 @@ async function restoreLyricsOverrideForSession(
   const processed = await ensureProcessingVersion(trackId, uri, lyrics, session, false);
   if (!session.isCurrent()) return { handled: true, result: null };
   presentLyrics(processed.lyrics, session);
-  if (processed.translationPending) {
-    void finishTranslationInBackground(trackId, processed.lyrics, session, false);
-  }
   return { handled: true, result: [{ ...processed.lyrics, fromCache: true }, 200] };
 }
 
@@ -528,9 +470,6 @@ async function activateLyricsCandidateForSession(
     const processed = await ensureProcessingVersion(trackId, uri, lyrics, session, false);
     if (!session.isCurrent()) return null;
     presentLyrics(processed.lyrics, session);
-    if (processed.translationPending) {
-      void finishTranslationInBackground(trackId, processed.lyrics, session, false);
-    }
     result = [{ ...processed.lyrics, fromCache: true }, 200];
   } else {
     const lyrics = structuredClone(record.result.lyrics);
@@ -641,7 +580,7 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
       const lyrics = { ...localLyrics, id: trackId, uri };
       markLyricsOverridePreference(lyrics, preference);
       captureSourceTranslations(lyrics);
-      if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
+      if (hasRomanizationWorkQuick(lyrics)) {
         await ProcessLyrics(lyrics, { allowRemoteRomanization: $romanization.get() });
       } else {
         markProcessedWithoutBackground(lyrics);
@@ -675,10 +614,11 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
 
     // Same entry schema as the main fetch path: sidecar the provider
-    // translation before any processing so the lanes stay consistent.
+    // Capture provider-authored translations before processing so the source
+    // sidecar and rendered meaning lane stay consistent.
     captureSourceTranslations(lyrics);
 
-    if (hasRomanizationWorkQuick(lyrics) || hasTranslationWorkQuick(lyrics)) {
+    if (hasRomanizationWorkQuick(lyrics)) {
       await ProcessLyrics(lyrics, {
         allowRemoteRomanization: $romanization.get(),
       });
@@ -776,9 +716,6 @@ async function fetchLyricsForSession(
           if (!session.isCurrent()) return null;
           const processedLyrics = processed.lyrics;
           presentLyrics(processedLyrics, session);
-          if (processed.translationPending) {
-            void finishTranslationInBackground(trackId, processedLyrics, session, persistTrack);
-          }
           return [processedLyrics, 200];
         }
       }
@@ -821,9 +758,6 @@ async function fetchLyricsForSession(
           if (!session.isCurrent()) return null;
           const lyricsFromCache = processed.lyrics;
           presentLyrics(lyricsFromCache, session);
-          if (processed.translationPending) {
-            void finishTranslationInBackground(trackId, lyricsFromCache, session);
-          }
           return [{ ...lyricsFromCache, fromCache: true }, 200];
         }
       }

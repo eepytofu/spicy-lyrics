@@ -48,7 +48,6 @@ import {
 import { batchRomanizeArabicScriptPhrases } from "./Fork/GoogleRomanizationClient.ts";
 import { acceptRomanization } from "./Fork/RomanizationAcceptance.ts";
 import { analyzeJapaneseLine, buildJapaneseLineTextMap } from "./Reading/JapaneseReading.ts";
-import { translateLyrics, clearTranslationCache } from "./Fork/Translation.ts";
 import { buildCanonicalLine } from "./Processing/Canonical.ts";
 import { annotateKoreanLine } from "./Processing/Korean/KoreanAnnotationProcessor.ts";
 import { buildRenderPlan, validateRenderPlan } from "./Processing/RenderPlan.ts";
@@ -101,10 +100,9 @@ import {
   type TextAnalysisProjection,
 } from "./Processing/TextAnalysisProjection.ts";
 
-export { clearTranslationCache };
 export { acceptRomanization };
-// v80: rebuild refined hybrid Japanese reading boundaries.
-export const LYRICS_PROCESSING_VERSION = 81;
+// v82: retire the persisted built-in machine-translation lane.
+export const LYRICS_PROCESSING_VERSION = 82;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -918,7 +916,6 @@ const romanizeEntry = async (
 };
 
 type ProcessLyricsOptions = {
-  awaitTranslation?: boolean;
   signal?: AbortSignal;
   allowRemoteRomanization?: boolean;
 };
@@ -936,7 +933,6 @@ export const ProcessLyrics = async (
   }
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
-  const awaitTranslation = options.awaitTranslation !== false;
   const providerReadingEvidence = sourceDocument.document?.providerReadings;
   const hadApiTransliterations = lyrics.HasTransliterations === true;
   let gathered = gatherText(lyrics);
@@ -1109,7 +1105,4 @@ export const ProcessLyrics = async (
 
   lyrics.DetectedChinese = presentScripts.includes("Chinese");
 
-  if (awaitTranslation) {
-    await translateLyrics(lyrics);
-  }
 };
