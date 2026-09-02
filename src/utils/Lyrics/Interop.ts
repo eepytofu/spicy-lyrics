@@ -19,6 +19,7 @@ import {
   type VocalAgents,
   type VocalCue,
 } from "./VocalSemantics.ts";
+import { isLyricRevision } from "./LyricRevision.ts";
 
 export const SPICY_LYRICS_INTEROP_VERSION = 6;
 
@@ -61,6 +62,9 @@ export type SpicyLyricsInteropSnapshot = {
   version: typeof SPICY_LYRICS_INTEROP_VERSION;
   trackUri: string;
   trackId: string;
+  lyricRevisionId?: string;
+  providerId?: string;
+  sourceCandidateId?: string;
   lyricsType: "Static" | "Line" | "Syllable";
   language?: string;
   languageISO2?: string;
@@ -206,6 +210,13 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
   if (!trackUri && !trackId) return null;
   const sourceDocument = ensureSourceLyricDocument(lyrics).document;
   const sourceLines = new Map(sourceDocument?.lines.map((line) => [line.id, line]));
+  const revision = isLyricRevision(lyrics.LyricRevision) ? lyrics.LyricRevision : undefined;
+  const providerId = revision?.providerId
+    || clean(sourceDocument?.provider?.id || lyrics.fetchProvider || lyrics.source)
+    || undefined;
+  const sourceCandidateId = revision?.candidateId
+    || clean(lyrics.SourceCandidateId)
+    || undefined;
 
   const lines: SpicyLyricsInteropLine[] = [];
   const pushLine = (line: Omit<SpicyLyricsInteropLine, "index">): void => {
@@ -333,6 +344,9 @@ export function buildLyricsInteropSnapshot(lyrics: any): SpicyLyricsInteropSnaps
     version: SPICY_LYRICS_INTEROP_VERSION,
     trackUri,
     trackId,
+    ...(revision ? { lyricRevisionId: revision.id } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(sourceCandidateId ? { sourceCandidateId } : {}),
     lyricsType: lyrics.Type,
     language: clean(lyrics.Language) || undefined,
     languageISO2: clean(lyrics.LanguageISO2) || undefined,

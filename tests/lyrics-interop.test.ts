@@ -205,6 +205,47 @@ test("interop v6 publishes provider cues and AMLL agents without resolving anony
   assert.equal(amllSnapshot?.lines.some((line) => line.vocalCue), false);
 });
 
+test("interop v6 exposes the current lyric revision and source identity", () => {
+  const revisionId = "a".repeat(64);
+  const contentHash = "b".repeat(64);
+  const snapshot = buildLyricsInteropSnapshot({
+    Type: "Line",
+    source: "qq",
+    fetchProvider: "qq",
+    uri: "spotify:track:source-identity",
+    id: "source-identity",
+    LyricRevision: {
+      schemaVersion: 4,
+      trackUri: "spotify:track:source-identity",
+      providerId: "qq",
+      candidateId: "qq:candidate:42",
+      contentHash,
+      id: revisionId,
+    },
+    Content: [{ Text: "provider text", StartTime: 1, EndTime: 2 }],
+  });
+
+  assert.equal(snapshot?.lyricRevisionId, revisionId);
+  assert.equal(snapshot?.providerId, "qq");
+  assert.equal(snapshot?.sourceCandidateId, "qq:candidate:42");
+});
+
+test("interop v6 retains provider identity when a legacy lyric has no valid revision", () => {
+  const snapshot = buildLyricsInteropSnapshot({
+    Type: "Line",
+    source: "netease",
+    fetchProvider: "netease",
+    SourceCandidateId: "netease:legacy-candidate",
+    uri: "spotify:track:legacy-source-identity",
+    id: "legacy-source-identity",
+    Content: [{ Text: "same provider text", StartTime: 1, EndTime: 2 }],
+  });
+
+  assert.equal(snapshot?.lyricRevisionId, undefined);
+  assert.equal(snapshot?.providerId, "netease");
+  assert.equal(snapshot?.sourceCandidateId, "netease:legacy-candidate");
+});
+
 test("interop suppresses synthetic Japanese CJK gaps only for AMLL DB", () => {
   const lyrics = (source: string) => ({
     Type: "Syllable" as const,
