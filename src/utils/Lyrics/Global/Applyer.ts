@@ -14,6 +14,7 @@ import Fullscreen from "../../../components/Utils/Fullscreen.ts";
 import { SpotifyPlayer } from "../../../components/Global/SpotifyPlayer.ts";
 import { $providerTranslationsEnabled } from "../../uiState.ts";
 import { resetLyricsApplyState } from "../Applyer/ApplyLifecycle.ts";
+import { projectExternalTranslations } from "../ExternalTranslations.ts";
 
 /**
  * Union type for all lyrics data types
@@ -156,10 +157,12 @@ export default async function ApplyLyrics(lyricsContent: [object | string, numbe
     return;
   }
 
-  const lyrics = descriptor as LyricsData;
+  const lyrics = projectExternalTranslations(descriptor as LyricsData) as LyricsData;
 
   const romanize = isRomanized;
-  const showProviderTranslations = $providerTranslationsEnabled.get();
+  const showProviderTranslations = lyrics.ExternalTranslationActive === true
+    ? lyrics.ExternalTranslationShowProvider === true
+    : $providerTranslationsEnabled.get();
 
   if (lyrics.Type === "Syllable") {
     ApplySyllableLyrics(lyrics as any, romanize, showProviderTranslations);

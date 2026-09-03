@@ -146,7 +146,7 @@ test("interop preserves Chinese word grouping and full-line contextual pinyin", 
   assert.equal(snapshot?.lines[0]?.readingText, "yīn yuè");
 });
 
-test("interop v6 retains provider-info rows and classification", () => {
+test("interop v7 retains provider-info rows and classification", () => {
   const snapshot = buildLyricsInteropSnapshot({
     Type: "Static",
     uri: "spotify:track:provider-info",
@@ -158,7 +158,7 @@ test("interop v6 retains provider-info rows and classification", () => {
     ],
   });
 
-  assert.equal(snapshot?.version, 6);
+  assert.equal(snapshot?.version, 7);
   assert.deepEqual(snapshot?.lines.map(({ originalText, providerInfoKind }) => ({
     originalText,
     providerInfoKind,
@@ -169,7 +169,7 @@ test("interop v6 retains provider-info rows and classification", () => {
   ]);
 });
 
-test("interop v6 publishes provider cues and AMLL agents without resolving anonymous IDs", () => {
+test("interop v7 publishes provider cues and AMLL agents without resolving anonymous IDs", () => {
   const providerSnapshot = buildLyricsInteropSnapshot({
     Type: "Line",
     source: "qq",
@@ -205,7 +205,7 @@ test("interop v6 publishes provider cues and AMLL agents without resolving anony
   assert.equal(amllSnapshot?.lines.some((line) => line.vocalCue), false);
 });
 
-test("interop v6 exposes the current lyric revision and source identity", () => {
+test("interop v7 exposes the current lyric revision and source identity", () => {
   const revisionId = "a".repeat(64);
   const contentHash = "b".repeat(64);
   const snapshot = buildLyricsInteropSnapshot({
@@ -230,7 +230,7 @@ test("interop v6 exposes the current lyric revision and source identity", () => 
   assert.equal(snapshot?.sourceCandidateId, "qq:candidate:42");
 });
 
-test("interop v6 retains provider identity when a legacy lyric has no valid revision", () => {
+test("interop v7 retains provider identity when a legacy lyric has no valid revision", () => {
   const snapshot = buildLyricsInteropSnapshot({
     Type: "Line",
     source: "netease",

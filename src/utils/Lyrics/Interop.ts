@@ -20,8 +20,15 @@ import {
   type VocalCue,
 } from "./VocalSemantics.ts";
 import { isLyricRevision } from "./LyricRevision.ts";
+import {
+  clearExternalTranslation,
+  submitExternalTranslation,
+  synchronizeExternalTranslation,
+  type ExternalTranslationResult,
+  type ExternalTranslationSubmission,
+} from "./ExternalTranslations.ts";
 
-export const SPICY_LYRICS_INTEROP_VERSION = 6;
+export const SPICY_LYRICS_INTEROP_VERSION = 7;
 
 export type SpicyLyricsInteropSidecar = {
   text: string;
@@ -362,6 +369,7 @@ export function publishLyricsInteropSnapshot(lyrics: any): void {
   const snapshot = buildLyricsInteropSnapshot(lyrics);
   if (!snapshot) return;
   currentSnapshot = snapshot;
+  const cleared = synchronizeExternalTranslation(snapshot);
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(
@@ -369,12 +377,32 @@ export function publishLyricsInteropSnapshot(lyrics: any): void {
         detail: cloneSnapshot(snapshot),
       })
     );
+    if (cleared) dispatchExternalTranslationUpdate();
   }
+}
+
+function dispatchExternalTranslationUpdate(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("spicy-lyrics:external-translations-update"));
 }
 
 const interopApi = Object.freeze({
   version: SPICY_LYRICS_INTEROP_VERSION,
   getSnapshot: (): SpicyLyricsInteropSnapshot | null => cloneSnapshot(currentSnapshot),
+  submitExternalTranslations: (
+    submission: ExternalTranslationSubmission,
+  ): ExternalTranslationResult => {
+    const result = submitExternalTranslation(currentSnapshot, submission);
+    if (result.ok && result.changed) dispatchExternalTranslationUpdate();
+    return result;
+  },
+  clearExternalTranslations: (
+    identity?: Partial<Pick<SpicyLyricsInteropSnapshot, "trackUri" | "lyricRevisionId" | "providerId" | "sourceCandidateId">>,
+  ) => {
+    const cleared = clearExternalTranslation(identity);
+    if (cleared) dispatchExternalTranslationUpdate();
+    return { ok: true, cleared };
+  },
 });
 
 if (typeof window !== "undefined") {

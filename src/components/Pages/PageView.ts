@@ -1124,6 +1124,10 @@ window.addEventListener("spicy-lyrics:processing-ready", ((event: CustomEvent) =
   });
 }) as EventListener);
 
+window.addEventListener("spicy-lyrics:external-translations-update", () => {
+  queueDisplaySettingsRefresh();
+});
+
 $ttmlMakerMode.listen(() => {
   if (!PageContainer) return;
   AppendViewControls(true);

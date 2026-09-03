@@ -39,7 +39,7 @@ test("TTML semantics survive native, evidence, source document, and interop boun
   assert.deepEqual(document?.lines[0].providerTranslations, evidence.lines[0].providerTranslations);
 
   const snapshot = buildLyricsInteropSnapshot(lyrics)!;
-  assert.equal(snapshot.version, 6);
+  assert.equal(snapshot.version, 7);
   assert.equal(snapshot.providerLanguage, "ja");
   assert.equal(snapshot.lines[0].providerLineId, "L1");
   assert.deepEqual(snapshot.lines[0].providerRomanizations, [
