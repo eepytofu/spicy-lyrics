@@ -22,7 +22,7 @@ test("enabling romanization reuses the current source cache through the display 
 test("display refresh accepts only current-track cached lyrics and current revisions", () => {
   const source = readSource("../src/components/Pages/PageView.ts");
   assert.match(source, /cachedLyrics\?\.uri === uri/u);
-  assert.match(source, /targetRevision !== displaySettingsRevision/u);
+  assert.match(source, /!displaySettingsRefresh\.isCurrent\(targetRevision\)/u);
   assert.match(source, /SpotifyPlayer\.GetUri\(\) !== uri/u);
   assert.match(source, /if \(!lyrics\) \{\s*lyrics = await fetchLyrics\(uri\);\s*\}/u);
   assert.match(source, /if \(!reprocessCurrent && raw/u);
@@ -32,8 +32,16 @@ test("a failed display refresh is logged without retrying the same revision fore
   const source = readSource("../src/components/Pages/PageView.ts");
   assert.match(
     source,
-    /try \{\s*await rerenderCurrentLyrics\(targetRevision, reprocessCurrent\);\s*\} catch \(error\) \{\s*pageLogger\.warn\("Failed to refresh lyrics after a display setting changed", error\);\s*\}\s*appliedDisplaySettingsRevision = targetRevision;/u,
+    /new LyricsRefreshQueue<DisplaySettingsRefreshRequest>[\s\S]*?onError: \(error\) => \{\s*pageLogger\.warn\("Failed to refresh lyrics after a display setting changed", error\);/u,
   );
+});
+
+test("display and processing refreshes share the serialized latest-work coordinator", () => {
+  const source = readSource("../src/components/Pages/PageView.ts");
+  assert.match(source, /const displaySettingsRefresh = new LyricsRefreshQueue/u);
+  assert.match(source, /const processingSettingsRefresh = new LyricsRefreshQueue/u);
+  assert.doesNotMatch(source, /SettingsRefreshRunning|appliedDisplaySettingsRevision/u);
+  assert.match(source, /processingSettingsRefresh\.isIdleAt\(completedRevision\)/u);
 });
 
 test("structural display settings share the cached refresh queue", () => {

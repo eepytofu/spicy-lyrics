@@ -4,6 +4,7 @@ import fetchLyrics, {
 } from "../../utils/Lyrics/fetchLyrics.ts";
 import { removeProcessedLyricsCache } from "../../utils/Lyrics/ProcessedLyricsCache.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
+import { LyricsRefreshQueue } from "../../utils/Lyrics/LyricsRefreshQueue.ts";
 import { bindCoalescedSourceSettingsRefresh } from "../../utils/Lyrics/SourceSettingsRefresh.ts";
 import {
   $chineseTones,
@@ -851,11 +852,6 @@ function AppendViewControls(ReAppend: boolean = false) {
   }
 }
 
-let displaySettingsRevision = 0;
-let appliedDisplaySettingsRevision = 0;
-let displaySettingsRefreshRunning = false;
-let displaySettingsReprocessingPending = false;
-
 function lyricRevisionIdFromRaw(raw: string): string | null {
   if (!raw || raw.startsWith("NO_LYRICS:")) return null;
   try {
@@ -891,7 +887,7 @@ async function rerenderCurrentLyrics(
   }
 
   if (
-    targetRevision !== displaySettingsRevision
+    !displaySettingsRefresh.isCurrent(targetRevision)
     || SpotifyPlayer.GetUri() !== uri
     || !PageContainer
     || !PageView.IsOpened
@@ -908,40 +904,27 @@ async function rerenderCurrentLyrics(
   await ApplyLyrics(lyrics);
   AppendViewControls(true);
   setTimeout(() => {
-    if (targetRevision !== displaySettingsRevision || SpotifyPlayer.GetUri() !== uri) return;
+    if (!displaySettingsRefresh.isCurrent(targetRevision) || SpotifyPlayer.GetUri() !== uri) return;
     triggerRemeasureLV();
   }, 60);
 }
 
-async function runQueuedDisplaySettingsRefresh(): Promise<void> {
-  if (displaySettingsRefreshRunning) return;
-  displaySettingsRefreshRunning = true;
-  try {
-    while (appliedDisplaySettingsRevision < displaySettingsRevision) {
-      const targetRevision = displaySettingsRevision;
-      const reprocessCurrent = displaySettingsReprocessingPending;
-      displaySettingsReprocessingPending = false;
-      try {
-        await rerenderCurrentLyrics(targetRevision, reprocessCurrent);
-      } catch (error) {
-        pageLogger.warn("Failed to refresh lyrics after a display setting changed", error);
-      }
-      appliedDisplaySettingsRevision = targetRevision;
-    }
-  } finally {
-    displaySettingsRefreshRunning = false;
-    if (appliedDisplaySettingsRevision < displaySettingsRevision) {
-      void runQueuedDisplaySettingsRefresh();
-    }
-  }
-}
+type DisplaySettingsRefreshRequest = { reprocessCurrent: boolean };
+
+const displaySettingsRefresh = new LyricsRefreshQueue<DisplaySettingsRefreshRequest>({
+  merge: (pending, next) => ({
+    reprocessCurrent: pending.reprocessCurrent || next.reprocessCurrent,
+  }),
+  run: (revision, request) => rerenderCurrentLyrics(revision, request.reprocessCurrent),
+  onError: (error) => {
+    pageLogger.warn("Failed to refresh lyrics after a display setting changed", error);
+  },
+});
 
 function queueDisplaySettingsRefresh(
   options: { reprocessCurrent?: boolean } = {},
 ): void {
-  if (options.reprocessCurrent) displaySettingsReprocessingPending = true;
-  displaySettingsRevision++;
-  void runQueuedDisplaySettingsRefresh();
+  displaySettingsRefresh.enqueue({ reprocessCurrent: options.reprocessCurrent === true });
 }
 
 // --- Reactive setting subscriptions ---
@@ -1010,63 +993,45 @@ const reprocessCurrentLyricsFromSource = async () => {
   if (!uri) return;
   const lyricsContent = PageContainer.querySelector(".LyricsContainer .LyricsContent");
   lyricsContent?.classList.add("HiddenTransitioned");
+  const currentRaw = $currentLyricsData.get();
+  let currentLyrics: any = null;
   try {
-    const currentRaw = $currentLyricsData.get();
-    let currentLyrics: any = null;
-    try {
-      currentLyrics = currentRaw && !currentRaw.startsWith("NO_LYRICS:")
-        ? JSON.parse(currentRaw)
-        : null;
-    } catch {
-      currentLyrics = null;
-    }
-    if (currentLyrics?.uri === uri && currentLyrics?.ManualLyricsSelection === true) {
-      invalidateLyricsPipeline();
-      const lyrics = await fetchLyrics(uri);
-      await ApplyLyrics(lyrics);
-      return;
-    }
-    $currentLyricsData.set("");
-    if (trackId) await removeProcessedLyricsCache(trackId).catch(() => {});
+    currentLyrics = currentRaw && !currentRaw.startsWith("NO_LYRICS:")
+      ? JSON.parse(currentRaw)
+      : null;
+  } catch {
+    currentLyrics = null;
+  }
+  if (currentLyrics?.uri === uri && currentLyrics?.ManualLyricsSelection === true) {
+    invalidateLyricsPipeline();
     const lyrics = await fetchLyrics(uri);
     await ApplyLyrics(lyrics);
-  } catch (error) {
+    return;
+  }
+  $currentLyricsData.set("");
+  if (trackId) await removeProcessedLyricsCache(trackId).catch(() => {});
+  const lyrics = await fetchLyrics(uri);
+  await ApplyLyrics(lyrics);
+};
+
+const processingSettingsRefresh = new LyricsRefreshQueue<void>({
+  merge: () => undefined,
+  run: () => reprocessCurrentLyricsFromSource(),
+  onError: (error) => {
     pageLogger.warn("Failed to reprocess lyrics after a processing setting changed", error);
-  }
-};
-
-let processingSettingsRevision = 0;
-let appliedProcessingSettingsRevision = 0;
-let processingSettingsRefreshRunning = false;
-
-const runQueuedProcessingSettingsRefresh = async (): Promise<void> => {
-  if (processingSettingsRefreshRunning) return;
-  processingSettingsRefreshRunning = true;
-  try {
-    while (appliedProcessingSettingsRevision < processingSettingsRevision) {
-      const targetRevision = processingSettingsRevision;
-      await reprocessCurrentLyricsFromSource();
-      appliedProcessingSettingsRevision = targetRevision;
-    }
-  } finally {
-    processingSettingsRefreshRunning = false;
-    if (appliedProcessingSettingsRevision < processingSettingsRevision) {
-      void runQueuedProcessingSettingsRefresh();
-    } else {
-      const completedRevision = appliedProcessingSettingsRevision;
-      setTimeout(() => {
-        if (processingSettingsRefreshRunning || completedRevision !== processingSettingsRevision) return;
-        AppendViewControls(true);
-        triggerRemeasureLV();
-        PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
-      }, 60);
-    }
-  }
-};
+  },
+  onIdle: (completedRevision) => {
+    setTimeout(() => {
+      if (!processingSettingsRefresh.isIdleAt(completedRevision)) return;
+      AppendViewControls(true);
+      triggerRemeasureLV();
+      PageContainer?.querySelector(".LyricsContainer .LyricsContent")?.classList.remove("HiddenTransitioned");
+    }, 60);
+  },
+});
 
 const queueProcessingSettingsRefresh = (): void => {
-  processingSettingsRevision++;
-  void runQueuedProcessingSettingsRefresh();
+  processingSettingsRefresh.enqueue();
 };
 
 onExperimentChange(() => {
