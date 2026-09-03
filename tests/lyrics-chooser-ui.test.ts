@@ -17,6 +17,7 @@ const stores = readSource("../src/utils/stores.ts");
 const css = readSource("../src/css/settings-panel.css");
 const externalSources = readSource("../src/utils/Lyrics/ExternalSources.ts");
 const fetchLyrics = readSource("../src/utils/Lyrics/fetchLyrics.ts");
+const processedLyricsCache = readSource("../src/utils/Lyrics/ProcessedLyricsCache.ts");
 
 test("chooser exposes compact all-provider metadata search from lyric controls", () => {
   assert.match(page, /id="ChooseLyrics"/);
@@ -197,7 +198,11 @@ test("timing labels name the canonical Syllable, Line, and Static tiers", () => 
 
 test("manual candidates use revision storage without replacing the automatic track cache", () => {
   assert.match(fetchLyrics, /LyricsRevisionStore\.SetItem\(revision\.id, lyrics\)/);
-  assert.match(fetchLyrics, /if \(options\.persistTrack !== false\) await LyricsStore\.SetItem/);
+  assert.match(
+    fetchLyrics,
+    /if \(options\.persistTrack !== false\) await writeProcessedLyricsCache/,
+  );
+  assert.match(processedLyricsCache, /processedLyricsStore\.SetItem\(trackId, lyrics\)/);
   assert.match(fetchLyrics, /persistTrack: false,[\s\S]*manualSelection: true/);
   assert.match(page, /lyricRevisionIdFromRaw/);
 });

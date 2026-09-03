@@ -1,7 +1,7 @@
 import { SpotifyPlayer } from "../components/Global/SpotifyPlayer.ts";
 import PageView from "../components/Pages/PageView.ts";
 import { toast } from "sonner";
-import fetchLyrics, { invalidateLyricsPipeline, LyricsStore } from "./Lyrics/fetchLyrics.ts";
+import fetchLyrics, { invalidateLyricsPipeline } from "./Lyrics/fetchLyrics.ts";
 import ApplyLyrics from "./Lyrics/Global/Applyer.ts";
 import {
   clearAllManualLyricsSelections,
@@ -12,6 +12,10 @@ import {
   performCacheOperation,
   type CacheOperationOutcome,
 } from "./CacheOperation.ts";
+import {
+  clearProcessedLyricsCache,
+  removeProcessedLyricsCache,
+} from "./Lyrics/ProcessedLyricsCache.ts";
 
 let cacheOperation: Promise<CacheOperationOutcome> | null = null;
 
@@ -75,7 +79,7 @@ export const RemoveCurrentLyrics_AllCaches = async (ui: boolean = false) => {
   await runCacheOperation(
     async () => {
       await Promise.all([
-        LyricsStore.RemoveItem(currentSongId),
+        removeProcessedLyricsCache(currentSongId),
         clearManualLyricsSelection(currentUri),
       ]);
     },
@@ -90,7 +94,7 @@ export const RemoveLyricsCache = async (ui: boolean = false) => {
   await runCacheOperation(
     async () => {
       await Promise.all([
-        LyricsStore.Destroy(),
+        clearProcessedLyricsCache(),
         clearAllManualLyricsSelections(),
       ]);
     },

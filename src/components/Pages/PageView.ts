@@ -1,8 +1,8 @@
 import fetchLyrics, {
   invalidateLyricsPipeline,
-  LyricsStore,
   ShowQueueLoader,
 } from "../../utils/Lyrics/fetchLyrics.ts";
+import { removeProcessedLyricsCache } from "../../utils/Lyrics/ProcessedLyricsCache.ts";
 import { LyricsQueueRetry } from "../../utils/Lyrics/LyricsQueueRetry.ts";
 import { bindCoalescedSourceSettingsRefresh } from "../../utils/Lyrics/SourceSettingsRefresh.ts";
 import {
@@ -1027,7 +1027,7 @@ const reprocessCurrentLyricsFromSource = async () => {
       return;
     }
     $currentLyricsData.set("");
-    if (trackId) await LyricsStore.RemoveItem(trackId).catch(() => {});
+    if (trackId) await removeProcessedLyricsCache(trackId).catch(() => {});
     const lyrics = await fetchLyrics(uri);
     await ApplyLyrics(lyrics);
   } catch (error) {

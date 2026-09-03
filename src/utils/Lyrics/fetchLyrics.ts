@@ -1,4 +1,3 @@
-import { isDev } from "../../components/Global/Defaults.ts";
 import {
   $currentLyricsData,
   $currentLyricsType,
@@ -25,7 +24,6 @@ import {
 import Logger from "../Logger.ts";
 import { LocalLyricsManager } from "./manager/index.ts";
 import { LyricsQueueRetry } from "./LyricsQueueRetry.ts";
-import { GetExpireStore } from "../../modules/Store.ts";
 import {
   captureSourceTranslations,
   normalizeProviderTranslations,
@@ -71,6 +69,11 @@ import {
   type LyricsOverrideLifetime,
   type LyricsOverridePreference,
 } from "./LyricsOverridePreference.ts";
+import {
+  readProcessedLyricsCache,
+  removeProcessedLyricsCache,
+  writeProcessedLyricsCache,
+} from "./ProcessedLyricsCache.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -83,17 +86,6 @@ export function invalidateLyricsPipeline(): void {
   foregroundLyricsRequests.invalidate();
   $currentlyFetching.set(false);
 }
-
-// recently updated key structure - changed name
-export const LyricsStore = GetExpireStore<any>(
-  "SpicyLyrics_LyricsStore_g1",
-  2,
-  {
-    Unit: "Days",
-    Duration: 3,
-  },
-  isDev as true
-);
 
 function isSourceCacheCompatible(lyrics: any): boolean {
   return isLyricsSourceCacheCompatible(
@@ -129,7 +121,7 @@ async function setProcessedLyricsStoreItem(
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   if (session && !session.isCurrent()) return;
   await LyricsRevisionStore.SetItem(revision.id, lyrics);
-  if (options.persistTrack !== false) await LyricsStore.SetItem(trackId, lyrics);
+  if (options.persistTrack !== false) await writeProcessedLyricsCache(trackId, lyrics);
 }
 
 function setRomanizationClass(hasTransliterations: boolean | undefined): void {
@@ -571,9 +563,9 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
       await setProcessedLyricsStoreItem(trackId, lyrics, undefined, { persistTrack: false });
       return;
     }
-    const cached = await LyricsStore.GetItem(trackId);
+    const cached = await readProcessedLyricsCache(trackId);
     if (cached && (!isSourceCacheCompatible(cached) || cached?.source === "ldb")) {
-      await LyricsStore.RemoveItem(trackId);
+      await removeProcessedLyricsCache(trackId);
     } else if (cached) return;
   } catch (error) {
     lyricsPrefetchLogger.debug("Prefetch cache probe failed", error);
@@ -718,34 +710,32 @@ async function fetchLyricsForSession(
     return ["local-track", 400];
   }
 
-  if (LyricsStore) {
-    try {
-      const lyricsFromCacheRes = await LyricsStore.GetItem(trackId);
-      if (lyricsFromCacheRes) {
-        if (
-          !isSourceCacheCompatible(lyricsFromCacheRes) ||
-          lyricsFromCacheRes?.source === "ldb" ||
-          lyricsFromCacheRes?.ManualLyricsSelection === true
-        ) {
-          await LyricsStore.RemoveItem(trackId);
-        } else {
-          markLyricsOverridePreference(lyricsFromCacheRes, automaticPreference);
-          const processed = await ensureProcessingVersion(
-            trackId,
-            uri,
-            lyricsFromCacheRes,
-            session
-          );
-          if (!session.isCurrent()) return null;
-          const lyricsFromCache = processed.lyrics;
-          presentLyrics(lyricsFromCache, session);
-          return [{ ...lyricsFromCache, fromCache: true }, 200];
-        }
+  try {
+    const lyricsFromCacheRes = await readProcessedLyricsCache(trackId);
+    if (lyricsFromCacheRes) {
+      if (
+        !isSourceCacheCompatible(lyricsFromCacheRes) ||
+        lyricsFromCacheRes?.source === "ldb" ||
+        lyricsFromCacheRes?.ManualLyricsSelection === true
+      ) {
+        await removeProcessedLyricsCache(trackId);
+      } else {
+        markLyricsOverridePreference(lyricsFromCacheRes, automaticPreference);
+        const processed = await ensureProcessingVersion(
+          trackId,
+          uri,
+          lyricsFromCacheRes,
+          session
+        );
+        if (!session.isCurrent()) return null;
+        const lyricsFromCache = processed.lyrics;
+        presentLyrics(lyricsFromCache, session);
+        return [{ ...lyricsFromCache, fromCache: true }, 200];
       }
-    } catch (error) {
-      lyricsCacheLogger.error("Error parsing cache entry", error);
-      return ["unknown-error", 0];
     }
+  } catch (error) {
+    lyricsCacheLogger.error("Error parsing cache entry", error);
+    return ["unknown-error", 0];
   }
 
   if (!navigator.onLine) {
