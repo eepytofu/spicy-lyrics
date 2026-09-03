@@ -54,4 +54,8 @@ export class LyricsCandidateSessionStore<TRecord, TFailure> {
   clearForTrackChange(uri: string): void {
     if (this.session && this.session.uri !== uri) this.session = null;
   }
+
+  clear(uri?: string): void {
+    if (uri === undefined || this.session?.uri === uri) this.session = null;
+  }
 }

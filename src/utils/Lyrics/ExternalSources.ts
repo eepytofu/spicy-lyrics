@@ -732,6 +732,10 @@ export function clearLyricsCandidateSessionForTrackChange(uri: string): void {
   candidateSessions.clearForTrackChange(uri);
 }
 
+export function clearLyricsCandidateSession(uri?: string): void {
+  candidateSessions.clear(uri);
+}
+
 export async function loadLyricsCandidates(
   uri: string,
   order: LyricsSourceProviderId[],

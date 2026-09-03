@@ -2,6 +2,20 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { LyricsCandidateSessionStore } from "../src/utils/Lyrics/LyricsCandidateSession.ts";
 
+function candidateSession(uri: string, signature: string) {
+  return {
+    uri,
+    signature,
+    records: [{}],
+    failures: [],
+    recommendedRevisionId: null,
+    automaticRevisionId: null,
+    activeRevisionId: null,
+    alternativesLoaded: true,
+    searchOverrides: null,
+  };
+}
+
 test("candidate sessions are bounded by uri, source signature, and expiry", () => {
   const store = new LyricsCandidateSessionStore<{ provider: string }, { kind: string }>();
   store.set(
@@ -59,4 +73,20 @@ test("candidate sessions clone caller and reader state", () => {
   assert.equal(store.get("spotify:track:one", "sources:a", 1_003)?.activeRevisionId, "manual");
   store.clearForTrackChange("spotify:track:two");
   assert.equal(store.get("spotify:track:one", "sources:a", 1_004), null);
+});
+
+test("candidate sessions can clear one matching uri or all state", () => {
+  const store = new LyricsCandidateSessionStore<object, object>();
+  const session = candidateSession("spotify:track:one", "signature");
+  store.set(session, 1_000);
+
+  store.clear("spotify:track:other");
+  assert.ok(store.get(session.uri, session.signature, 1_001));
+
+  store.clear(session.uri);
+  assert.equal(store.get(session.uri, session.signature, 1_001), null);
+
+  store.set(session, 1_000);
+  store.clear();
+  assert.equal(store.get(session.uri, session.signature, 1_001), null);
 });

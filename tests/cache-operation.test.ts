@@ -48,4 +48,17 @@ test("cache UI maps the three outcomes to distinct final notifications", () => {
   assert.match(source, /outcome\.kind === "operation-failed"[\s\S]*toast\.error/u);
   assert.match(source, /toast\.warning\(refreshFailureMessage\)/u);
   assert.doesNotMatch(source, /toast\.success\(successMessage\)[\s\S]*await refetchCurrentLyrics/u);
+  assert.match(source, /clearCurrentLyricsCaches\(currentSongId, currentUri, cacheLifecycleDependencies\)/u);
+  assert.match(source, /clearAllLyricsCaches\(cacheLifecycleDependencies\)/u);
+});
+
+test("state-only clearing does not invoke persistent cache lifecycle operations", () => {
+  const source = readFileSync(
+    new URL("../src/utils/LyricsCacheTools.ts", import.meta.url),
+    "utf8",
+  );
+  const stateOnly = source.slice(source.indexOf("RemoveCurrentLyrics_StateCache"));
+
+  assert.match(stateOnly, /runCacheOperation\(\s*async \(\) => \{\}/u);
+  assert.doesNotMatch(stateOnly, /clearCurrentLyricsCaches|clearAllLyricsCaches/u);
 });

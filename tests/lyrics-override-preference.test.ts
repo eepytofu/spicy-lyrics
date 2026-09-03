@@ -106,10 +106,64 @@ test("resetting candidates removes durable and session choices without touching 
   );
 
   assert.deepEqual(new Set(await controller.resetCandidates()), new Set([uri, automaticUri]));
-  assert.equal(values.has(uri), false);
-  assert.equal((await controller.get(uri))?.kind, undefined);
+  assert.equal(values.get(uri)?.kind, "automatic");
+  assert.equal((await controller.get(uri))?.kind, "automatic");
   assert.equal((await controller.get(localUri))?.kind, "local");
   assert.equal((await controller.get(automaticUri))?.preferenceId, automatic.preferenceId);
+});
+
+test("resetting one persistent candidate stores automatic and reports referenced revisions", async () => {
+  const { storage, values } = memoryStorage();
+  const controller = new LyricsOverridePreferenceController(storage);
+  await controller.set(
+    candidateLyricsOverride(uri, "persistent", {
+      revisionId: "selected-revision",
+      automaticRevisionId: "automatic-revision",
+      snapshot: { uri, Type: "Line" },
+    }),
+  );
+
+  assert.deepEqual(await controller.resetCandidate(uri), {
+    affected: true,
+    revisionIds: ["selected-revision", "automatic-revision"],
+  });
+  assert.equal((await controller.get(uri))?.kind, "automatic");
+  assert.equal(values.get(uri)?.kind, "automatic");
+});
+
+test("resetting a temporary candidate restores its durable non-candidate preference", async () => {
+  const { storage, values } = memoryStorage();
+  const controller = new LyricsOverridePreferenceController(storage);
+  const local = localLyricsOverride(uri, "persistent", "raw source");
+  await controller.set(local);
+  controller.setSession(
+    candidateLyricsOverride(uri, "temporary", {
+      revisionId: "temporary-revision",
+      automaticRevisionId: null,
+      snapshot: { uri, Type: "Syllable" },
+    }),
+  );
+
+  assert.deepEqual(await controller.resetCandidate(uri), {
+    affected: true,
+    revisionIds: ["temporary-revision"],
+  });
+  assert.equal((await controller.get(uri))?.preferenceId, local.preferenceId);
+  assert.equal(values.get(uri)?.kind, "local");
+});
+
+test("resetting one non-candidate preference is a no-op", async () => {
+  const { storage, values } = memoryStorage();
+  const controller = new LyricsOverridePreferenceController(storage);
+  const automatic = automaticLyricsOverride(uri);
+  await controller.set(automatic);
+
+  assert.deepEqual(await controller.resetCandidate(uri), {
+    affected: false,
+    revisionIds: [],
+  });
+  assert.equal((await controller.get(uri))?.preferenceId, automatic.preferenceId);
+  assert.equal(values.get(uri)?.preferenceId, automatic.preferenceId);
 });
 
 test("persistent local preference keeps its raw source outside the preference row", async () => {

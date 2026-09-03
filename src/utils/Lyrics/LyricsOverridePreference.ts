@@ -39,6 +39,11 @@ export type LyricsOverridePreference =
   | LocalLyricsOverride
   | CandidateLyricsOverride;
 
+export type LyricsCandidateOverrideReset = {
+  affected: boolean;
+  revisionIds: string[];
+};
+
 export type LyricsOverrideStorage = {
   get(trackUri: string): Promise<unknown>;
   put(trackUri: string, preference: LyricsOverridePreference): Promise<void>;
@@ -215,16 +220,71 @@ export class LyricsOverridePreferenceController {
     this.loaded.clear();
   }
 
+  async resetCandidate(trackUri: string): Promise<LyricsCandidateOverrideReset> {
+    const pendingWrite = this.writes.get(trackUri);
+    if (pendingWrite) await pendingWrite;
+
+    const sessionPreference = this.session.get(trackUri);
+    const storedPreference = normalizeLyricsOverridePreference(
+      await this.storage.get(trackUri),
+      trackUri,
+    );
+    const activePreference = sessionPreference ?? storedPreference;
+    if (activePreference?.kind !== "candidate") {
+      return { affected: false, revisionIds: [] };
+    }
+
+    const revisionIds = [
+      activePreference.revisionId,
+      activePreference.automaticRevisionId,
+    ].filter((revisionId): revisionId is string => typeof revisionId === "string");
+
+    if (
+      sessionPreference?.kind === "candidate" &&
+      storedPreference &&
+      storedPreference.kind !== "candidate"
+    ) {
+      this.loaded.add(trackUri);
+      this.session.set(trackUri, structuredClone(storedPreference));
+      return { affected: true, revisionIds: [...new Set(revisionIds)] };
+    }
+
+    await this.set(automaticLyricsOverride(trackUri));
+    return { affected: true, revisionIds: [...new Set(revisionIds)] };
+  }
+
   async resetCandidates(): Promise<string[]> {
     await Promise.all(this.writes.values());
-    const affected = new Set(await this.storage.removeCandidates());
-    for (const [trackUri, preference] of this.session) {
-      if (preference.kind === "candidate") affected.add(trackUri);
-    }
+    const sessionCandidateUris = [...this.session]
+      .filter(([, preference]) => preference.kind === "candidate")
+      .map(([trackUri]) => trackUri);
+    const storedPreferences = new Map(
+      await Promise.all(
+        sessionCandidateUris.map(async (trackUri) => [
+          trackUri,
+          normalizeLyricsOverridePreference(await this.storage.get(trackUri), trackUri),
+        ] as const),
+      ),
+    );
+    const removedDurableCandidates = new Set(await this.storage.removeCandidates());
+    const affected = new Set([...removedDurableCandidates, ...sessionCandidateUris]);
+    const automaticUris: string[] = [];
     for (const trackUri of affected) {
-      this.session.delete(trackUri);
-      this.loaded.delete(trackUri);
+      const storedPreference = storedPreferences.get(trackUri);
+      if (
+        !removedDurableCandidates.has(trackUri) &&
+        storedPreference &&
+        storedPreference.kind !== "candidate"
+      ) {
+        this.loaded.add(trackUri);
+        this.session.set(trackUri, structuredClone(storedPreference));
+      } else {
+        automaticUris.push(trackUri);
+      }
     }
+    await Promise.all(
+      automaticUris.map((trackUri) => this.set(automaticLyricsOverride(trackUri))),
+    );
     return [...affected];
   }
 
@@ -296,6 +356,12 @@ export function isCurrentLyricsOverridePreference(trackUri: string, preferenceId
 
 export function clearLyricsOverrideSessionIfCurrent(trackUri: string, preferenceId: string): void {
   preferences.clearIfCurrent(trackUri, preferenceId);
+}
+
+export function resetLyricsCandidateOverride(
+  trackUri: string,
+): Promise<LyricsCandidateOverrideReset> {
+  return preferences.resetCandidate(trackUri);
 }
 
 export async function resetLyricsCandidateOverrides(): Promise<string[]> {

@@ -4,20 +4,44 @@ import { toast } from "sonner";
 import fetchLyrics, { invalidateLyricsPipeline } from "./Lyrics/fetchLyrics.ts";
 import ApplyLyrics from "./Lyrics/Global/Applyer.ts";
 import {
-  clearAllManualLyricsSelections,
-  clearManualLyricsSelection,
-} from "./Lyrics/ManualLyricsSelection.ts";
+  clearLyricsCandidateSession,
+} from "./Lyrics/ExternalSources.ts";
+import { clearManualLyricsSelection } from "./Lyrics/ManualLyricsSelection.ts";
+import {
+  resetLyricsCandidateOverride,
+  resetLyricsCandidateOverrides,
+} from "./Lyrics/LyricsOverridePreference.ts";
 import { $currentLyricsData } from "./stores.ts";
 import {
   performCacheOperation,
   type CacheOperationOutcome,
 } from "./CacheOperation.ts";
 import {
+  clearAllLyricsCaches,
+  clearCurrentLyricsCaches,
+  type LyricsCacheLifecycleDependencies,
+} from "./Lyrics/LyricsCacheLifecycle.ts";
+import {
   clearProcessedLyricsCache,
   removeProcessedLyricsCache,
 } from "./Lyrics/ProcessedLyricsCache.ts";
+import {
+  clearLyricsRevisionCache,
+  removeLyricsRevisionCache,
+} from "./Lyrics/LyricsRevisionCache.ts";
 
 let cacheOperation: Promise<CacheOperationOutcome> | null = null;
+
+const cacheLifecycleDependencies: LyricsCacheLifecycleDependencies = {
+  removeProcessed: removeProcessedLyricsCache,
+  clearProcessed: clearProcessedLyricsCache,
+  removeRevision: removeLyricsRevisionCache,
+  clearRevisions: clearLyricsRevisionCache,
+  resetCandidate: resetLyricsCandidateOverride,
+  resetCandidates: resetLyricsCandidateOverrides,
+  clearLegacySelection: clearManualLyricsSelection,
+  clearCandidateSession: clearLyricsCandidateSession,
+};
 
 async function refetchCurrentLyrics(): Promise<void> {
   if (!PageView.IsOpened) return;
@@ -78,10 +102,7 @@ export const RemoveCurrentLyrics_AllCaches = async (ui: boolean = false) => {
 
   await runCacheOperation(
     async () => {
-      await Promise.all([
-        removeProcessedLyricsCache(currentSongId),
-        clearManualLyricsSelection(currentUri),
-      ]);
+      await clearCurrentLyricsCaches(currentSongId, currentUri, cacheLifecycleDependencies);
     },
     "Cleared cached lyrics for the current song",
     "Could not clear cached lyrics for the current song. Check the console for details.",
@@ -93,10 +114,7 @@ export const RemoveCurrentLyrics_AllCaches = async (ui: boolean = false) => {
 export const RemoveLyricsCache = async (ui: boolean = false) => {
   await runCacheOperation(
     async () => {
-      await Promise.all([
-        clearProcessedLyricsCache(),
-        clearAllManualLyricsSelections(),
-      ]);
+      await clearAllLyricsCaches(cacheLifecycleDependencies);
     },
     "Cleared the stored lyrics cache",
     "Could not clear the stored lyrics cache. Check the console for details.",
