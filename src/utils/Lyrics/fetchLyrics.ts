@@ -1,3 +1,4 @@
+import { isDev } from "../../components/Global/Defaults.ts";
 import {
   $currentLyricsData,
   $currentLyricsType,

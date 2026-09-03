@@ -19,6 +19,14 @@ const externalSources = readSource("../src/utils/Lyrics/ExternalSources.ts");
 const fetchLyrics = readSource("../src/utils/Lyrics/fetchLyrics.ts");
 const processedLyricsCache = readSource("../src/utils/Lyrics/ProcessedLyricsCache.ts");
 
+test("the in-memory lyrics reuse guard imports its development flag", () => {
+  assert.match(
+    fetchLyrics,
+    /import \{ isDev \} from "\.\.\/\.\.\/components\/Global\/Defaults\.ts";/u,
+  );
+  assert.match(fetchLyrics, /if \(savedLyricsData && !isDev\)/u);
+});
+
 test("chooser exposes compact all-provider metadata search from lyric controls", () => {
   assert.match(page, /id="ChooseLyrics"/);
   assert.match(page, /OpenChooseLyrics/);
