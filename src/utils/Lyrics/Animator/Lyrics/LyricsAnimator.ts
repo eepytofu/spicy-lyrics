@@ -41,6 +41,7 @@ import {
 } from "./AnimatorState.ts";
 import { setOnNewElementMounted } from "../../LyricsVirtualizer.ts";
 import { Spring } from "../../../../modules/Spring.ts";
+import { frameStyleWriter } from "./FrameStyleWriter.ts";
 
 const getSLMAnimation = (duration: number) => {
   return `SLM_Animation ${duration}ms linear forwards`;
@@ -84,6 +85,7 @@ const applyTimedRubyAnchorState = (
   word: SyllableLead,
   hostWordScale: number,
   gradientPosition?: number,
+  simpleMode = $simpleLyricsMode.get(),
 ): void => {
   const anchor = word.TimedRubyAnchorElement;
   if (!anchor || typeof word.TimedRubyAnchorOffsetEm !== "number") return;
@@ -96,7 +98,7 @@ const applyTimedRubyAnchorState = (
     );
   }
   // Simple lyrics mode stubs word motion; the ruby stays static there too.
-  if ($simpleLyricsMode.get()) return;
+  if (simpleMode) return;
 
   const safeHost = Math.max(hostWordScale || 1, 0.001);
   const tx = ((1 - safeHost) / safeHost) * word.TimedRubyAnchorOffsetEm;
@@ -246,50 +248,14 @@ function promoteToGPUWithFilter(el: HTMLElement): void {
   _gpuPromotedWithFilter.add(el);
 }
 
-// Cache last written style values to avoid redundant DOM writes
-const _styleCache = new WeakMap<HTMLElement, Map<string, string>>();
-// Queue for batched style writes
-const _styleQueue = new Map<HTMLElement, Map<string, string>>();
-
-function queueStyle(el: HTMLElement, prop: string, value: string): void {
-  let props = _styleQueue.get(el);
-  if (!props) {
-    props = new Map<string, string>();
-    _styleQueue.set(el, props);
-  }
-  props.set(prop, value);
-}
-
 function setStyleIfChanged(el: HTMLElement, prop: string, value: string, epsilon = 0): void {
-  let map = _styleCache.get(el);
-  if (!map) {
-    map = new Map();
-    _styleCache.set(el, map);
-  }
-  const prev = map.get(prop);
-  if (prev !== undefined) {
-    // Try numeric comparison when possible
-    const parseNum = (v: string) => {
-      // Extract numeric portion (supports "12px", "45%", "1.2")
-      const n = parseFloat(v);
-      return Number.isNaN(n) ? null : n;
-    };
-    const a = parseNum(prev);
-    const b = parseNum(value);
-    if (a !== null && b !== null) {
-      if (Math.abs(a - b) <= epsilon) return; // Skip tiny changes
-    } else {
-      if (prev === value) return; // Exact match for non-numeric values
-    }
-  }
-  queueStyle(el, prop, value);
-  map.set(prop, value);
+  frameStyleWriter.set(el, prop, value, epsilon);
 }
 
 function invalidateMountedStyleCache(root: HTMLElement): void {
-  _styleCache.delete(root);
+  frameStyleWriter.invalidate(root);
   for (const element of root.querySelectorAll<HTMLElement>("*")) {
-    _styleCache.delete(element);
+    frameStyleWriter.invalidate(element);
   }
 }
 
@@ -306,13 +272,7 @@ function applyWordGlowState(word: SyllableLead, glow: unknown): void {
 }
 
 function flushStyleBatch(): void {
-  if (_styleQueue.size === 0) return;
-  for (const [el, props] of _styleQueue) {
-    for (const [prop, value] of props) {
-      el.style.setProperty(prop, value);
-    }
-  }
-  _styleQueue.clear();
+  frameStyleWriter.flush();
 }
 
 function applyDotVisualState(
@@ -456,8 +416,8 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
       );
       setStyleIfChanged(word.HTMLElement, "--gradient-position", restingGradient, 0);
     } else {
-      word.HTMLElement.style.animation = "none";
-      word.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
+      setStyleIfChanged(word.HTMLElement, "animation", "none");
+      setStyleIfChanged(word.HTMLElement, "--SLM_GradientPosition", restingGradient);
     }
     applyTimedRubyAnchorState(
       word,
@@ -492,8 +452,8 @@ const resetSyllableLineToNotSung = (words: SyllableLead[] | undefined): void => 
         );
         setStyleIfChanged(letter.HTMLElement, "--gradient-position", restingGradient, 0);
       } else {
-        letter.HTMLElement.style.animation = "none";
-        letter.HTMLElement.style.setProperty("--SLM_GradientPosition", restingGradient);
+        setStyleIfChanged(letter.HTMLElement, "animation", "none");
+        setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", restingGradient);
       }
       setStyleIfChanged(letter.HTMLElement, "--text-shadow-blur-radius", "4px", 0);
       setStyleIfChanged(letter.HTMLElement, "--text-shadow-opacity", "0%", 0);
@@ -537,8 +497,8 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
     word.AnimatorStore.Glow.SetGoal(GlowSpline.at(1), true);
 
     if (simpleMode) {
-      word.HTMLElement.style.animation = "none";
-      word.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+      setStyleIfChanged(word.HTMLElement, "animation", "none");
+      setStyleIfChanged(word.HTMLElement, "--SLM_GradientPosition", "100%");
     } else {
       setStyleIfChanged(word.HTMLElement, "scale", `${ScaleSpline.at(1)}`, 0);
       setStyleIfChanged(
@@ -569,8 +529,8 @@ const settleSyllableLineToSung = (words: SyllableLead[] | undefined): void => {
       letter.AnimatorStore.Glow.SetGoal(GlowSpline.at(1), true);
 
       if (simpleMode) {
-        letter.HTMLElement.style.animation = "none";
-        letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+        setStyleIfChanged(letter.HTMLElement, "animation", "none");
+        setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "100%");
       } else {
         setStyleIfChanged(letter.HTMLElement, "scale", `${LetterScaleSpline.at(1)}`, 0);
         setStyleIfChanged(
@@ -627,6 +587,16 @@ export let Blurring_LastLine: number | null = null;
 let lastFrameTime = performance.now();
 let lastAnimationPosition: number | null = null;
 const syllableLinePaintStates = new WeakMap<HTMLElement, "NotSung" | "Active" | "Sung">();
+
+export interface AnimationFrameContext {
+  readonly position: number;
+  readonly processedPosition: number;
+  readonly deltaTime: number;
+  readonly timelineJumped: boolean;
+  readonly lyricsType: ReturnType<typeof $currentLyricsType.get>;
+  readonly simpleMode: boolean;
+  readonly simpleRenderingType: ReturnType<typeof $simpleLyricsModeRenderingType.get>;
+}
 
 // A freshly mounted line can otherwise inherit a cached animation decision
 // while its initial transparent text has not received any playback-state
@@ -711,21 +681,28 @@ export function setBlurringLastLine(c: number | null) {
 }
 
 export function Animate(position: number): void {
-  const ProcessedPosition = position + timeOffset - ($simpleLyricsMode.get() ? 33.5 : 0);
-
   const now = performance.now();
-
   const elapsedMs = now - lastFrameTime;
-  const timelineJumped = animationTimelineJumped(
-    lastAnimationPosition,
+  const simpleMode = $simpleLyricsMode.get();
+  const frame: AnimationFrameContext = {
     position,
-    elapsedMs,
-  );
-  const deltaTime = elapsedMs / 1000;
+    processedPosition: position + timeOffset - (simpleMode ? 33.5 : 0),
+    deltaTime: elapsedMs / 1000,
+    timelineJumped: animationTimelineJumped(lastAnimationPosition, position, elapsedMs),
+    lyricsType: $currentLyricsType.get(),
+    simpleMode,
+    simpleRenderingType: $simpleLyricsModeRenderingType.get(),
+  };
   lastFrameTime = now;
   lastAnimationPosition = position;
 
-  const CurrentLyricsType = $currentLyricsType.get();
+  const {
+    processedPosition: ProcessedPosition,
+    deltaTime,
+    timelineJumped,
+    lyricsType: CurrentLyricsType,
+    simpleRenderingType,
+  } = frame;
 
   if (!CurrentLyricsType || CurrentLyricsType === "None") return;
 
@@ -839,14 +816,14 @@ export function Animate(position: number): void {
             const gradientTargets = wordGradientTargets(
               wordState,
               percentage,
-              $simpleLyricsMode.get()
+              simpleMode
             );
             const targetGradientPos = gradientTargets.base;
             const targetExtraGradientPos = gradientTargetsAt(
               ProcessedPosition,
               word.RomajiStartTime ?? word.StartTime,
               word.RomajiEndTime ?? word.EndTime,
-              $simpleLyricsMode.get()
+              simpleMode
             ).extra;
 
             if (wordState === "Active") {
@@ -866,7 +843,7 @@ export function Animate(position: number): void {
 
             // Timed ruby members lift, scale, and glow as one unit while each
             // source owner keeps its exact registered timing.
-            if (word.TimedGroupTimes && !$simpleLyricsMode.get()) {
+            if (word.TimedGroupTimes && !simpleMode) {
               targetScale = ScaleSpline.at(
                 timedGroupEnvelopeAt(word.TimedGroupTimes, ProcessedPosition, TimedGroupScaleHold)
               );
@@ -900,10 +877,10 @@ export function Animate(position: number): void {
                   ProcessedPosition,
                   word.TimedGroupTimes.start,
                   word.TimedGroupTimes.end,
-                  $simpleLyricsMode.get(),
+                  simpleMode,
                 ).base
               : undefined;
-            applyTimedRubyAnchorState(word, currentScale, timedGroupGradientPosition);
+            applyTimedRubyAnchorState(word, currentScale, timedGroupGradientPosition, simpleMode);
 
             setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
             // Use translate3d to ensure GPU-accelerated transforms
@@ -914,17 +891,21 @@ export function Animate(position: number): void {
               0.001
             );
             if (isLetterGroup) {
-              if ($simpleLyricsMode.get()) {
+              if (simpleMode) {
                 if (wordState === "Active") {
-                  if ($simpleLyricsModeRenderingType.get() === "animate") {
+                  if (simpleRenderingType === "animate") {
                     const nextWord = words[wordIndex + 1];
                     if (nextWord && !nextWord?.LetterGroup) {
                       if (!nextWord.PreSLMAnimated) {
                         nextWord.PreSLMAnimated = true;
-                        nextWord.HTMLElement.style.removeProperty("--SLM_GradientPosition");
+                        frameStyleWriter.remove(nextWord.HTMLElement, "--SLM_GradientPosition");
                         setTimeout(
                           () => {
-                            nextWord.HTMLElement.style.animation = getPreSLMAnimation(250);
+                            frameStyleWriter.setImmediate(
+                              nextWord.HTMLElement,
+                              "animation",
+                              getPreSLMAnimation(250),
+                            );
                           },
                           safeAnimationDelay(totalDuration * 0.845 - 130, totalDuration)
                         );
@@ -935,26 +916,32 @@ export function Animate(position: number): void {
               }
             }
             if (!isLetterGroup) {
-              if ($simpleLyricsMode.get()) {
+              if (simpleMode) {
                 if (wordState === "Active" && !word.SLMAnimated) {
-                  if ($simpleLyricsModeRenderingType.get() === "calculate") {
-                    word.HTMLElement.style.setProperty(
+                  if (simpleRenderingType === "calculate") {
+                    setStyleIfChanged(
+                      word.HTMLElement,
                       "--SLM_GradientPosition",
-                      `${targetGradientPos}%`
+                      `${targetGradientPos}%`,
+                      0.5,
                     );
                   } else {
-                    word.HTMLElement.style.removeProperty("--SLM_GradientPosition");
-                    word.HTMLElement.style.animation = getSLMAnimation(totalDuration);
+                    frameStyleWriter.remove(word.HTMLElement, "--SLM_GradientPosition");
+                    setStyleIfChanged(word.HTMLElement, "animation", getSLMAnimation(totalDuration));
                     word.SLMAnimated = true;
                     word.PreSLMAnimated = false;
                     const nextWord = words[wordIndex + 1];
                     if (nextWord) {
                       if (!nextWord.PreSLMAnimated) {
                         nextWord.PreSLMAnimated = true;
-                        nextWord.HTMLElement.style.removeProperty("--SLM_GradientPosition");
+                        frameStyleWriter.remove(nextWord.HTMLElement, "--SLM_GradientPosition");
                         setTimeout(
                           () => {
-                            nextWord.HTMLElement.style.animation = getPreSLMAnimation(125);
+                            frameStyleWriter.setImmediate(
+                              nextWord.HTMLElement,
+                              "animation",
+                              getPreSLMAnimation(125),
+                            );
                           },
                           safeAnimationDelay(totalDuration * 0.6 - 22, totalDuration)
                         );
@@ -963,28 +950,32 @@ export function Animate(position: number): void {
                   }
                 }
                 if (wordState === "NotSung") {
-                  if ($simpleLyricsModeRenderingType.get() === "calculate") {
-                    word.HTMLElement.style.setProperty(
+                  if (simpleRenderingType === "calculate") {
+                    setStyleIfChanged(
+                      word.HTMLElement,
                       "--SLM_GradientPosition",
-                      `${targetGradientPos}%`
+                      `${targetGradientPos}%`,
+                      0.5,
                     );
                   } else {
                     if (!word.PreSLMAnimated) {
-                      word.HTMLElement.style.animation = "none";
-                      word.HTMLElement.style.setProperty("--SLM_GradientPosition", "-50%");
+                      setStyleIfChanged(word.HTMLElement, "animation", "none");
+                      setStyleIfChanged(word.HTMLElement, "--SLM_GradientPosition", "-50%");
                     }
                     word.SLMAnimated = false;
                   }
                 }
                 if (wordState === "Sung") {
-                  if ($simpleLyricsModeRenderingType.get() === "calculate") {
-                    word.HTMLElement.style.setProperty(
+                  if (simpleRenderingType === "calculate") {
+                    setStyleIfChanged(
+                      word.HTMLElement,
                       "--SLM_GradientPosition",
-                      `${targetGradientPos}%`
+                      `${targetGradientPos}%`,
+                      0.5,
                     );
                   } else {
-                    word.HTMLElement.style.animation = "none";
-                    word.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+                    setStyleIfChanged(word.HTMLElement, "animation", "none");
+                    setStyleIfChanged(word.HTMLElement, "--SLM_GradientPosition", "100%");
                     word.SLMAnimated = false;
                     word.PreSLMAnimated = false;
                   }
@@ -1131,28 +1122,28 @@ export function Animate(position: number): void {
                 // Apply proximity-based animation if an active letter is found
                 if (activeLetterIndex !== -1) {
                   // Get the base animation values for the active letter
-                  const percentageCount = $simpleLyricsMode.get()
+                  const percentageCount = simpleMode
                     ? getProgressPercentage(ProcessedPosition, word.StartTime, word.EndTime)
                     : activeLetterPercentage;
 
                   const config = SimpleLyricsMode_LetterEffectsStrengthConfig;
                   const baseScale =
                     LetterScaleSpline.at(percentageCount) *
-                    ($simpleLyricsMode.get()
+                    (simpleMode
                       ? word.TotalTime > config.LongerThan
                         ? config.Longer.Scale
                         : config.Shorter.Scale
                       : 1);
                   const baseYOffset =
                     LetterYOffsetSpline.at(percentageCount) *
-                    ($simpleLyricsMode.get()
+                    (simpleMode
                       ? word.TotalTime > config.LongerThan
                         ? config.Longer.YOffset
                         : config.Shorter.YOffset
                       : 1);
                   const baseGlow =
                     GlowSpline.at(percentageCount) *
-                    ($simpleLyricsMode.get()
+                    (simpleMode
                       ? word.TotalTime > config.LongerThan
                         ? config.Longer.Glow
                         : config.Shorter.Glow
@@ -1179,7 +1170,7 @@ export function Animate(position: number): void {
                 } // else - if no active letter, targets remain at resting state set above
 
                 // Only override values for NotSung letters or for letters in a non-Active word
-                if (letterState === "NotSung" && !$simpleLyricsMode.get()) {
+                if (letterState === "NotSung" && !simpleMode) {
                   // NotSung letters always use resting values
                   targetScale = LetterScaleSpline.at(0);
                   targetYOffset = LetterYOffsetSpline.at(0);
@@ -1192,7 +1183,7 @@ export function Animate(position: number): void {
 
                 // --- Determine Gradient based on individual letter state ---
                 if (letterState === "NotSung") {
-                  if ($simpleLyricsMode.get()) {
+                  if (simpleMode) {
                     targetGradient = -50;
                   } else {
                     targetGradient = -20;
@@ -1204,7 +1195,7 @@ export function Animate(position: number): void {
                   // Only the *actual* active letter gets the animated gradient
                   targetGradient =
                     k === activeLetterIndex ? -20 + 120 * easeSinOut(activeLetterPercentage) : -20;
-                  if ($simpleLyricsMode.get()) {
+                  if (simpleMode) {
                     targetGradient =
                       k === activeLetterIndex
                         ? -50 + 120 * easeSinOut(activeLetterPercentage)
@@ -1229,28 +1220,30 @@ export function Animate(position: number): void {
 
                 const totalDuration = letter.EndTime - letter.StartTime;
                 // Apply styles from springs and calculated gradient
-                if ($simpleLyricsMode.get()) {
-                  if ($simpleLyricsModeRenderingType.get() === "calculate") {
-                    letter.HTMLElement.style.setProperty(
+                if (simpleMode) {
+                  if (simpleRenderingType === "calculate") {
+                    setStyleIfChanged(
+                      letter.HTMLElement,
                       "--SLM_GradientPosition",
-                      `${targetGradient}%`
+                      `${targetGradient}%`,
+                      0.5,
                     );
                   } else {
                     if (letterState === "Active" && !letter.SLMAnimated) {
-                      letter.HTMLElement.style.removeProperty("--SLM_GradientPosition");
-                      letter.HTMLElement.style.animation = getSLMAnimation(totalDuration);
+                      frameStyleWriter.remove(letter.HTMLElement, "--SLM_GradientPosition");
+                      setStyleIfChanged(letter.HTMLElement, "animation", getSLMAnimation(totalDuration));
                       letter.SLMAnimated = true;
                     }
                     if (letterState === "NotSung") {
                       if (!letter.PreSLMAnimated) {
-                        letter.HTMLElement.style.animation = "none";
-                        letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "-50%");
+                        setStyleIfChanged(letter.HTMLElement, "animation", "none");
+                        setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "-50%");
                       }
                       letter.SLMAnimated = false;
                     }
                     if (letterState === "Sung") {
-                      letter.HTMLElement.style.animation = "none";
-                      letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+                      setStyleIfChanged(letter.HTMLElement, "animation", "none");
+                      setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "100%");
                       letter.SLMAnimated = false;
                     }
                   }
@@ -1303,9 +1296,9 @@ export function Animate(position: number): void {
                 const currentYOffset = letter.AnimatorStore.YOffset.Step(deltaTime);
                 const currentGlow = letter.AnimatorStore.Glow.Step(deltaTime);
 
-                if ($simpleLyricsMode.get()) {
-                  letter.HTMLElement.style.animation = "none";
-                  letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "-50%");
+                if (simpleMode) {
+                  setStyleIfChanged(letter.HTMLElement, "animation", "none");
+                  setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "-50%");
                 } else {
                   setStyleIfChanged(letter.HTMLElement, "--gradient-position", "-20%", 0);
                 }
@@ -1350,9 +1343,9 @@ export function Animate(position: number): void {
                 const currentYOffset = letter.AnimatorStore.YOffset.Step(deltaTime);
                 const currentGlow = letter.AnimatorStore.Glow.Step(deltaTime);
 
-                if ($simpleLyricsMode.get()) {
-                  letter.HTMLElement.style.animation = "none";
-                  letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+                if (simpleMode) {
+                  setStyleIfChanged(letter.HTMLElement, "animation", "none");
+                  setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "100%");
                 } else {
                   setStyleIfChanged(letter.HTMLElement, "--gradient-position", "100%", 0);
                 }
@@ -1424,7 +1417,7 @@ export function Animate(position: number): void {
                 0.001
               );
               setStyleIfChanged(word.HTMLElement, "scale", `${currentScale}`, 0.001);
-              applyTimedRubyAnchorState(word, currentScale, 100);
+              applyTimedRubyAnchorState(word, currentScale, 100, simpleMode);
               if (word.RomajiElement) {
                 setStyleIfChanged(
                   word.RomajiElement,
@@ -1434,9 +1427,9 @@ export function Animate(position: number): void {
                 );
               }
               if (!word.LetterGroup) {
-                if ($simpleLyricsMode.get()) {
-                  word.HTMLElement.style.animation = "none";
-                  word.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+                if (simpleMode) {
+                  setStyleIfChanged(word.HTMLElement, "animation", "none");
+                  setStyleIfChanged(word.HTMLElement, "--SLM_GradientPosition", "100%");
                 } else {
                   setStyleIfChanged(word.HTMLElement, "--gradient-position", "100%", 0);
                 }
@@ -1479,9 +1472,9 @@ export function Animate(position: number): void {
                 const currentYOffset = letter.AnimatorStore.YOffset.Step(deltaTime);
                 const currentGlow = letter.AnimatorStore.Glow.Step(deltaTime);
 
-                if ($simpleLyricsMode.get()) {
-                  letter.HTMLElement.style.animation = "none";
-                  letter.HTMLElement.style.setProperty("--SLM_GradientPosition", "100%");
+                if (simpleMode) {
+                  setStyleIfChanged(letter.HTMLElement, "animation", "none");
+                  setStyleIfChanged(letter.HTMLElement, "--SLM_GradientPosition", "100%");
                 } else {
                   setStyleIfChanged(letter.HTMLElement, "--gradient-position", "100%", 0);
                 }
@@ -1492,13 +1485,17 @@ export function Animate(position: number): void {
                   0.001
                 );
                 setStyleIfChanged(letter.HTMLElement, "scale", `${currentScale}`, 0.001);
-                letter.HTMLElement.style.setProperty(
+                setStyleIfChanged(
+                  letter.HTMLElement,
                   "--text-shadow-blur-radius",
-                  `${4 + 12 * currentGlow}px`
+                  `${4 + 12 * currentGlow}px`,
+                  0.5,
                 );
-                letter.HTMLElement.style.setProperty(
+                setStyleIfChanged(
+                  letter.HTMLElement,
                   "--text-shadow-opacity",
-                  `${currentGlow * LetterGlowMultiplier_Opacity}%`
+                  `${currentGlow * LetterGlowMultiplier_Opacity}%`,
+                  1,
                 );
               }
             }
@@ -1627,7 +1624,7 @@ export function Animate(position: number): void {
           const currentGlow = line.AnimatorStore.Glow.Step(deltaTime);
 
           // Apply styles using spring value for glow, keep direct calculation for gradient
-          if (!$simpleLyricsMode.get()) {
+          if (!simpleMode) {
             setStyleIfChanged(
               line.HTMLElement,
               "--gradient-position",

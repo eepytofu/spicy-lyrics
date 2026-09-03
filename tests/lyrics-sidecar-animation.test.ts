@@ -317,7 +317,7 @@ test("exact Furigana compounds project the existing ruby sweep across their base
   );
   assert.match(
     animatorSource,
-    /applyTimedRubyAnchorState\(word, currentScale, timedGroupGradientPosition\)[\s\S]*?projectTimedFuriganaBaseGradient\(\s*timedGroupGradientPosition/u,
+    /applyTimedRubyAnchorState\(word, currentScale, timedGroupGradientPosition, simpleMode\)[\s\S]*?projectTimedFuriganaBaseGradient\(\s*timedGroupGradientPosition/u,
   );
 });
 
