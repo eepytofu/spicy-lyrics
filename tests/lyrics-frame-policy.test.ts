@@ -36,7 +36,7 @@ test("paused lyrics settle briefly and then stop rendering unchanged frames", ()
 test("mounted virtualized lines invalidate stale paint before bounded paused settle", () => {
   assert.match(
     animatorSource,
-    /setOnNewElementMounted\(\(mountedWrappers\)\s*=>\s*\{[\s\S]*?invalidateMountedStyleCache\(wrapper\)[\s\S]*?syllableLinePaintStates\.delete\(line\)[\s\S]*?applyLineState\(line,\s*"NotSung"\)[\s\S]*?requestPausedAnimationSettle\(\)/u,
+    /setOnMountedLyricsWindowChange\(\(change\)\s*=>\s*\{[\s\S]*?mountedLyricsIndices\s*=\s*change\.mountedIndices[\s\S]*?invalidateMountedStyleCache\(wrapper\)[\s\S]*?syllableLinePaintStates\.delete\(line\)[\s\S]*?applyLineState\(line,\s*"NotSung"\)[\s\S]*?requestPausedAnimationSettle\(\)/u,
   );
   assert.match(
     lyricsLoopSource,
@@ -44,10 +44,10 @@ test("mounted virtualized lines invalidate stale paint before bounded paused set
   );
   assert.match(
     virtualizerSource,
-    /if \(newlyMountedWrappers\.length > 0\)\s*\{\s*this\._onNewElementMounted\?\.\(newlyMountedWrappers\)/u,
+    /this\._onMountedWindowChange\?\.\(\{\s*mounted:\s*mountedItems,\s*unmounted:\s*unmountedItems,\s*mountedIndices:/u,
   );
   assert.doesNotMatch(
     virtualizerSource,
-    /destroy\(\): void\s*\{[\s\S]*?this\._onNewElementMounted\s*=\s*null/u,
+    /destroy\(\): void\s*\{[\s\S]*?this\._onMountedWindowChange\s*=\s*null/u,
   );
 });

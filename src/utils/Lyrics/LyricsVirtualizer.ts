@@ -6,6 +6,18 @@ import {
 } from "@tanstack/virtual-core";
 import { Maid } from "../../modules/Maid.ts";
 import Logger from "../Logger.ts";
+
+export interface MountedLyricsItem {
+  readonly index: number;
+  readonly element: HTMLElement;
+  readonly wrapper: HTMLElement;
+}
+
+export interface MountedLyricsWindowChange {
+  readonly mounted: readonly MountedLyricsItem[];
+  readonly unmounted: readonly MountedLyricsItem[];
+  readonly mountedIndices: readonly number[];
+}
 import {
   measuredVerticalSize,
   shouldVerifyLyricsScroll,
@@ -40,9 +52,9 @@ class LyricsVirtualizer {
   private _virtualContainer: HTMLElement | null = null;
   private _scrollEl: HTMLElement | null = null;
 
-  // Invoked once per mounted batch. Used by the animator to invalidate only the
-  // new subtrees before its next bounded paint pass.
-  private _onNewElementMounted: ((elements: readonly HTMLElement[]) => void) | null = null;
+  // Reports the complete virtual-window delta so animation work can stay scoped
+  // to connected lyric rows while newly mounted rows still receive exact paint.
+  private _onMountedWindowChange: ((change: MountedLyricsWindowChange) => void) | null = null;
 
   // Timer for the scroll-settle remeasure pass (fallback for browsers without scrollend).
   private _scrollEndTimer: ReturnType<typeof setTimeout> | null = null;
@@ -97,10 +109,10 @@ class LyricsVirtualizer {
   private _inOnChange = false;
   private _onChangePending = false;
 
-  setOnNewElementMounted(
-    cb: ((elements: readonly HTMLElement[]) => void) | null,
+  setOnMountedWindowChange(
+    cb: ((change: MountedLyricsWindowChange) => void) | null,
   ): void {
-    this._onNewElementMounted = cb;
+    this._onMountedWindowChange = cb;
   }
 
   private _isNextBgLine(index: number): boolean {
@@ -572,9 +584,11 @@ class LyricsVirtualizer {
       if (!nextVisible.has(idx)) toUnmount.push(idx);
     }
     const unmountWrappers: HTMLElement[] = [];
+    const unmountedItems: MountedLyricsItem[] = [];
     for (const idx of toUnmount) {
       const wrapper = this._wrappers[idx];
-      if (wrapper) {
+      const element = this._allElements[idx];
+      if (wrapper && element) {
         // Sync the cached size to the line's current classList before unmounting.
         // The animator may have flipped Active/Sung since the wrapper was rendered,
         // and the MutationObserver only fires for elements still in the subtree (and
@@ -588,6 +602,7 @@ class LyricsVirtualizer {
           wrapper.style.paddingBottom = `${gap}px`;
         }
         unmountWrappers.push(wrapper);
+        unmountedItems.push({ index: idx, element, wrapper });
       }
     }
     // Batch every DOM write above before the first layout read. Measuring and
@@ -612,7 +627,7 @@ class LyricsVirtualizer {
     }
 
     const wrappersToMeasure: HTMLElement[] = [];
-    const newlyMountedWrappers: HTMLElement[] = [];
+    const mountedItems: MountedLyricsItem[] = [];
     for (const item of items) {
       const wrapper = this._getOrCreateWrapper(item.index);
       const gap = this._itemGap(item.index);
@@ -626,15 +641,20 @@ class LyricsVirtualizer {
         this._virtualContainer.appendChild(wrapper);
         this._mountedIndices.add(item.index);
         wrappersToMeasure.push(wrapper);
-        newlyMountedWrappers.push(wrapper);
+        const element = this._allElements[item.index];
+        if (element) mountedItems.push({ index: item.index, element, wrapper });
       } else if (Math.abs(prevPad - gap) >= 0.5) {
         // Gap changes alter wrapper height without necessarily triggering a ResizeObserver
         // callback quickly enough for this pass.
         wrappersToMeasure.push(wrapper);
       }
     }
-    if (newlyMountedWrappers.length > 0) {
-      this._onNewElementMounted?.(newlyMountedWrappers);
+    if (mountedItems.length > 0 || unmountedItems.length > 0) {
+      this._onMountedWindowChange?.({
+        mounted: mountedItems,
+        unmounted: unmountedItems,
+        mountedIndices: [...this._mountedIndices].sort((left, right) => left - right),
+      });
     }
     // All wrappers are connected and styled before measurement starts, so the
     // first offsetHeight fallback lays out the complete new window and later
@@ -946,8 +966,19 @@ class LyricsVirtualizer {
       // Ignore — method is private / may not exist in all versions.
     }
 
+    const unmountedItems: MountedLyricsItem[] = [];
     for (const idx of this._mountedIndices) {
+      const element = this._allElements[idx];
+      const wrapper = this._wrappers[idx];
+      if (element && wrapper) unmountedItems.push({ index: idx, element, wrapper });
       this._wrappers[idx]?.parentElement?.removeChild(this._wrappers[idx]!);
+    }
+    if (unmountedItems.length > 0) {
+      this._onMountedWindowChange?.({
+        mounted: [],
+        unmounted: unmountedItems,
+        mountedIndices: [],
+      });
     }
     this._virtualizer = null;
     this._allElements = [];
@@ -995,10 +1026,10 @@ export function destroyLyricsVirtualizer(): void {
   lyricsVirtualizer.destroy();
 }
 
-export function setOnNewElementMounted(
-  cb: ((elements: readonly HTMLElement[]) => void) | null,
+export function setOnMountedLyricsWindowChange(
+  cb: ((change: MountedLyricsWindowChange) => void) | null,
 ): void {
-  lyricsVirtualizer.setOnNewElementMounted(cb);
+  lyricsVirtualizer.setOnMountedWindowChange(cb);
 }
 
 export function triggerRemeasureLV(): void {

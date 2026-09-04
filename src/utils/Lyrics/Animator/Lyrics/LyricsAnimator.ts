@@ -39,7 +39,7 @@ import {
   timedGroupEnvelopeAt,
   wordGradientTargets,
 } from "./AnimatorState.ts";
-import { setOnNewElementMounted } from "../../LyricsVirtualizer.ts";
+import { setOnMountedLyricsWindowChange } from "../../LyricsVirtualizer.ts";
 import { Spring } from "../../../../modules/Spring.ts";
 import { frameStyleWriter } from "./FrameStyleWriter.ts";
 
@@ -587,6 +587,7 @@ export let Blurring_LastLine: number | null = null;
 let lastFrameTime = performance.now();
 let lastAnimationPosition: number | null = null;
 const syllableLinePaintStates = new WeakMap<HTMLElement, "NotSung" | "Active" | "Sung">();
+let mountedLyricsIndices: readonly number[] = [];
 
 export interface AnimationFrameContext {
   readonly position: number;
@@ -603,8 +604,9 @@ export interface AnimationFrameContext {
 // paint. Give genuinely new lines a visible resting state immediately, then
 // invalidate only the mounted subtree so the bounded paused settle frame
 // recomputes its exact NotSung/Active/Sung paint and blur.
-setOnNewElementMounted((mountedWrappers) => {
-  for (const wrapper of mountedWrappers) {
+setOnMountedLyricsWindowChange((change) => {
+  mountedLyricsIndices = change.mountedIndices;
+  for (const { wrapper } of change.mounted) {
     invalidateMountedStyleCache(wrapper);
     for (const line of wrapper.querySelectorAll<HTMLElement>(".line")) {
       syllableLinePaintStates.delete(line);
@@ -719,16 +721,9 @@ export function Animate(position: number): void {
 
     const max = BlurMultiplier * 5 + BlurMultiplier * 0.465;
 
-    for (let i = 0; i < arr.length; i++) {
+    for (const i of mountedLyricsIndices) {
       const el = arr[i].HTMLElement;
-      // The virtualizer only mounts a small window of elements at a time.
-      // Skip elements that are not in the DOM — writing styles to detached
-      // elements is wasteful: it populates _styleQueue with hundreds of entries
-      // that flushStyleBatch() then has to flush (style.setProperty on each),
-      // creating a large burst of DOM work every time the active line changes.
-      // When an off-screen element is later mounted, the next active-line change
-      // will call applyBlur again and catch it with the correct values.
-      if (!el.isConnected) continue;
+      if (!el?.isConnected) continue;
       const state = getElementState(ProcessedPosition, arr[i].StartTime, arr[i].EndTime);
       const distance = Math.abs(i - activeIndex);
       const blurAmount = distance === 0 ? 0 : Math.min(blurMultiplierValue * distance, max);
@@ -747,9 +742,9 @@ export function Animate(position: number): void {
   if (CurrentLyricsType === "Syllable") {
     const arr = LyricsObject.Types.Syllable.Lines;
 
-    for (let index = 0; index < arr.length; index++) {
+    for (const index of mountedLyricsIndices) {
       const line = arr[index];
-      if (!line.HTMLElement.isConnected) continue;
+      if (!line?.HTMLElement.isConnected) continue;
       const lineState = getElementState(ProcessedPosition, line.StartTime, line.EndTime);
       const previousPaintState = syllableLinePaintStates.get(line.HTMLElement);
       applyLineState(line.HTMLElement, lineState);
@@ -1522,9 +1517,9 @@ export function Animate(position: number): void {
   } else if (CurrentLyricsType === "Line") {
     const arr = LyricsObject.Types.Line.Lines;
 
-    for (let index = 0; index < arr.length; index++) {
+    for (const index of mountedLyricsIndices) {
       const line = arr[index];
-      if (!line.HTMLElement.isConnected) continue;
+      if (!line?.HTMLElement.isConnected) continue;
       const lineState = getElementState(ProcessedPosition, line.StartTime, line.EndTime);
       const percentage = getProgressPercentage(
         ProcessedPosition,
