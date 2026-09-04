@@ -316,8 +316,10 @@ const baseRunText = (run: HTMLElement): string =>
   directClusterChild(run, "furigana-base")?.textContent ?? run.textContent ?? "";
 
 function groupWrapPunctuationRuns(parent: HTMLElement): void {
+  if (parent.childElementCount < 2) return;
   const runs = Array.from(parent.children) as HTMLElement[];
   const grouped: HTMLElement[] = [];
+  let changed = false;
 
   for (let index = 0; index < runs.length; index += 1) {
     const run = runs[index];
@@ -327,6 +329,7 @@ function groupWrapPunctuationRuns(parent: HTMLElement): void {
       const group = document.createElement("span");
       group.className = "lyric-wrap-group";
       group.append(run, runs[index + 1]);
+      changed = true;
       grouped.push(group);
       index += 1;
       continue;
@@ -336,6 +339,7 @@ function groupWrapPunctuationRuns(parent: HTMLElement): void {
       const group = document.createElement("span");
       group.className = "lyric-wrap-group";
       group.append(grouped.pop()!, run);
+      changed = true;
       grouped.push(group);
       continue;
     }
@@ -343,8 +347,10 @@ function groupWrapPunctuationRuns(parent: HTMLElement): void {
     grouped.push(run);
   }
 
-  parent.textContent = "";
-  parent.append(...grouped);
+  if (changed) {
+    parent.textContent = "";
+    parent.append(...grouped);
+  }
 }
 
 /**
@@ -543,10 +549,12 @@ const hasElementClass = (element: Element, className: string): boolean =>
   element.classList.contains(className) ||
   String(element.className).split(/\s+/u).includes(className);
 
-const directClusterChild = (cluster: HTMLElement, className: string): HTMLElement | undefined =>
-  Array.from(cluster.children).find((child) => hasElementClass(child, className)) as
-    | HTMLElement
-    | undefined;
+const directClusterChild = (cluster: HTMLElement, className: string): HTMLElement | undefined => {
+  for (const child of cluster.children) {
+    if (hasElementClass(child, className)) return child as HTMLElement;
+  }
+  return undefined;
+};
 
 /**
  * A timed provider can split adjacent kanji into separate DOM words even when

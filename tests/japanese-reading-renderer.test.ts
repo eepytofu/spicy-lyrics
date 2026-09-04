@@ -32,6 +32,7 @@ class FakeElement {
     },
   };
   private ownTextContent = "";
+  textContentWrites = 0;
   lang = "";
 
   get textContent(): string {
@@ -41,6 +42,7 @@ class FakeElement {
   }
 
   set textContent(value: string) {
+    this.textContentWrites += 1;
     this.ownTextContent = value;
     this.children = [];
   }
@@ -632,6 +634,22 @@ test("plain Japanese tails expose wrap points beside ruby clusters", () => {
         .some((run) => run.children.some((child) => child.className.includes("furigana-reading"))),
       false
     );
+  }
+});
+
+test("reading rows without punctuation grouping are not cleared and reparented twice", () => {
+  // Constructed DOM-operation contract, not linguistic reading evidence.
+  for (const text of ["", "漢", "漢字", "abc def"]) {
+    for (const kind of ["furigana", "above"] as const) {
+      const parent = new FakeElement();
+      if (kind === "furigana") {
+        appendFuriganaText(parent as unknown as HTMLElement, text, []);
+      } else {
+        appendAboveReadingText(parent as unknown as HTMLElement, text, []);
+      }
+      assert.equal(parent.textContent, text);
+      assert.equal(parent.textContentWrites, 1, `${kind}: ${text}`);
+    }
   }
 });
 
