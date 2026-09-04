@@ -11,10 +11,20 @@
 
 import transliterPkg from "transliter";
 import { getJyutpingList } from "to-jyutping";
-import { G2p } from "korean-pronunciation";
-import CompletePinyinDict from "@pinyin-pro/data/complete";
-import { addDict, OutputFormat, pinyin, segment } from "pinyin-pro";
+import { convertKoreanPronunciation } from "../Processing/Korean/KoreanPronunciationEngine.ts";
 import { ChineseTextTest } from "./TextDetection.ts";
+
+export {
+  buildMandarinWordLayout,
+  joinMandarinReadingWords,
+  projectMandarinReading,
+  romanizeMandarin,
+} from "../Processing/Mandarin/MandarinRomanizationEngine.ts";
+export type {
+  MandarinReadingProjection,
+  MandarinReadingSegment,
+  MandarinWordLayout,
+} from "../Processing/Mandarin/MandarinRomanizationEngine.ts";
 
 const JYUTPING_PHRASES: Record<string, string> = {
   上堂: "soeng5 tong4",
@@ -67,12 +77,6 @@ const JYUTPING_PHRASES: Record<string, string> = {
 };
 
 const JYUTPING_PHRASE_KEYS = Object.keys(JYUTPING_PHRASES).sort((a, b) => b.length - a.length);
-
-// The default pinyin-pro dictionary is intentionally compact and misses some
-// ordinary lexical readings (for example, 诗行 is shī háng). Register the full
-// dictionary once at module load so every Mandarin path uses the same phrase
-// context without maintaining a growing list of local one-off corrections.
-addDict(CompletePinyinDict, { name: "spicy-lyrics-complete", dict1: "replace" });
 
 // ─── Cantonese (Jyutping) ─────────────────────────────────────────────────────
 
@@ -134,107 +138,6 @@ export async function romanizeCantonese(
 
 export function stripJyutpingTones(text: string): string {
   return text.replace(/(?<=[a-zA-Z])[1-6]/g, "");
-}
-
-export type MandarinReadingSegment = {
-  startCp: number;
-  endCp: number;
-  reading: string;
-};
-
-export type MandarinReadingProjection = {
-  text: string;
-  segments: MandarinReadingSegment[];
-  valid: boolean;
-};
-
-export function projectMandarinReading(text: string, tones = true): MandarinReadingProjection {
-  const readings = pinyin(text, {
-    type: "all",
-    toneType: tones ? "symbol" : "none",
-    toneSandhi: false,
-    nonZh: "consecutive",
-  });
-  const segments: MandarinReadingSegment[] = [];
-  let cursorCp = 0;
-  let reconstructed = "";
-
-  for (const result of readings) {
-    const origin = result.origin || "";
-    const originLength = Array.from(origin).length;
-    reconstructed += origin;
-    if (
-      result.isZh &&
-      originLength === 1 &&
-      isChineseHanChar(origin) &&
-      result.result &&
-      result.result !== origin
-    ) {
-      segments.push({
-        startCp: cursorCp,
-        endCp: cursorCp + 1,
-        reading: result.result,
-      });
-    }
-    cursorCp += originLength;
-  }
-
-  const hanCount = Array.from(text).filter(isChineseHanChar).length;
-  return {
-    text: readings.map((result) => result.result).join(" ").replace(/\s+/gu, " ").trim(),
-    segments,
-    valid: reconstructed === text && segments.length === hanCount,
-  };
-}
-
-export function romanizeMandarin(text: string, tones = true): string {
-  return projectMandarinReading(text, tones).text;
-}
-
-export type MandarinWordLayout = {
-  tokenCount: number;
-  continuationTokenIndices: ReadonlySet<number>;
-};
-
-/**
- * Describe Pinyin token boundaries that fall inside one segmented Mandarin
- * word. Whitespace is excluded from the token count because romanizeMandarin
- * normalizes it into separators rather than display tokens.
- */
-export function buildMandarinWordLayout(text: string): MandarinWordLayout {
-  const groups = segment(text, {
-    format: OutputFormat.ZhArray,
-    nonZh: "consecutive",
-    toneSandhi: false,
-  });
-  const continuationTokenIndices = new Set<number>();
-  let tokenCount = 0;
-
-  for (const group of groups) {
-    const isHanWord = group.length > 1 && group.every((part) => {
-      const characters = Array.from(part);
-      return characters.length === 1 && isChineseHanChar(characters[0]);
-    });
-
-    for (let index = 0; index < group.length; index += 1) {
-      if (!group[index].trim()) continue;
-      if (isHanWord && index > 0) continuationTokenIndices.add(tokenCount);
-      tokenCount += 1;
-    }
-  }
-
-  return { tokenCount, continuationTokenIndices };
-}
-
-export function joinMandarinReadingWords(text: string, reading: string): string {
-  const layout = buildMandarinWordLayout(text);
-  const tokens = reading.trim().split(/\s+/u).filter(Boolean);
-  if (tokens.length !== layout.tokenCount) return reading;
-
-  return tokens.map((token, index) => {
-    if (index === 0 || layout.continuationTokenIndices.has(index)) return token;
-    return ` ${token}`;
-  }).join("");
 }
 
 // ─── Cyrillic (BGN/PCGN) ──────────────────────────────────────────────────────
@@ -414,8 +317,6 @@ const ON_R = 5;
 const ON_NULL = 11;
 const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
 
-let koreanG2p: G2p | undefined;
-
 type HangulSyllable = [number, number, number];
 type KoreanRomanizedSyllablePart = { onset: string; vowel: string; coda: string };
 
@@ -428,11 +329,6 @@ function decomposeHangul(char: string): HangulSyllable | null {
 
 function isHangulSyllable(char: string): boolean {
   return decomposeHangul(char) !== null;
-}
-
-function getKoreanG2p(): G2p {
-  koreanG2p ??= new G2p();
-  return koreanG2p;
 }
 
 function appendLineSpaceIfNeeded(lineText: string): string {
@@ -880,7 +776,7 @@ export function romanizeKoreanDisplayPieces(text: string, mode: KoreanDisplayMod
 }
 
 function convertKoreanWordToPronouncedHangul(word: string): string {
-  return KOREAN_POST_G2P_EXCEPTIONS[word] ?? getKoreanG2p().convert(rewriteKoreanUiForG2p(word));
+  return KOREAN_POST_G2P_EXCEPTIONS[word] ?? convertKoreanPronunciation(rewriteKoreanUiForG2p(word));
 }
 
 function koreanDependentNounAfterL(word: string): string | undefined {
@@ -908,7 +804,7 @@ function convertKoreanHangulRunToPronouncedHangul(run: string): string {
       continue;
     }
     if (shouldJoinKoreanG2pBigram(word, nextWord)) {
-      const pair = getKoreanG2p().convert(`${word} ${nextWord}`).split(/\s+/);
+      const pair = convertKoreanPronunciation(`${word} ${nextWord}`).split(/\s+/);
       converted.push(pair[0] ?? convertKoreanWordToPronouncedHangul(word));
       converted.push(pair[1] ?? convertKoreanWordToPronouncedHangul(nextWord));
       index += 1;
@@ -1060,7 +956,7 @@ function romanizeKoreanPronunciationTokenWithSeparators(token: string, style: Ko
 }
 
 function pronouncedKoreanBigramSecondWord(word: string, nextWord: string): string {
-  return getKoreanG2p().convert(`${rewriteKoreanUiForG2p(word)} ${rewriteKoreanUiForG2p(nextWord)}`).split(/\s+/)[1] ?? convertKoreanWordToPronouncedHangul(nextWord);
+  return convertKoreanPronunciation(`${rewriteKoreanUiForG2p(word)} ${rewriteKoreanUiForG2p(nextWord)}`).split(/\s+/)[1] ?? convertKoreanWordToPronouncedHangul(nextWord);
 }
 
 function romanizeKoreanPronunciationDisplay(text: string, style: KoreanOutputStyle): string {
