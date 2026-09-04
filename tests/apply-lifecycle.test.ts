@@ -64,3 +64,12 @@ test("line-timed background vocals are rendered without changing lyric tier", ()
   assert.match(source, /classList\.add\("line", "bg-line"\)/u);
   assert.match(source, /BGLine: true/u);
 });
+
+test("syllable lead and background groups share detached line-root assembly", () => {
+  const source = readSource("../src/utils/Lyrics/Applyer/Synced/Syllable.ts");
+  assert.match(source, /const assembleSyllableGroup = \(/u);
+  assert.match(source, /assembleSyllableGroup\(\s*"lead"/u);
+  assert.match(source, /assembleSyllableGroup\(\s*"background"/u);
+  assert.match(source, /assembleSyllableGroup\([\s\S]*?lineElements\.push\(lineElem\)/u);
+  assert.equal(source.match(/createSyllableWord\(/gu)?.length, 1);
+});

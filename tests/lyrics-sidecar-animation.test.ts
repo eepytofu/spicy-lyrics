@@ -243,7 +243,8 @@ test("timed romaji and line sidecars follow paint-only extra gradient state", ()
     /(?:RomajiElement|line\.HTMLElement)\.style\.setProperty\(\s*"--extra-gradient-position"/u
   );
   assert.match(lineApplyerSource, /HasExtraSidecars:\s*hasExtraSidecars/u);
-  assert.match(syllableApplyerSource, /\.HasExtraSidecars\s*=\s*appendSyllableRomanizedBelow/u);
+  assert.match(syllableApplyerSource, /\.HasExtraSidecars\s*=\s*assembleSyllableGroup/u);
+  assert.match(syllableApplyerSource, /return appendSyllableRomanizedBelow\(/u);
   assert.match(mainCss, /var\(--extra-gradient-position, -40%\)/u);
   assert.match(
     mainCss,

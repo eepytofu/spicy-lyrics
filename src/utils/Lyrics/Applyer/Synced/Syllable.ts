@@ -34,6 +34,7 @@ import { timedGroupContinuesAt } from "../../Processing/Japanese/TimedGroupIds.t
 import {
   joinSyllableDisplayText,
   prepareSyllableGroupRenderPlan,
+  type SyllableGroupRenderPlan,
   type SyllableWordTiming,
   type TimedRubyGroup,
 } from "./SyllableGroupRenderPlan.ts";
@@ -385,6 +386,118 @@ const appendGroupedWord = (
   return null;
 };
 
+type SyllableGroupKind = "lead" | "background";
+
+const assembleSyllableGroup = (
+  kind: SyllableGroupKind,
+  lineElement: HTMLElement,
+  group: TimedSyllableGroup,
+  plan: SyllableGroupRenderPlan,
+  renderOptions: ReadingRenderOptions,
+  providerLanguage?: string,
+  source?: string
+): boolean => {
+  const isBackground = kind === "background";
+  if (plan.hasRtl) lineElement.classList.add("rtl");
+
+  let currentWordGroup: HTMLSpanElement | null = null;
+  let currentSemanticGroupId: string | undefined;
+  const timedRubyState = createTimedRubyRenderState();
+
+  for (const wordPlan of plan.words) {
+    const { syllable, index } = wordPlan;
+    const word = createSyllableWord(
+      syllable,
+      index,
+      group.Syllables,
+      wordPlan.renderOptions,
+      {
+        readingRow: wordPlan.readingRow,
+        timing: wordPlan.timing,
+        isBackground,
+        providerLanguage,
+        source,
+        timedFuriganaBaseSweepRange: wordPlan.timedFuriganaBaseSweepRange,
+      }
+    );
+
+    // Ruby crossing timed syllables is drawn once above a display group.
+    // Exact full-owner Furigana compounds project the existing group sweep
+    // across their base; source timing and partial-owner geometry stay
+    // unchanged. The line is never collapsed.
+    if (wordPlan.timedRubyGroup) {
+      appendTimedRubyMember(
+        lineElement,
+        word,
+        syllable,
+        String(index),
+        wordPlan.timedRubyGroup,
+        timedRubyState
+      );
+      currentWordGroup = null;
+      currentSemanticGroupId = undefined;
+      continue;
+    }
+
+    // Authored whitespace spans between members stay inside the open group
+    // so the ruby is not split into duplicates.
+    if (
+      timedRubyState.root &&
+      !(syllable.Text || "").trim() &&
+      timedGroupContinuesAt(
+        plan.texts,
+        plan.timedRubyLookup,
+        index + 1,
+        timedRubyState.groupId
+      )
+    ) {
+      timedRubyState.root.appendChild(word);
+      currentWordGroup = null;
+      currentSemanticGroupId = undefined;
+      continue;
+    }
+    resetTimedRubyRenderState(timedRubyState);
+
+    const semanticGroupId = wordPlan.semanticGroupId;
+    if (plan.usesSemanticGroups && semanticGroupId) {
+      if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
+        currentWordGroup = document.createElement("span");
+        currentWordGroup.classList.add("word-group", "semantic-word-group");
+        lineElement.appendChild(currentWordGroup);
+        currentSemanticGroupId = semanticGroupId;
+      }
+      currentWordGroup.appendChild(word);
+    } else {
+      currentWordGroup = appendGroupedWord(
+        lineElement,
+        word,
+        syllable,
+        group.Syllables[index - 1],
+        currentWordGroup
+      );
+    }
+  }
+
+  packAdjacentFuriganaClusters(lineElement.querySelectorAll<HTMLElement>(".lyric-base-run"));
+
+  const registeredEntries =
+    LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
+  const sidecarEntries = isBackground
+    ? registeredEntries.filter((entry) => entry.BGWord)
+    : registeredEntries;
+  return appendSyllableRomanizedBelow(
+    lineElement,
+    group.Syllables,
+    plan.sourceText,
+    plan.romanizedText,
+    group.ProviderTranslatedText,
+    group.TranslatedText,
+    sidecarEntries,
+    group.ReadingRenderPlan,
+    renderOptions
+  );
+};
+
 export function ApplySyllableLyrics(
   data: LyricsData,
   UseRomanized: boolean = false,
@@ -496,102 +609,21 @@ export function ApplySyllableLyrics(
       lineElem.classList.add("OppositeAligned");
     }
 
-    lineElements.push(lineElem);
-
     const leadPlan = prepareSyllableGroupRenderPlan(
       line.Lead,
       lineRenderOptions,
       leadSourceText
     );
-    if (leadPlan.hasRtl) lineElem.classList.add("rtl");
-    let currentWordGroup: HTMLSpanElement | null = null;
-    let currentSemanticGroupId: string | undefined;
-    const leadTimedRubyState = createTimedRubyRenderState();
-
-    leadPlan.words.forEach((wordPlan) => {
-      const { syllable: lead, index: iL } = wordPlan;
-      // Ruby crossing timed syllables is drawn once above a display group.
-      // Exact full-owner Furigana compounds project the existing group sweep
-      // across their base; source timing and partial-owner geometry stay
-      // unchanged. The line is never collapsed.
-      const word = createSyllableWord(
-        lead,
-        iL,
-        line.Lead.Syllables,
-        wordPlan.renderOptions,
-        {
-          readingRow: wordPlan.readingRow,
-          timing: wordPlan.timing,
-          providerLanguage: data.ProviderLanguage,
-          source: data.source,
-          timedFuriganaBaseSweepRange: wordPlan.timedFuriganaBaseSweepRange,
-        }
-      );
-      if (wordPlan.timedRubyGroup) {
-        appendTimedRubyMember(
-          lineElem,
-          word,
-          lead,
-          String(iL),
-          wordPlan.timedRubyGroup,
-          leadTimedRubyState
-        );
-        currentWordGroup = null;
-        currentSemanticGroupId = undefined;
-        return;
-      }
-      // Authored whitespace spans between members stay inside the open group
-      // so the ruby is not split into duplicates.
-      if (
-        leadTimedRubyState.root &&
-        !(lead.Text || "").trim() &&
-        timedGroupContinuesAt(
-          leadPlan.texts,
-          leadPlan.timedRubyLookup,
-          iL + 1,
-          leadTimedRubyState.groupId
-        )
-      ) {
-        leadTimedRubyState.root.appendChild(word);
-        currentWordGroup = null;
-        currentSemanticGroupId = undefined;
-        return;
-      }
-      resetTimedRubyRenderState(leadTimedRubyState);
-
-      const semanticGroupId = wordPlan.semanticGroupId;
-      if (leadPlan.usesSemanticGroups && semanticGroupId) {
-        if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
-          currentWordGroup = document.createElement("span");
-          currentWordGroup.classList.add("word-group", "semantic-word-group");
-          lineElem.appendChild(currentWordGroup);
-          currentSemanticGroupId = semanticGroupId;
-        }
-        currentWordGroup.appendChild(word);
-      } else {
-        currentWordGroup = appendGroupedWord(
-          lineElem,
-          word,
-          lead,
-          line.Lead.Syllables[iL - 1],
-          currentWordGroup
-        );
-      }
-    });
-    packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".lyric-base-run"));
-
-    const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
-    leadLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
+    leadLyricsLine.HasExtraSidecars = assembleSyllableGroup(
+      "lead",
       lineElem,
-      line.Lead.Syllables,
-      leadPlan.sourceText,
-      leadPlan.romanizedText,
-      line.Lead.ProviderTranslatedText,
-      line.Lead.TranslatedText,
-      leadEntries,
-      line.Lead.ReadingRenderPlan,
-      lineRenderOptions
+      line.Lead,
+      leadPlan,
+      lineRenderOptions,
+      data.ProviderLanguage,
+      data.source
     );
+    lineElements.push(lineElem);
 
     if (line.Background) {
       line.Background.forEach((bg) => {
@@ -616,94 +648,16 @@ export function ApplySyllableLyrics(
         if (line.OppositeAligned) {
           lineE.classList.add("OppositeAligned");
         }
-        if (bgPlan.hasRtl) lineE.classList.add("rtl");
-        lineElements.push(lineE);
-
-        let currentBGWordGroup: HTMLSpanElement | null = null;
-        let currentBGSemanticGroupId: string | undefined;
-        const bgTimedRubyState = createTimedRubyRenderState();
-
-        bgPlan.words.forEach((wordPlan) => {
-          const { syllable: bw, index: bI } = wordPlan;
-          const word = createSyllableWord(
-            bw,
-            bI,
-            bg.Syllables,
-            wordPlan.renderOptions,
-            {
-              readingRow: wordPlan.readingRow,
-              timing: wordPlan.timing,
-              isBackground: true,
-              providerLanguage: data.ProviderLanguage,
-              source: data.source,
-              timedFuriganaBaseSweepRange: wordPlan.timedFuriganaBaseSweepRange,
-            }
-          );
-          if (wordPlan.timedRubyGroup) {
-            appendTimedRubyMember(
-              lineE,
-              word,
-              bw,
-              String(bI),
-              wordPlan.timedRubyGroup,
-              bgTimedRubyState
-            );
-            currentBGWordGroup = null;
-            currentBGSemanticGroupId = undefined;
-            return;
-          }
-          if (
-            bgTimedRubyState.root &&
-            !(bw.Text || "").trim() &&
-            timedGroupContinuesAt(
-              bgPlan.texts,
-              bgPlan.timedRubyLookup,
-              bI + 1,
-              bgTimedRubyState.groupId
-            )
-          ) {
-            bgTimedRubyState.root.appendChild(word);
-            currentBGWordGroup = null;
-            currentBGSemanticGroupId = undefined;
-            return;
-          }
-          resetTimedRubyRenderState(bgTimedRubyState);
-
-          const semanticGroupId = wordPlan.semanticGroupId;
-          if (bgPlan.usesSemanticGroups && semanticGroupId) {
-            if (!currentBGWordGroup || semanticGroupId !== currentBGSemanticGroupId) {
-              currentBGWordGroup = document.createElement("span");
-              currentBGWordGroup.classList.add("word-group", "semantic-word-group");
-              lineE.appendChild(currentBGWordGroup);
-              currentBGSemanticGroupId = semanticGroupId;
-            }
-            currentBGWordGroup.appendChild(word);
-          } else {
-            currentBGWordGroup = appendGroupedWord(
-              lineE,
-              word,
-              bw,
-              bg.Syllables[bI - 1],
-              currentBGWordGroup
-            );
-          }
-        });
-        packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".lyric-base-run"));
-
-        const allEntries =
-          LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
-        const bgEntries = allEntries.filter((entry: any) => entry.BGWord);
-        backgroundLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
+        backgroundLyricsLine.HasExtraSidecars = assembleSyllableGroup(
+          "background",
           lineE,
-          bg.Syllables,
-          bgPlan.sourceText,
-          bgPlan.romanizedText,
-          bg.ProviderTranslatedText,
-          bg.TranslatedText,
-          bgEntries,
-          bg.ReadingRenderPlan,
-          bgRenderOptions
+          bg,
+          bgPlan,
+          bgRenderOptions,
+          data.ProviderLanguage,
+          data.source
         );
+        lineElements.push(lineE);
       });
     }
     const interludeStartTime = lineWindow.endTime;
