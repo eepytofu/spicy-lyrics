@@ -129,6 +129,13 @@ test("Mandarin phrase readings keep lexical context without confusing bank usage
   assert.equal(romanizeMandarin("\u6b4c\u884c"), "g\u0113 x\u00edng");
 });
 
+test("Mandarin complete dictionary retains its longest phrase entry", () => {
+  assert.equal(
+    romanizeMandarin("侵华日军南京大屠杀遇难同胞纪念馆"),
+    "qīn huá rì jūn nán jīng dà tú shā yù nàn tóng bāo jì niàn guǎn",
+  );
+});
+
 test("Mandarin word segmentation exposes display-only continuation boundaries", () => {
   assert.deepEqual([...buildMandarinWordLayout("诗行").continuationTokenIndices], [1]);
   assert.deepEqual([...buildMandarinWordLayout("歌行").continuationTokenIndices], [1]);

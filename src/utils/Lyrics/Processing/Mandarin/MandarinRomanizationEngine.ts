@@ -2,10 +2,43 @@ import CompletePinyinDict from "@pinyin-pro/data/complete";
 import { addDict, OutputFormat, pinyin, segment } from "pinyin-pro";
 import { ChineseTextTest } from "../../Fork/TextDetection.ts";
 
+const COMPLETE_DICTIONARY_NAME = "spicy-lyrics-complete";
+// @pinyin-pro/data 1.3.1 has no key longer than this. The longest-entry
+// regression test must move with this bound when the pinned dataset changes.
+const COMPLETE_DICTIONARY_MAX_CODE_POINTS = 16;
+const registeredCompleteEntries = new Set<string>();
+
 // The default pinyin-pro dictionary is intentionally compact and misses some
-// ordinary lexical readings (for example, 诗行 is shī háng). Every Mandarin
-// path shares the complete phrase dictionary rather than local corrections.
-addDict(CompletePinyinDict, { name: "spicy-lyrics-complete", dict1: "replace" });
+// ordinary lexical readings (for example, 诗行 is shī háng). Keep every entry
+// in the complete dictionary available, but expand only entries that can match
+// the current source text instead of building a 348k-pattern matcher eagerly.
+function registerCompleteEntriesForText(text: string): void {
+  const codePoints = Array.from(text);
+  const pending: Record<string, string | [string] | [string, number] | [string, number, string]> = {};
+  const pendingKeys: string[] = [];
+
+  for (let start = 0; start < codePoints.length; start += 1) {
+    const limit = Math.min(codePoints.length, start + COMPLETE_DICTIONARY_MAX_CODE_POINTS);
+    let candidate = "";
+    for (let end = start; end < limit; end += 1) {
+      candidate += codePoints[end];
+      if (
+        registeredCompleteEntries.has(candidate) ||
+        Object.prototype.hasOwnProperty.call(pending, candidate) ||
+        !Object.prototype.hasOwnProperty.call(CompletePinyinDict, candidate)
+      ) {
+        continue;
+      }
+      pending[candidate] = CompletePinyinDict[candidate];
+      pendingKeys.push(candidate);
+    }
+  }
+
+  if (pendingKeys.length > 0) {
+    addDict(pending, { name: COMPLETE_DICTIONARY_NAME, dict1: "replace" });
+    for (const key of pendingKeys) registeredCompleteEntries.add(key);
+  }
+}
 
 function isChineseHanChar(char: string): boolean {
   return ChineseTextTest.test(char);
@@ -24,6 +57,7 @@ export type MandarinReadingProjection = {
 };
 
 export function projectMandarinReading(text: string, tones = true): MandarinReadingProjection {
+  registerCompleteEntriesForText(text);
   const readings = pinyin(text, {
     type: "all",
     toneType: tones ? "symbol" : "none",
@@ -77,6 +111,7 @@ export type MandarinWordLayout = {
  * normalizes it into separators rather than display tokens.
  */
 export function buildMandarinWordLayout(text: string): MandarinWordLayout {
+  registerCompleteEntriesForText(text);
   const groups = segment(text, {
     format: OutputFormat.ZhArray,
     nonZh: "consecutive",
