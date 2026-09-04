@@ -1046,7 +1046,17 @@ test("timed syllable rendering keeps one Above romaji group across Kana owners",
   assert.match(syllableApplyerSource, /word\.querySelector\("\.above-reading-plain-cluster"\)/u);
   assert.match(
     syllableApplyerSource,
-    /bg\.Syllables\.map\(\(syllable\) =>\s*resolveReadingRowPresentation\(syllable, bgRenderOptions\)/u
+    /readingRow:\s*resolveReadingRowPresentation\(syllable, renderOptions\)/u
+  );
+  assert.match(syllableApplyerSource, /const leadPlan = prepareSyllableGroupRenderPlan\(/u);
+  assert.match(syllableApplyerSource, /const bgPlan = prepareSyllableGroupRenderPlan\(/u);
+  assert.match(
+    syllableApplyerSource,
+    /timing:\s*\{ startTime, endTime, totalDuration: endTime - startTime \}/u
+  );
+  assert.match(
+    syllableApplyerSource,
+    /registerSyllableWord\(word, presentation\.timing, isBackground\)/u
   );
 });
 

@@ -27,6 +27,8 @@ import {
   populateFuriganaReading,
   renderBaseTextWithReadings,
   resolveReadingRowPresentation,
+  shouldRenderAboveReadings,
+  shouldRenderFurigana,
 } from "../ReadingRenderer.ts";
 import type { ReadingRenderOptions, ReadingRowPresentation } from "../ReadingRenderer.ts";
 import type { TimedSyllableEntry, TimedSyllableGroup } from "../../Reading/JapaneseReading.ts";
@@ -136,10 +138,15 @@ const applyWordPositionClasses = (
   }
 };
 
+type SyllableWordTiming = Readonly<{
+  startTime: number;
+  endTime: number;
+  totalDuration: number;
+}>;
+
 const registerSyllableWord = (
   element: HTMLElement,
-  syllable: SyllableData,
-  totalDuration: number,
+  timing: SyllableWordTiming,
   isBackground: boolean
 ): void => {
   const lead = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
@@ -150,14 +157,16 @@ const registerSyllableWord = (
 
   lead.push({
     HTMLElement: element,
-    StartTime: ConvertTime(syllable.StartTime),
-    EndTime: ConvertTime(syllable.EndTime),
-    TotalTime: totalDuration,
+    StartTime: timing.startTime,
+    EndTime: timing.endTime,
+    TotalTime: timing.totalDuration,
     ...(isBackground ? { BGWord: true } : {}),
   });
 };
 
 interface SyllableWordPresentation {
+  readingRow: ReadingRowPresentation;
+  timing: SyllableWordTiming;
   isBackground?: boolean;
   timedFuriganaBaseSweepRange?: { start: number; end: number };
   providerLanguage?: string;
@@ -181,13 +190,13 @@ const createSyllableWord = (
   index: number,
   all: SyllableData[],
   renderOptions: ReadingRenderOptions,
-  presentation: SyllableWordPresentation = {}
+  presentation: SyllableWordPresentation
 ): HTMLElement => {
   const isBackground = presentation.isBackground === true;
   let word = document.createElement("span");
-  const totalDuration = ConvertTime(syllable.EndTime) - ConvertTime(syllable.StartTime);
+  const totalDuration = presentation.timing.totalDuration;
   const letterLength = Array.from(syllable.Text).length;
-  const readingRow = resolveReadingRowPresentation(syllable, renderOptions);
+  const readingRow = presentation.readingRow;
   const reservesReadingRow = readingRow.kind !== "none";
   const rendersEmphasisWithReadings = reservesReadingRow || !!syllable.JapaneseReading;
   const letterCapable =
@@ -255,7 +264,7 @@ const createSyllableWord = (
     presentation.providerLanguage,
     presentation.source,
   );
-  registerSyllableWord(word, syllable, totalDuration, isBackground);
+  registerSyllableWord(word, presentation.timing, isBackground);
   return word;
 };
 
@@ -263,10 +272,101 @@ const EMPTY_TIMED_FURIGANA: TimedFuriganaGroups = { groups: [], bySpanId: new Ma
 const EMPTY_TIMED_ABOVE_READING: TimedAboveReadingGroups = { groups: [], bySpanId: new Map() };
 type TimedRubyGroup = TimedFuriganaGroup | TimedAboveReadingGroup;
 
-const rendersReadingRow = (
-  presentation: ReadingRowPresentation,
-  kind: Exclude<ReadingRowPresentation["kind"], "none">
-): boolean => presentation.kind === kind && presentation.state === "rendered";
+type SyllableWordRenderPlan = Readonly<{
+  syllable: SyllableData;
+  index: number;
+  timing: SyllableWordTiming;
+  readingRow: ReadingRowPresentation;
+  renderOptions: ReadingRenderOptions;
+  timedFuriganaGroup?: TimedFuriganaGroup;
+  timedRubyGroup?: TimedRubyGroup;
+  semanticGroupId?: string;
+  timedFuriganaBaseSweepRange?: { start: number; end: number };
+}>;
+
+export type SyllableGroupRenderPlan = Readonly<{
+  sourceText: string;
+  hasRtl: boolean;
+  usesSemanticGroups: boolean;
+  texts: readonly string[];
+  timedRubyLookup: { bySpanId: ReadonlyMap<string, TimedRubyGroup> };
+  words: readonly SyllableWordRenderPlan[];
+  romanizedText?: string;
+}>;
+
+const prepareSyllableGroupRenderPlan = (
+  group: TimedSyllableGroup,
+  baseRenderOptions: ReadingRenderOptions,
+  sourceText = group.JapaneseReading?.sourceText || joinSyllableDisplayText(group.Syllables)
+): SyllableGroupRenderPlan => {
+  const groupHasFurigana = shouldRenderFurigana(group, baseRenderOptions);
+  const groupHasAboveReading = shouldRenderAboveReadings(group, baseRenderOptions);
+  const hasFurigana =
+    groupHasFurigana ||
+    group.Syllables.some((syllable) => shouldRenderFurigana(syllable, baseRenderOptions));
+  const hasAboveReading =
+    groupHasAboveReading ||
+    group.Syllables.some((syllable) => shouldRenderAboveReadings(syllable, baseRenderOptions));
+  const reservedReadingRow = hasAboveReading
+    ? "pinyinAbove"
+    : hasFurigana
+      ? "furigana"
+      : undefined;
+  const groupRenderOptions = {
+    ...baseRenderOptions,
+    reservedReadingRow,
+    primaryScript: group.ReadingRenderPlan?.primaryScript,
+  } satisfies ReadingRenderOptions;
+  const timedFurigana = hasFurigana
+    ? timedFuriganaGroups(group.ReadingRenderPlan)
+    : EMPTY_TIMED_FURIGANA;
+  const timedAboveReading = hasAboveReading
+    ? timedAboveReadingGroups(group.ReadingRenderPlan)
+    : EMPTY_TIMED_ABOVE_READING;
+  const logicalGroupIds = timedLogicalGroupIds(group.ReadingRenderPlan);
+  const timedRubyLookup = {
+    bySpanId: new Map<string, TimedRubyGroup>([
+      ...timedFurigana.bySpanId,
+      ...timedAboveReading.bySpanId,
+    ]),
+  };
+
+  return {
+    sourceText,
+    hasRtl: group.Syllables.some((syllable) => isRtl(syllable.Text)),
+    usesSemanticGroups:
+      group.Syllables.some((syllable) => !!syllable.JapaneseReading) &&
+      !!group.ReadingRenderPlan,
+    texts: group.Syllables.map((syllable) => syllable.Text || ""),
+    timedRubyLookup,
+    words: group.Syllables.map((syllable, index) => {
+      const spanId = String(index);
+      const startTime = ConvertTime(syllable.StartTime);
+      const endTime = ConvertTime(syllable.EndTime);
+      const timedFuriganaGroup = timedFurigana.bySpanId.get(spanId);
+      const timedRubyGroup = timedFuriganaGroup ?? timedAboveReading.bySpanId.get(spanId);
+      const renderOptions = {
+        ...groupRenderOptions,
+        aboveReadingSegments: aboveReadingSegmentsForSpan(group.ReadingRenderPlan, spanId),
+        ...(timedFuriganaGroup
+          ? { suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
+          : {}),
+      } satisfies ReadingRenderOptions;
+      return {
+        syllable,
+        index,
+        timing: { startTime, endTime, totalDuration: endTime - startTime },
+        readingRow: resolveReadingRowPresentation(syllable, renderOptions),
+        renderOptions,
+        timedFuriganaGroup,
+        timedRubyGroup,
+        semanticGroupId: logicalGroupIds.get(spanId),
+        timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(spanId),
+      };
+    }),
+    romanizedText: group.RomanizedText || group.TransliteratedText,
+  };
+};
 
 /**
  * One visual ruby drawn once above several timed syllables. Every member
@@ -464,13 +564,13 @@ export function ApplySyllableLyrics(
       startTime: line.Lead.StartTime,
       endTime: line.Lead.EndTime,
     };
-    const leadSourceText =
-      line.Lead.JapaneseReading?.sourceText || joinSyllableDisplayText(line.Lead.Syllables);
+    const leadDisplayText = joinSyllableDisplayText(line.Lead.Syllables);
+    const leadSourceText = line.Lead.JapaneseReading?.sourceText || leadDisplayText;
     lineElem.dataset.spicyLyricsLineId = `lead:${sourceIndex}`;
     lineElem.dataset.spicyLyricsOriginalText = leadSourceText;
     const hanLanguageContext = createHanLanguageContext(
       data,
-      joinSyllableDisplayText(line.Lead.Syllables),
+      leadDisplayText,
       fixHanGlyphVariants
     );
     applyHanLanguageTag(lineElem, hanLanguageContext);
@@ -522,84 +622,42 @@ export function ApplySyllableLyrics(
 
     lineElements.push(lineElem);
 
+    const leadPlan = prepareSyllableGroupRenderPlan(
+      line.Lead,
+      lineRenderOptions,
+      leadSourceText
+    );
+    if (leadPlan.hasRtl) lineElem.classList.add("rtl");
     let currentWordGroup: HTMLSpanElement | null = null;
     let currentSemanticGroupId: string | undefined;
-    const leadReadingRow = resolveReadingRowPresentation(line.Lead, lineRenderOptions);
-    const leadSyllableReadingRows = line.Lead.Syllables.map((syllable) =>
-      resolveReadingRowPresentation(syllable, lineRenderOptions)
-    );
-    const leadHasFurigana =
-      rendersReadingRow(leadReadingRow, "furigana") ||
-      leadSyllableReadingRows.some((presentation) => rendersReadingRow(presentation, "furigana"));
-    const leadHasAboveReading =
-      rendersReadingRow(leadReadingRow, "pinyinAbove") ||
-      leadSyllableReadingRows.some((presentation) =>
-        rendersReadingRow(presentation, "pinyinAbove")
-      );
-    const leadReservedReadingRow = leadHasAboveReading
-      ? "pinyinAbove"
-      : leadHasFurigana
-        ? "furigana"
-        : undefined;
-    const leadUsesSemanticGroups =
-      line.Lead.Syllables.some((s) => !!s.JapaneseReading) && !!line.Lead.ReadingRenderPlan;
-    const leadRenderOptions = {
-      ...lineRenderOptions,
-      reservedReadingRow: leadReservedReadingRow,
-      primaryScript: line.Lead.ReadingRenderPlan?.primaryScript,
-    } satisfies ReadingRenderOptions;
-    const leadLogicalGroupIds = timedLogicalGroupIds(line.Lead.ReadingRenderPlan);
-    const leadTimedFurigana = leadHasFurigana
-      ? timedFuriganaGroups(line.Lead.ReadingRenderPlan)
-      : EMPTY_TIMED_FURIGANA;
-    const leadTimedAboveReading = leadHasAboveReading
-      ? timedAboveReadingGroups(line.Lead.ReadingRenderPlan)
-      : EMPTY_TIMED_ABOVE_READING;
-    const leadTimedRubyLookup = {
-      bySpanId: new Map<string, TimedRubyGroup>([
-        ...leadTimedFurigana.bySpanId,
-        ...leadTimedAboveReading.bySpanId,
-      ]),
-    };
-    const leadTexts = line.Lead.Syllables.map((s) => s.Text || "");
     const leadTimedRubyState = createTimedRubyRenderState();
 
-    line.Lead.Syllables.forEach((lead, iL, aL) => {
-      if (isRtl(lead.Text) && !lineElem.classList.contains("rtl")) {
-        lineElem.classList.add("rtl");
-      }
-
+    leadPlan.words.forEach((wordPlan) => {
+      const { syllable: lead, index: iL } = wordPlan;
       // Ruby crossing timed syllables is drawn once above a display group.
       // Exact full-owner Furigana compounds project the existing group sweep
       // across their base; source timing and partial-owner geometry stay
       // unchanged. The line is never collapsed.
-      const timedFuriganaGroup = leadTimedFurigana.bySpanId.get(String(iL));
-      const timedAboveReadingGroup = leadTimedAboveReading.bySpanId.get(String(iL));
-      const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
-      const wordRenderOptions = {
-        ...leadRenderOptions,
-        aboveReadingSegments: aboveReadingSegmentsForSpan(line.Lead.ReadingRenderPlan, String(iL)),
-      };
       const word = createSyllableWord(
         lead,
         iL,
-        aL,
-        timedFuriganaGroup
-          ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-          : wordRenderOptions,
+        line.Lead.Syllables,
+        wordPlan.renderOptions,
         {
+          readingRow: wordPlan.readingRow,
+          timing: wordPlan.timing,
           providerLanguage: data.ProviderLanguage,
           source: data.source,
-          timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(iL)),
+          timedFuriganaBaseSweepRange: wordPlan.timedFuriganaBaseSweepRange,
         }
       );
-      if (timedRubyGroup) {
+      if (wordPlan.timedRubyGroup) {
         appendTimedRubyMember(
           lineElem,
           word,
           lead,
           String(iL),
-          timedRubyGroup,
+          wordPlan.timedRubyGroup,
           leadTimedRubyState
         );
         currentWordGroup = null;
@@ -611,7 +669,12 @@ export function ApplySyllableLyrics(
       if (
         leadTimedRubyState.root &&
         !(lead.Text || "").trim() &&
-        timedGroupContinuesAt(leadTexts, leadTimedRubyLookup, iL + 1, leadTimedRubyState.groupId)
+        timedGroupContinuesAt(
+          leadPlan.texts,
+          leadPlan.timedRubyLookup,
+          iL + 1,
+          leadTimedRubyState.groupId
+        )
       ) {
         leadTimedRubyState.root.appendChild(word);
         currentWordGroup = null;
@@ -620,8 +683,8 @@ export function ApplySyllableLyrics(
       }
       resetTimedRubyRenderState(leadTimedRubyState);
 
-      const semanticGroupId = leadLogicalGroupIds.get(String(iL));
-      if (leadUsesSemanticGroups && semanticGroupId) {
+      const semanticGroupId = wordPlan.semanticGroupId;
+      if (leadPlan.usesSemanticGroups && semanticGroupId) {
         if (!currentWordGroup || semanticGroupId !== currentSemanticGroupId) {
           currentWordGroup = document.createElement("span");
           currentWordGroup.classList.add("word-group", "semantic-word-group");
@@ -630,18 +693,23 @@ export function ApplySyllableLyrics(
         }
         currentWordGroup.appendChild(word);
       } else {
-        currentWordGroup = appendGroupedWord(lineElem, word, lead, aL[iL - 1], currentWordGroup);
+        currentWordGroup = appendGroupedWord(
+          lineElem,
+          word,
+          lead,
+          line.Lead.Syllables[iL - 1],
+          currentWordGroup
+        );
       }
     });
     packAdjacentFuriganaClusters(lineElem.querySelectorAll<HTMLElement>(".lyric-base-run"));
 
-    const leadRomanizedText = line.Lead.RomanizedText || line.Lead.TransliteratedText;
     const leadEntries = LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead;
     leadLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
       lineElem,
       line.Lead.Syllables,
-      leadSourceText,
-      leadRomanizedText,
+      leadPlan.sourceText,
+      leadPlan.romanizedText,
       line.Lead.ProviderTranslatedText,
       line.Lead.TranslatedText,
       leadEntries,
@@ -657,6 +725,7 @@ export function ApplySyllableLyrics(
           ...lineRenderOptions,
           oppositeAligned: line.OppositeAligned,
         };
+        const bgPlan = prepareSyllableGroupRenderPlan(bg, bgRenderOptions);
 
         const backgroundLyricsLine = {
           HTMLElement: lineE,
@@ -671,85 +740,36 @@ export function ApplySyllableLyrics(
         if (line.OppositeAligned) {
           lineE.classList.add("OppositeAligned");
         }
+        if (bgPlan.hasRtl) lineE.classList.add("rtl");
         lineElements.push(lineE);
 
         let currentBGWordGroup: HTMLSpanElement | null = null;
         let currentBGSemanticGroupId: string | undefined;
-        const bgReadingRow = resolveReadingRowPresentation(bg, bgRenderOptions);
-        const bgSyllableReadingRows = bg.Syllables.map((syllable) =>
-          resolveReadingRowPresentation(syllable, bgRenderOptions)
-        );
-        const bgHasFurigana =
-          rendersReadingRow(bgReadingRow, "furigana") ||
-          bgSyllableReadingRows.some((presentation) => rendersReadingRow(presentation, "furigana"));
-        const bgHasAboveReading =
-          rendersReadingRow(bgReadingRow, "pinyinAbove") ||
-          bgSyllableReadingRows.some((presentation) =>
-            rendersReadingRow(presentation, "pinyinAbove")
-          );
-        const bgReservedReadingRow = bgHasAboveReading
-          ? "pinyinAbove"
-          : bgHasFurigana
-            ? "furigana"
-            : undefined;
-        const bgUsesSemanticGroups =
-          bg.Syllables.some((s) => !!s.JapaneseReading) && !!bg.ReadingRenderPlan;
-        const bgWordRenderOptions = {
-          ...bgRenderOptions,
-          reservedReadingRow: bgReservedReadingRow,
-          primaryScript: bg.ReadingRenderPlan?.primaryScript,
-        } satisfies ReadingRenderOptions;
-        const bgSourceText =
-          bg.JapaneseReading?.sourceText || joinSyllableDisplayText(bg.Syllables);
-        const bgLogicalGroupIds = timedLogicalGroupIds(bg.ReadingRenderPlan);
-        const bgTimedFurigana = bgHasFurigana
-          ? timedFuriganaGroups(bg.ReadingRenderPlan)
-          : EMPTY_TIMED_FURIGANA;
-        const bgTimedAboveReading = bgHasAboveReading
-          ? timedAboveReadingGroups(bg.ReadingRenderPlan)
-          : EMPTY_TIMED_ABOVE_READING;
-        const bgTimedRubyLookup = {
-          bySpanId: new Map<string, TimedRubyGroup>([
-            ...bgTimedFurigana.bySpanId,
-            ...bgTimedAboveReading.bySpanId,
-          ]),
-        };
-        const bgTexts = bg.Syllables.map((s) => s.Text || "");
         const bgTimedRubyState = createTimedRubyRenderState();
 
-        bg.Syllables.forEach((bw, bI, bA) => {
-          if (isRtl(bw.Text) && !lineE.classList.contains("rtl")) {
-            lineE.classList.add("rtl");
-          }
-
-          const timedFuriganaGroup = bgTimedFurigana.bySpanId.get(String(bI));
-          const timedAboveReadingGroup = bgTimedAboveReading.bySpanId.get(String(bI));
-          const timedRubyGroup = timedFuriganaGroup ?? timedAboveReadingGroup;
-          const wordRenderOptions = {
-            ...bgWordRenderOptions,
-            aboveReadingSegments: aboveReadingSegmentsForSpan(bg.ReadingRenderPlan, String(bI)),
-          };
+        bgPlan.words.forEach((wordPlan) => {
+          const { syllable: bw, index: bI } = wordPlan;
           const word = createSyllableWord(
             bw,
             bI,
-            bA,
-            timedFuriganaGroup
-              ? { ...wordRenderOptions, suppressedFuriganaKeys: [timedFuriganaGroup.segmentKey] }
-              : wordRenderOptions,
+            bg.Syllables,
+            wordPlan.renderOptions,
             {
+              readingRow: wordPlan.readingRow,
+              timing: wordPlan.timing,
               isBackground: true,
               providerLanguage: data.ProviderLanguage,
               source: data.source,
-              timedFuriganaBaseSweepRange: timedFuriganaGroup?.baseSweepRanges.get(String(bI)),
+              timedFuriganaBaseSweepRange: wordPlan.timedFuriganaBaseSweepRange,
             }
           );
-          if (timedRubyGroup) {
+          if (wordPlan.timedRubyGroup) {
             appendTimedRubyMember(
               lineE,
               word,
               bw,
               String(bI),
-              timedRubyGroup,
+              wordPlan.timedRubyGroup,
               bgTimedRubyState
             );
             currentBGWordGroup = null;
@@ -759,7 +779,12 @@ export function ApplySyllableLyrics(
           if (
             bgTimedRubyState.root &&
             !(bw.Text || "").trim() &&
-            timedGroupContinuesAt(bgTexts, bgTimedRubyLookup, bI + 1, bgTimedRubyState.groupId)
+            timedGroupContinuesAt(
+              bgPlan.texts,
+              bgPlan.timedRubyLookup,
+              bI + 1,
+              bgTimedRubyState.groupId
+            )
           ) {
             bgTimedRubyState.root.appendChild(word);
             currentBGWordGroup = null;
@@ -768,8 +793,8 @@ export function ApplySyllableLyrics(
           }
           resetTimedRubyRenderState(bgTimedRubyState);
 
-          const semanticGroupId = bgLogicalGroupIds.get(String(bI));
-          if (bgUsesSemanticGroups && semanticGroupId) {
+          const semanticGroupId = wordPlan.semanticGroupId;
+          if (bgPlan.usesSemanticGroups && semanticGroupId) {
             if (!currentBGWordGroup || semanticGroupId !== currentBGSemanticGroupId) {
               currentBGWordGroup = document.createElement("span");
               currentBGWordGroup.classList.add("word-group", "semantic-word-group");
@@ -778,20 +803,25 @@ export function ApplySyllableLyrics(
             }
             currentBGWordGroup.appendChild(word);
           } else {
-            currentBGWordGroup = appendGroupedWord(lineE, word, bw, bA[bI - 1], currentBGWordGroup);
+            currentBGWordGroup = appendGroupedWord(
+              lineE,
+              word,
+              bw,
+              bg.Syllables[bI - 1],
+              currentBGWordGroup
+            );
           }
         });
         packAdjacentFuriganaClusters(lineE.querySelectorAll<HTMLElement>(".lyric-base-run"));
 
-        const bgRomanizedText = bg.RomanizedText || bg.TransliteratedText;
         const allEntries =
           LyricsObject.Types.Syllable.Lines[CurrentLineLyricsObject]?.Syllables?.Lead || [];
         const bgEntries = allEntries.filter((entry: any) => entry.BGWord);
         backgroundLyricsLine.HasExtraSidecars = appendSyllableRomanizedBelow(
           lineE,
           bg.Syllables,
-          bgSourceText,
-          bgRomanizedText,
+          bgPlan.sourceText,
+          bgPlan.romanizedText,
           bg.ProviderTranslatedText,
           bg.TranslatedText,
           bgEntries,
