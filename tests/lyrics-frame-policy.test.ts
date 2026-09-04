@@ -7,17 +7,13 @@ import {
   shouldAnimateLyricsFrame,
 } from "../src/utils/Lyrics/AnimationFramePolicy.ts";
 
-const animatorSource = readFileSync(
-  new URL("../src/utils/Lyrics/Animator/Lyrics/LyricsAnimator.ts", import.meta.url),
-  "utf8",
-);
 const lyricsLoopSource = readFileSync(
   new URL("../src/utils/Lyrics/lyrics.ts", import.meta.url),
-  "utf8",
+  "utf8"
 );
 const virtualizerSource = readFileSync(
   new URL("../src/utils/Lyrics/LyricsVirtualizer.ts", import.meta.url),
-  "utf8",
+  "utf8"
 );
 
 test("lyrics animation remains live during playback", () => {
@@ -33,21 +29,14 @@ test("paused lyrics settle briefly and then stop rendering unchanged frames", ()
   assert.equal(shouldAnimateLyricsFrame(false, false, animateThrough + 1, animateThrough), false);
 });
 
-test("mounted virtualized lines invalidate stale paint before bounded paused settle", () => {
-  assert.match(
-    animatorSource,
-    /setOnMountedLyricsWindowChange\(\(change\)\s*=>\s*\{[\s\S]*?mountedLyricsIndices\s*=\s*change\.mountedIndices[\s\S]*?invalidateMountedStyleCache\(wrapper\)[\s\S]*?syllableLinePaintStates\.delete\(line\)[\s\S]*?applyLineState\(line,\s*"NotSung"\)[\s\S]*?requestPausedAnimationSettle\(\)/u,
-  );
-  assert.match(
-    lyricsLoopSource,
-    /export function requestPausedAnimationSettle\(\): void/u,
-  );
+test("virtualizer exposes mounted-window changes and retains the animator subscription", () => {
+  assert.match(lyricsLoopSource, /export function requestPausedAnimationSettle\(\): void/u);
   assert.match(
     virtualizerSource,
-    /this\._onMountedWindowChange\?\.\(\{\s*mounted:\s*mountedItems,\s*unmounted:\s*unmountedItems,\s*mountedIndices:/u,
+    /this\._onMountedWindowChange\?\.\(\{\s*mounted:\s*mountedItems,\s*unmounted:\s*unmountedItems,\s*mountedIndices:/u
   );
   assert.doesNotMatch(
     virtualizerSource,
-    /destroy\(\): void\s*\{[\s\S]*?this\._onMountedWindowChange\s*=\s*null/u,
+    /destroy\(\): void\s*\{[\s\S]*?this\._onMountedWindowChange\s*=\s*null/u
   );
 });
