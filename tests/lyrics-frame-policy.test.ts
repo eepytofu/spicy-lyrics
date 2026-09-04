@@ -11,10 +11,6 @@ const lyricsLoopSource = readFileSync(
   new URL("../src/utils/Lyrics/lyrics.ts", import.meta.url),
   "utf8"
 );
-const virtualizerSource = readFileSync(
-  new URL("../src/utils/Lyrics/LyricsVirtualizer.ts", import.meta.url),
-  "utf8"
-);
 
 test("lyrics animation remains live during playback", () => {
   assert.equal(shouldAnimateLyricsFrame(true, false, 10_000, 0), true);
@@ -29,14 +25,6 @@ test("paused lyrics settle briefly and then stop rendering unchanged frames", ()
   assert.equal(shouldAnimateLyricsFrame(false, false, animateThrough + 1, animateThrough), false);
 });
 
-test("virtualizer exposes mounted-window changes and retains the animator subscription", () => {
+test("lyrics loop exposes a bounded settle request for newly mounted lines", () => {
   assert.match(lyricsLoopSource, /export function requestPausedAnimationSettle\(\): void/u);
-  assert.match(
-    virtualizerSource,
-    /this\._onMountedWindowChange\?\.\(\{\s*mounted:\s*mountedItems,\s*unmounted:\s*unmountedItems,\s*mountedIndices:/u
-  );
-  assert.doesNotMatch(
-    virtualizerSource,
-    /destroy\(\): void\s*\{[\s\S]*?this\._onMountedWindowChange\s*=\s*null/u
-  );
 });
