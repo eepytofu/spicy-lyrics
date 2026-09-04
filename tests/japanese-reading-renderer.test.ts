@@ -1036,7 +1036,6 @@ test("Japanese syllable emphasis keeps rendered base runs in every display mode"
 });
 
 test("timed syllable rendering keeps one Above romaji group across Kana owners", () => {
-  assert.match(syllableApplyerSource, /timedAboveReadingGroups\(/u);
   assert.match(syllableApplyerSource, /"timed-above-reading-group"/u);
   assert.match(syllableApplyerSource, /"above-reading-text"/u);
   assert.match(
@@ -1044,16 +1043,8 @@ test("timed syllable rendering keeps one Above romaji group across Kana owners",
     /"has-reading-row",\s*"reading-row-rendered",[\s\S]*?"timed-above-reading-group"/u
   );
   assert.match(syllableApplyerSource, /word\.querySelector\("\.above-reading-plain-cluster"\)/u);
-  assert.match(
-    syllableApplyerSource,
-    /readingRow:\s*resolveReadingRowPresentation\(syllable, renderOptions\)/u
-  );
   assert.match(syllableApplyerSource, /const leadPlan = prepareSyllableGroupRenderPlan\(/u);
   assert.match(syllableApplyerSource, /const bgPlan = prepareSyllableGroupRenderPlan\(/u);
-  assert.match(
-    syllableApplyerSource,
-    /timing:\s*\{ startTime, endTime, totalDuration: endTime - startTime \}/u
-  );
   assert.match(
     syllableApplyerSource,
     /registerSyllableWord\(word, presentation\.timing, isBackground\)/u
@@ -1141,7 +1132,7 @@ test("pending Pinyin Above reserves the ruby row without a Below skeleton", () =
     /chineseDocument: \(data as any\)\.DetectedChinese === true/u
   );
   assert.match(syllableApplyerSource, /EmphasizeRenderedUnits\(renderedEmphasisUnits\(word\)/u);
-  assert.match(syllableApplyerSource, /resolveReadingRowPresentation\(syllable, renderOptions\)/u);
+  assert.match(syllableApplyerSource, /const readingRow = presentation\.readingRow/u);
   assert.match(syllableApplyerSource, /!run\.classList\.contains\("lyric-base-synthetic-gap"\)/u);
 
   $pinyinPlacement.set("below");
