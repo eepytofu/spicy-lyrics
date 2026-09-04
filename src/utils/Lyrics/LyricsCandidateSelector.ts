@@ -78,6 +78,12 @@ export type LyricsSelectionResult = {
 
 type LineSnapshot = { text: string; normalized: string; start?: number; end?: number };
 
+type ComparisonDocument = {
+  lines: LineSnapshot[];
+  text: string;
+  grams?: Map<string, number>;
+};
+
 const STATIC_LYRICS_PENALTY = 15;
 const NATIVE_TITLE_RANKING_MATCH_CAP = 90;
 
@@ -143,12 +149,19 @@ function ngrams(value: string, width = 2): Map<string, number> {
 }
 
 export function lyricsTextSimilarity(left: any, right: any): number {
-  const leftText = lyricsLineSnapshots(left).map((line) => line.normalized).join("");
-  const rightText = lyricsLineSnapshots(right).map((line) => line.normalized).join("");
-  if (!leftText || !rightText) return 0;
-  if (leftText === rightText) return 1;
-  const leftGrams = ngrams(leftText);
-  const rightGrams = ngrams(rightText);
+  return comparisonTextSimilarity(prepareComparisonDocument(left), prepareComparisonDocument(right));
+}
+
+function prepareComparisonDocument(lyrics: any): ComparisonDocument {
+  const lines = lyricsLineSnapshots(lyrics);
+  return { lines, text: lines.map((line) => line.normalized).join("") };
+}
+
+function comparisonTextSimilarity(left: ComparisonDocument, right: ComparisonDocument): number {
+  if (!left.text || !right.text) return 0;
+  if (left.text === right.text) return 1;
+  const leftGrams = left.grams ??= ngrams(left.text);
+  const rightGrams = right.grams ??= ngrams(right.text);
   let overlap = 0;
   let leftCount = 0;
   let rightCount = 0;
@@ -158,10 +171,36 @@ export function lyricsTextSimilarity(left: any, right: any): number {
   return leftCount + rightCount ? (2 * overlap) / (leftCount + rightCount) : 0;
 }
 
-function structuralTimingScore(candidate: LyricsCandidate, durationMs: number): number {
+/** Selection-local data only: later peer arrivals and source edits must be reassessed. */
+class CandidateComparison {
+  private readonly documents = new Map<unknown, ComparisonDocument>();
+  private readonly similarities = new Map<ComparisonDocument, Map<ComparisonDocument, number>>();
+
+  document(lyrics: any): ComparisonDocument {
+    let document = this.documents.get(lyrics);
+    if (!document) {
+      document = prepareComparisonDocument(lyrics);
+      this.documents.set(lyrics, document);
+    }
+    return document;
+  }
+
+  similarity(left: any, right: any): number {
+    const a = this.document(left);
+    const b = this.document(right);
+    const cached = this.similarities.get(a)?.get(b) ?? this.similarities.get(b)?.get(a);
+    if (cached !== undefined) return cached;
+    const value = comparisonTextSimilarity(a, b);
+    let peers = this.similarities.get(a);
+    if (!peers) this.similarities.set(a, peers = new Map());
+    peers.set(b, value);
+    return value;
+  }
+}
+
+function structuralTimingScore(candidate: LyricsCandidate, durationMs: number, lines: LineSnapshot[]): number {
   const lyrics = candidate.lyrics;
-  if (lyrics?.Type === "Static") return lyricsLineSnapshots(lyrics).length >= 3 ? 55 : 25;
-  const lines = lyricsLineSnapshots(lyrics);
+  if (lyrics?.Type === "Static") return lines.length >= 3 ? 55 : 25;
   if (!lines.length) return 0;
   const duration = Math.max(1, durationMs / 1000);
   let invalid = 0;
@@ -210,14 +249,14 @@ function median(values: number[]): number {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function timingAgreementScore(candidate: LyricsCandidate, peers: LyricsCandidate[]): number {
-  const candidateLines = lyricsLineSnapshots(candidate.lyrics);
+function timingAgreementScore(candidate: LyricsCandidate, peers: LyricsCandidate[], comparison: CandidateComparison): number {
+  const candidateLines = comparison.document(candidate.lyrics).lines;
   const peerScores: number[] = [];
   for (const peer of peers) {
-    if (peer === candidate || lyricsTextSimilarity(candidate.lyrics, peer.lyrics) < 0.58) continue;
+    if (peer === candidate || comparison.similarity(candidate.lyrics, peer.lyrics) < 0.58) continue;
     const deltas: number[] = [];
     const peerBuckets = new Map<string, number[]>();
-    for (const line of lyricsLineSnapshots(peer.lyrics)) {
+    for (const line of comparison.document(peer.lyrics).lines) {
       if (line.normalized.length < 4 || line.start === undefined) continue;
       const bucket = peerBuckets.get(line.normalized) ?? [];
       bucket.push(line.start);
@@ -277,10 +316,10 @@ function rankingMatchScore(match: LyricsMatchMetadata | undefined, providerScore
   return Math.max(providerScore, Math.min(NATIVE_TITLE_RANKING_MATCH_CAP, primaryIdentityScore));
 }
 
-function agreementScore(candidate: LyricsCandidate, candidates: LyricsCandidate[]): number {
+function agreementScore(candidate: LyricsCandidate, candidates: LyricsCandidate[], comparison: CandidateComparison): number {
   const similarities = candidates
     .filter((peer) => peer !== candidate)
-    .map((peer) => lyricsTextSimilarity(candidate.lyrics, peer.lyrics))
+    .map((peer) => comparison.similarity(candidate.lyrics, peer.lyrics))
     .sort((a, b) => b - a);
   if (!similarities.length) return 65;
   const agreeing = similarities.filter((similarity) => similarity >= 0.58);
@@ -348,13 +387,14 @@ function reasonList(
 }
 
 export function assessLyricsCandidates(candidates: LyricsCandidate[], durationMs: number): LyricsCandidateAssessment[] {
+  const comparison = new CandidateComparison();
   return candidates.map((candidate) => {
     const providerTrack = matchScore(candidate.match);
     const track = rankingMatchScore(candidate.match, providerTrack);
-    const structural = structuralTimingScore(candidate, durationMs);
-    const timingAgreement = timingAgreementScore(candidate, candidates);
+    const structural = structuralTimingScore(candidate, durationMs, comparison.document(candidate.lyrics).lines);
+    const timingAgreement = timingAgreementScore(candidate, candidates, comparison);
     const timing = structural * 0.7 + timingAgreement * 0.3;
-    const agreement = agreementScore(candidate, candidates);
+    const agreement = agreementScore(candidate, candidates, comparison);
     const detail = syncDetailScore(candidate.lyrics);
     const format: LyricsCandidateAssessment["format"] = ["Syllable", "Line", "Static"].includes(candidate.lyrics?.Type) ? candidate.lyrics.Type : "Unknown";
     const priority = clamp(100 - Math.max(0, candidate.orderIndex) * 10);

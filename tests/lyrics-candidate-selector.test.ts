@@ -323,3 +323,60 @@ test("all modes return an empty diagnostic result when no provider succeeds", ()
     assert.deepEqual(result.diagnostics.candidates, []);
   }
 });
+
+// Constructed fixtures characterize comparison lifetime and work, not lyric accuracy.
+test("assessment reads each source row once even when several peers share a document", () => {
+  let reads = 0;
+  const lyrics = lineLyrics(correctRows);
+  for (const row of lyrics.Content) {
+    const text = row.Text;
+    Object.defineProperty(row, "Text", { get: () => { reads++; return text; } });
+  }
+  const entries = [
+    candidate("one", 0, lyrics),
+    candidate("two", 1, lyrics),
+    candidate("three", 2, lineLyrics(correctRows)),
+  ];
+  selectLyricsCandidate(entries, 240_000, "smart");
+  assert.equal(reads, correctRows.length);
+});
+
+test("comparison data expires after each selection and never annotates source objects", () => {
+  const entries = [
+    candidate("one", 0, lineLyrics(correctRows)),
+    candidate("two", 1, lineLyrics(correctRows)),
+  ];
+  const before = structuredClone(entries);
+  const first = selectLyricsCandidate(entries, 240_000, "smart");
+  assert.deepEqual(entries, before);
+  entries[1].lyrics.Content = lineLyrics(wrongRows).Content;
+  const changed = selectLyricsCandidate(entries, 240_000, "smart");
+  const fresh = selectLyricsCandidate(structuredClone(entries), 240_000, "smart");
+  assert.deepEqual(changed.diagnostics, fresh.diagnostics);
+  assert.notDeepEqual(changed.diagnostics, first.diagnostics);
+});
+
+test("late peers recompute diagnostics even when the Sync Type First winner stays fixed", () => {
+  const winner = candidate("first", 0, wordLyrics(correctRows), 1);
+  const initial = selectLyricsCandidate([winner], 240_000, "syncType");
+  const completed = selectLyricsCandidate([
+    winner, candidate("late", 1, lineLyrics(correctRows), 1),
+  ], 240_000, "syncType");
+  assert.equal(initial.candidate, winner);
+  assert.equal(completed.candidate, winner);
+  assert.equal(initial.diagnostics.candidates[0].timingAgreementScore, 65);
+  assert.equal(completed.diagnostics.candidates[0].timingAgreementScore, 100);
+  assert.equal(completed.diagnostics.candidates.length, 2);
+});
+
+test("shared documents retain per-provider metadata, self exclusion, and Apple tie behavior", () => {
+  const lyrics = wordLyrics(correctRows);
+  const first = candidate("first", 0, lyrics, .2);
+  const apple = candidate("apple", 1, lyrics, 1);
+  const repeated = selectLyricsCandidate([first, first], 240_000, "smart");
+  assert.equal(repeated.diagnostics.candidates[0].textAgreementScore, 65);
+  assert.equal(selectLyricsCandidate([first, apple], 240_000, "smart").candidate, apple);
+  assert.equal(selectLyricsCandidate([first, apple], 240_000, "syncType").candidate, first);
+  assert.equal(selectLyricsCandidate([first, apple], 240_000, "syncType", true).candidate, apple);
+  assert.equal(selectLyricsCandidate([first, apple], 240_000, "strict").candidate, first);
+});
