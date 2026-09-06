@@ -54,6 +54,7 @@ export type JapaneseReadable = ProviderRubyReadable & {
   RomanizedText?: string;
   ProviderTranslatedText?: string;
   ProviderTranslationLanguage?: string;
+  TranslatedTextLanguage?: string;
   JapaneseReading?: JapaneseReading;
   RomajiSpaceBefore?: boolean;
   JapaneseRomajiTiming?: JapaneseRomajiTimingProjection;

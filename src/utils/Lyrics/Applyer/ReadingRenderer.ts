@@ -7,7 +7,7 @@
 
 import { $chineseTranslitMode, $japaneseReadingMode, $pinyinPlacement } from "../../uiState.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
-import { resolveTranslationSidecars } from "../TranslationSidecar.ts";
+import { resolveTranslationSidecars, type TranslationSidecarEntry } from "../TranslationSidecar.ts";
 import {
   JapaneseKanaTextTest,
   type FuriganaSegment,
@@ -35,6 +35,7 @@ export type ReadingRenderOptions = {
   romanizationPending?: boolean;
   translationPending?: boolean;
   translationLanguage?: string;
+  providerTranslationLanguage?: string;
   showProviderTranslations?: boolean;
   isJapaneseLyrics?: boolean;
   oppositeAligned?: boolean;
@@ -842,11 +843,23 @@ export function appendLineExtras(
   options: ReadingRenderOptions
 ): boolean {
   let appended = appendRomanizedBelow(lineElem, entry, options);
+  appended = appendTranslationSidecars(lineElem, entry.Text || "", entry, options) || appended;
+  return appended;
+}
+
+function appendTranslationSidecars(
+  lineElem: HTMLElement,
+  sourceText: string,
+  entry: TranslationSidecarEntry,
+  options: ReadingRenderOptions,
+): boolean {
   const translations = resolveTranslationSidecars(entry);
-  const providerTranslation = options.showProviderTranslations ? translations.provider : undefined;
+  const providerTranslation = options.showProviderTranslations
+    && (!translations.generic || isMeaningfullyDifferent(translations.provider, translations.generic))
+    ? translations.provider : undefined;
   const appendedProviderTranslation = appendTranslatedBelow(
     lineElem,
-    entry.Text || "",
+    sourceText,
     providerTranslation,
     {
       ...options,
@@ -856,12 +869,11 @@ export function appendLineExtras(
   );
   const appendedGenericTranslation = appendTranslatedBelow(
     lineElem,
-    entry.Text || "",
+    sourceText,
     translations.generic,
-    options
+    { ...options, translationLanguage: translations.genericLanguage ?? options.translationLanguage }
   );
-  appended ||= appendedProviderTranslation || appendedGenericTranslation;
-  return appended;
+  return appendedProviderTranslation || appendedGenericTranslation;
 }
 
 export function appendSyllableRomanizedBelow(
@@ -970,28 +982,13 @@ export function appendSyllableRomanizedBelow(
     }
   }
 
-  const translations = resolveTranslationSidecars({
+  const appendedTranslations = appendTranslationSidecars(lineElem, sourceText, {
     ProviderTranslatedText: groupProviderTranslatedText,
+    ProviderTranslationLanguage: options.providerTranslationLanguage,
     TranslatedText: groupTranslatedText,
-  });
-  const providerTranslation = options.showProviderTranslations ? translations.provider : undefined;
-  const appendedProviderTranslation = appendTranslatedBelow(
-    lineElem,
-    sourceText,
-    providerTranslation,
-    {
-      ...options,
-      translationLanguage: translations.providerLanguage,
-      translationPending: false,
-    }
-  );
-  const appendedGenericTranslation = appendTranslatedBelow(
-    lineElem,
-    sourceText,
-    translations.generic,
-    options
-  );
-  appended ||= appendedProviderTranslation || appendedGenericTranslation;
+    TranslatedTextLanguage: options.translationLanguage,
+  }, options);
+  appended ||= appendedTranslations;
   return appended;
 }
 

@@ -1787,3 +1787,31 @@ test("a provider-owned generic alias stays hidden with the provider toggle off",
   assert.equal(line.children.length, 0);
   assert.equal(appended, false);
 });
+
+for (const targetLanguage of ["id", "ja", "zh-Hans", "zh-Hant", "ko"]) {
+  for (const showProviderTranslations of [false, true]) {
+    test(`external target survives an identical provider sidecar (${targetLanguage}, provider=${showProviderTranslations})`, () => {
+      const line = new FakeElement();
+      appendLineExtras(line as unknown as HTMLElement, {
+        Text: "source fixture",
+        ProviderTranslatedText: "target fixture",
+        ProviderTranslationLanguage: "en",
+        TranslatedText: "target fixture",
+        TranslatedTextLanguage: targetLanguage,
+      }, { useRomanized: false, showProviderTranslations });
+      assert.equal(line.children.length, 1);
+      assert.equal(line.children[0]?.textContent, "target fixture");
+      assert.equal(line.children[0]?.lang, targetLanguage);
+    });
+  }
+}
+
+test("syllable sidecars preserve independent provider and target languages", () => {
+  const line = new FakeElement();
+  appendSyllableRomanizedBelow(line as unknown as HTMLElement, [{ Text: "source fixture" }],
+    "source fixture", undefined, "provider fixture", "target fixture", undefined, undefined,
+    { useRomanized: false, showProviderTranslations: true, providerTranslationLanguage: "ko", translationLanguage: "id" });
+  assert.deepEqual(line.children.map(child => [child.textContent, child.lang]), [
+    ["provider fixture", "ko"], ["target fixture", "id"],
+  ]);
+});

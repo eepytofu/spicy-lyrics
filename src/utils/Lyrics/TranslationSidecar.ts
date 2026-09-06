@@ -5,6 +5,7 @@ export type TranslationSidecarEntry = {
   ProviderTranslatedText?: unknown;
   ProviderTranslationLanguage?: unknown;
   TranslatedText?: unknown;
+  TranslatedTextLanguage?: unknown;
 };
 
 const nonEmptyText = (value: unknown): string | undefined =>
@@ -36,10 +37,14 @@ export function resolveTranslationSidecars(entry: TranslationSidecarEntry): {
   provider?: string;
   providerLanguage?: string;
   generic?: string;
+  genericLanguage?: string;
 } {
   const provider = nonEmptyText(entry.ProviderTranslatedText);
   const candidate = nonEmptyText(entry.TranslatedText);
-  const generic = candidate && (!provider || isMeaningfullyDifferent(candidate, provider))
+  const genericLanguage = normalizeLanguageTag(entry.TranslatedTextLanguage);
+  // An explicitly targeted lane is independently owned, even when its text
+  // matches a provider sidecar. Untagged legacy provider aliases stay deduped.
+  const generic = candidate && (genericLanguage || !provider || isMeaningfullyDifferent(candidate, provider))
     ? candidate
     : undefined;
 
@@ -47,6 +52,7 @@ export function resolveTranslationSidecars(entry: TranslationSidecarEntry): {
     provider,
     providerLanguage: providerTranslationLanguage(provider, entry.ProviderTranslationLanguage),
     generic,
+    ...(genericLanguage ? { genericLanguage } : {}),
   };
 }
 

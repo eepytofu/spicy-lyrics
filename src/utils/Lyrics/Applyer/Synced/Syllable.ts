@@ -494,7 +494,11 @@ const assembleSyllableGroup = (
     group.TranslatedText,
     sidecarEntries,
     group.ReadingRenderPlan,
-    renderOptions
+    {
+      ...renderOptions,
+      translationLanguage: group.TranslatedTextLanguage,
+      providerTranslationLanguage: group.ProviderTranslationLanguage,
+    }
   );
 };
 
