@@ -228,6 +228,22 @@ test("animator paints only the mounted window, including newly mounted active li
   assert.equal(animator.settleRequests, 2);
 });
 
+test("sung letters paint the spring glow exactly through small settling steps", () => {
+  const fixture = row(1000, 2000, "letter");
+  const animator = harness("Syllable", [fixture]);
+  animator.mount([0]);
+  animator.frame(1500);
+  const letter = fixture.line.Syllables.Lead[0].Letters![0] as unknown as {
+    AnimatorStore: { Glow: Spring };
+  };
+  for (let frame = 0; frame < 20; frame++) {
+    animator.frame(2100 + frame * 16);
+    const glow = letter.AnimatorStore.Glow.Step(0);
+    assert.equal(fixture.letterElement.values.get("--text-shadow-blur-radius"), `${4 + 12 * glow}px`);
+    assert.equal(fixture.letterElement.values.get("--text-shadow-opacity"), `${glow * 185}%`);
+  }
+});
+
 for (const simple of [false, true]) {
   test(`remounted words, letters and ruby reset after forward/backward seeks (simple=${simple})`, () => {
     const rows = [row(1000, 2000), row(2000, 3000, "letter"), row(3000, 4000, "dot")];

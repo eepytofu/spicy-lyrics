@@ -1484,13 +1484,13 @@ export function Animate(position: number): void {
                   letter.HTMLElement,
                   "--text-shadow-blur-radius",
                   `${4 + 12 * currentGlow}px`,
-                  0.5,
+                  0,
                 );
                 setStyleIfChanged(
                   letter.HTMLElement,
                   "--text-shadow-opacity",
                   `${currentGlow * LetterGlowMultiplier_Opacity}%`,
-                  1,
+                  0,
                 );
               }
             }
