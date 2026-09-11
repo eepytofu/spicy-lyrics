@@ -1,6 +1,6 @@
 import type { ProviderAcquisitionOutcome } from "./ProviderAcquisition.ts";
 
-export type SpicyAuthRejectionStatus = 401 | 403;
+export type SpicyAuthRejectionStatus = 401;
 
 export type SpicyQueryAttempt<Outcome extends ProviderAcquisitionOutcome<unknown>> =
   | { kind: "auth-rejected"; status: SpicyAuthRejectionStatus }
@@ -11,17 +11,23 @@ export type SpicyAuthRetryDependencies<
 > = {
   signal: AbortSignal;
   resolveToken: () => Promise<string>;
-  invalidateToken: () => void;
+  invalidateToken: (rejectedToken: string) => void;
   runAttempt: (
     token: string,
     signal: AbortSignal,
   ) => Promise<SpicyQueryAttempt<Outcome>>;
 };
 
-export function isSpicyAuthRejectionStatus(
+export function isSpicyEnvelopeAuthRejectionStatus(
   status: number,
 ): status is SpicyAuthRejectionStatus {
-  return status === 401 || status === 403;
+  return status === 401;
+}
+
+export function classifySpicyTransportFailure(
+  status: number,
+): "rate-limited" | "upstream-error" {
+  return status === 429 ? "rate-limited" : "upstream-error";
 }
 
 export async function acquireSpicyOutcomeWithBoundedAuthRetry<
@@ -34,12 +40,26 @@ export async function acquireSpicyOutcomeWithBoundedAuthRetry<
   if (attempt.kind !== "auth-rejected") return attempt.outcome;
   if (dependencies.signal.aborted) return { kind: "aborted" } as Outcome;
 
-  dependencies.invalidateToken();
-  token = await dependencies.resolveToken();
+  const rejectedToken = token;
+  const rejectedStatus = attempt.status;
+  dependencies.invalidateToken(rejectedToken);
+  try {
+    token = await dependencies.resolveToken();
+  } catch {
+    return dependencies.signal.aborted
+      ? { kind: "aborted" } as Outcome
+      : { kind: "upstream-error", status: rejectedStatus } as Outcome;
+  }
   if (dependencies.signal.aborted) return { kind: "aborted" } as Outcome;
+  if (token === rejectedToken) {
+    return { kind: "upstream-error", status: rejectedStatus } as Outcome;
+  }
 
   attempt = await dependencies.runAttempt(token, dependencies.signal);
-  return attempt.kind === "auth-rejected"
-    ? { kind: "upstream-error", status: attempt.status } as Outcome
+  if (attempt.kind === "auth-rejected") {
+    return { kind: "upstream-error", status: rejectedStatus } as Outcome;
+  }
+  return attempt.outcome.kind === "service-unavailable"
+    ? { kind: "upstream-error", status: rejectedStatus } as Outcome
     : attempt.outcome;
 }

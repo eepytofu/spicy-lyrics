@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   createSpotifyTokenProvider,
   SpotifyTokenAcquisitionError,
+  TOKEN_EXPIRY_SAFETY_MARGIN_MS,
 } from "../src/components/Global/SpotifyTokenProvider.ts";
 
 const NOW = 1_000_000;
@@ -32,7 +33,7 @@ test("unauthorized anonymous and near-expiry modern states fall back", async () 
   for (const state of [
     { isAuthorized: false, token: { accessToken: "blocked", accessTokenExpirationTimestampMs: FRESH } },
     { isAuthorized: true, token: { accessToken: "anonymous", accessTokenExpirationTimestampMs: FRESH, isAnonymous: true } },
-    { isAuthorized: true, token: { accessToken: "expiring", accessTokenExpirationTimestampMs: NOW + 30_000 } },
+    { isAuthorized: true, token: { accessToken: "expiring", accessTokenExpirationTimestampMs: NOW + TOKEN_EXPIRY_SAFETY_MARGIN_MS } },
   ]) {
     const provider = createSpotifyTokenProvider({
       now: () => NOW,
@@ -43,6 +44,69 @@ test("unauthorized anonymous and near-expiry modern states fall back", async () 
     });
     assert.equal(await provider.getToken(), "fallback");
   }
+});
+
+test("current AuthorizationAPI state is checked before a cached token", async () => {
+  let token = "first";
+  const provider = createSpotifyTokenProvider({
+    now: () => NOW,
+    sources: {
+      readAuthorizationApiState: () => ({
+        isAuthorized: true,
+        token: { accessToken: token, accessTokenExpirationTimestampMs: FRESH },
+      }),
+    },
+  });
+
+  assert.equal(await provider.getToken(), "first");
+  token = "rotated";
+  assert.equal(await provider.getToken(), "rotated");
+});
+
+test("a rejected token is skipped across every source until one rotates", async () => {
+  let sessionToken = "rejected";
+  const provider = createSpotifyTokenProvider({
+    now: () => NOW,
+    sources: {
+      readAuthorizationApiState: () => ({
+        isAuthorized: true,
+        token: { accessToken: "rejected", accessTokenExpirationTimestampMs: FRESH },
+      }),
+      readLegacyCosmosToken: () => ({ accessToken: "rejected" }),
+      readSessionTokenState: () => ({ accessToken: sessionToken }),
+    },
+  });
+
+  assert.equal(await provider.getToken(), "rejected");
+  provider.invalidate("rejected");
+  await assert.rejects(provider.getToken(), SpotifyTokenAcquisitionError);
+  sessionToken = "fresh";
+  assert.equal(await provider.getToken(), "fresh");
+});
+
+test("a late rejection of an older token preserves a newer cache entry", async () => {
+  let authorizationToken = "old";
+  const provider = createSpotifyTokenProvider({
+    now: () => NOW,
+    sources: {
+      readAuthorizationApiState: () => authorizationToken
+        ? {
+            isAuthorized: true,
+            token: {
+              accessToken: authorizationToken,
+              accessTokenExpirationTimestampMs: FRESH,
+            },
+          }
+        : undefined,
+    },
+  });
+
+  assert.equal(await provider.getToken(), "old");
+  authorizationToken = "new";
+  assert.equal(await provider.getToken(), "new");
+  provider.invalidate("old");
+  authorizationToken = "";
+  assert.equal(await provider.getToken(), "new");
 });
 
 test("source rejection falls through and failed refreshes can recover", async () => {

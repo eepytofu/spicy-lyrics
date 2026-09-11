@@ -49,7 +49,8 @@ const tokenProvider = createSpotifyTokenProvider({
 });
 
 const GetSpotifyAccessToken = (): Promise<string> => tokenProvider.getToken();
-const InvalidateSpotifyAccessToken = (): void => tokenProvider.invalidate();
+const InvalidateSpotifyAccessToken = (rejectedToken?: string): void =>
+  tokenProvider.invalidate(rejectedToken);
 
 const Platform = {
   OnSpotifyReady,

@@ -54,7 +54,7 @@ test("Spotify token requests reject cleanly, retry, deduplicate, and refresh nea
   assert.equal(concurrentCalls, 1);
   resolveToken({
     accessToken: "shared-token",
-    expiresAtTime: Date.now() + 60_000,
+    expiresAtTime: Date.now() + 120_000,
     tokenType: "Bearer",
   });
   assert.deepEqual(await Promise.all([first, second]), ["shared-token", "shared-token"]);
@@ -64,7 +64,7 @@ test("Spotify token requests reject cleanly, retry, deduplicate, and refresh nea
     refreshCalls += 1;
     return {
       accessToken: `token-${refreshCalls}`,
-      expiresAtTime: Date.now() + (refreshCalls === 1 ? 100 : 60_000),
+      expiresAtTime: Date.now() + (refreshCalls === 1 ? 100 : 120_000),
       tokenType: "Bearer",
     };
   });
@@ -78,7 +78,7 @@ test("Spotify token requests retain the Session fallback for missing resolvers",
     async () => { throw new Error("Resolver not found"); },
     {
       accessToken: "session-token",
-      accessTokenExpirationTimestampMs: Date.now() + 60_000,
+      accessTokenExpirationTimestampMs: Date.now() + 120_000,
     },
   );
 
@@ -97,7 +97,7 @@ test("Spotify token requests prefer the modern AuthorizationAPI", async () => {
       isAuthorized: true,
       token: {
         accessToken: "modern-token",
-        accessTokenExpirationTimestampMs: Date.now() + 60_000,
+        accessTokenExpirationTimestampMs: Date.now() + 120_000,
       },
     },
   );
@@ -110,13 +110,13 @@ test("Spotify token invalidation forces a new OAuth resolver read", async () => 
   let calls = 0;
   const platform = await loadPlatform(async () => ({
     accessToken: `token-${++calls}`,
-    expiresAtTime: Date.now() + 60_000,
+    expiresAtTime: Date.now() + 120_000,
     tokenType: "Bearer",
   }));
 
   assert.equal(await platform.GetSpotifyAccessToken(), "token-1");
   assert.equal(await platform.GetSpotifyAccessToken(), "token-1");
-  platform.InvalidateSpotifyAccessToken();
+  platform.InvalidateSpotifyAccessToken("token-1");
   assert.equal(await platform.GetSpotifyAccessToken(), "token-2");
   assert.equal(calls, 2);
 });
@@ -137,12 +137,12 @@ test("pre-invalidation token refresh cannot overwrite newer cached state", async
 
   resolvers[0]({
     accessToken: "stale-token",
-    expiresAtTime: Date.now() + 60_000,
+    expiresAtTime: Date.now() + 120_000,
     tokenType: "Bearer",
   });
   resolvers[1]({
     accessToken: "current-token",
-    expiresAtTime: Date.now() + 60_000,
+    expiresAtTime: Date.now() + 120_000,
     tokenType: "Bearer",
   });
 

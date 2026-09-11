@@ -70,7 +70,8 @@ import {
 import { cloneProviderReadingEvidenceForProvider } from "./ProviderReadingEvidence.ts";
 import {
   acquireSpicyOutcomeWithBoundedAuthRetry,
-  isSpicyAuthRejectionStatus,
+  classifySpicyTransportFailure,
+  isSpicyEnvelopeAuthRejectionStatus,
   type SpicyQueryAttempt,
 } from "./SpicyAuthRetry.ts";
 import {
@@ -189,10 +190,7 @@ async function spicyQueryAttempt(
       return { kind: "settled", outcome: { kind: "error", error } };
     }
     if (error instanceof QueryHttpError) {
-      if (isSpicyAuthRejectionStatus(error.status)) {
-        return { kind: "auth-rejected", status: error.status };
-      }
-      if (error.status === 429) {
+      if (classifySpicyTransportFailure(error.status) === "rate-limited") {
         return {
           kind: "settled",
           outcome: { kind: "rate-limited", retryAfterMs: error.retryAfterMs },
@@ -208,7 +206,7 @@ async function spicyQueryAttempt(
 
   const result = results.get("0");
   const status = Number(result?.httpStatus ?? 0);
-  if (isSpicyAuthRejectionStatus(status)) {
+  if (isSpicyEnvelopeAuthRejectionStatus(status)) {
     return { kind: "auth-rejected", status };
   }
   if (status === 503) return { kind: "settled", outcome: { kind: "queued" } };
@@ -236,7 +234,8 @@ function spicyRaw(
   return acquireSpicyOutcomeWithBoundedAuthRetry({
     signal,
     resolveToken: () => Platform.GetSpotifyAccessToken(),
-    invalidateToken: () => Platform.InvalidateSpotifyAccessToken(),
+    invalidateToken: (rejectedToken) =>
+      Platform.InvalidateSpotifyAccessToken(rejectedToken),
     runAttempt: (token, attemptSignal) => spicyQueryAttempt(
       id,
       token,

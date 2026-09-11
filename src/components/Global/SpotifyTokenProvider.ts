@@ -1,4 +1,4 @@
-export const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 30_000;
+export const TOKEN_EXPIRY_SAFETY_MARGIN_MS = 60_000;
 
 export type AuthorizationApiTokenState = {
   isAuthorized?: boolean;
@@ -52,6 +52,7 @@ export function createSpotifyTokenProvider(dependencies: SpotifyTokenProviderDep
   const { now, sources } = dependencies;
   let cached: TokenCandidate | undefined;
   let inFlight: Promise<string> | undefined;
+  let rejectedAccessToken: string | undefined;
   let epoch = 0;
 
   const usable = (candidate: TokenCandidate | undefined): candidate is TokenCandidate =>
@@ -97,19 +98,43 @@ export function createSpotifyTokenProvider(dependencies: SpotifyTokenProviderDep
     }
   };
 
+  const acceptable = (
+    candidate: TokenCandidate | undefined,
+  ): candidate is TokenCandidate =>
+    usable(candidate) && candidate.accessToken !== rejectedAccessToken;
+
+  const adopt = (candidate: TokenCandidate, startedAtEpoch: number): string => {
+    if (startedAtEpoch === epoch) {
+      cached = candidate;
+      if (
+        rejectedAccessToken !== undefined
+        && candidate.accessToken !== rejectedAccessToken
+      ) {
+        rejectedAccessToken = undefined;
+      }
+    }
+    return candidate.accessToken;
+  };
+
   const refresh = async (startedAtEpoch: number): Promise<string> => {
-    for (const reader of [authorization, cosmos, session]) {
+    const currentAuthorization = await safeRead(authorization);
+    if (acceptable(currentAuthorization)) {
+      return adopt(currentAuthorization, startedAtEpoch);
+    }
+
+    if (acceptable(cached)) {
+      return adopt(cached, startedAtEpoch);
+    }
+
+    for (const reader of [cosmos, session]) {
       const candidate = await safeRead(reader);
-      if (!candidate) continue;
-      if (startedAtEpoch === epoch) cached = candidate;
-      return candidate.accessToken;
+      if (!acceptable(candidate)) continue;
+      return adopt(candidate, startedAtEpoch);
     }
     throw new SpotifyTokenAcquisitionError();
   };
 
   const getToken = (): Promise<string> => {
-    if (usable(cached)) return Promise.resolve(cached.accessToken);
-    cached = undefined;
     if (inFlight) return inFlight;
     const pending = refresh(epoch).finally(() => {
       if (inFlight === pending) inFlight = undefined;
@@ -118,9 +143,14 @@ export function createSpotifyTokenProvider(dependencies: SpotifyTokenProviderDep
     return pending;
   };
 
-  const invalidate = (): void => {
+  const invalidate = (rejectedToken?: string): void => {
     epoch += 1;
-    cached = undefined;
+    if (nonEmpty(rejectedToken)) {
+      rejectedAccessToken = rejectedToken;
+      if (cached?.accessToken === rejectedToken) cached = undefined;
+    } else {
+      cached = undefined;
+    }
     inFlight = undefined;
   };
 
