@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   acquireSpicyOutcomeWithBoundedAuthRetry,
+  classifySpicyEnvelopeStatus,
   classifySpicyTransportFailure,
   isSpicyEnvelopeAuthRejectionStatus,
 } from "../src/utils/Lyrics/SpicyAuthRetry.ts";
@@ -44,6 +45,15 @@ test("Spicy authentication retry returns the second settled outcome", async () =
 
   assert.deepEqual(result, { kind: "lyrics", result: "lyrics" });
   assert.equal(attempts, 2);
+});
+
+test("envelope 204 is an upstream error rather than a no-match", () => {
+  assert.equal(classifySpicyEnvelopeStatus(200), "success");
+  assert.equal(classifySpicyEnvelopeStatus(204), "upstream-error");
+  assert.equal(classifySpicyEnvelopeStatus(401), "auth-rejected");
+  assert.equal(classifySpicyEnvelopeStatus(404), "no-match");
+  assert.equal(classifySpicyEnvelopeStatus(429), "rate-limited");
+  assert.equal(classifySpicyEnvelopeStatus(503), "queued");
 });
 
 test("Spicy authentication never resends the rejected token", async () => {

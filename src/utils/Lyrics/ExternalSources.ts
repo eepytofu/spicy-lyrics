@@ -70,8 +70,8 @@ import {
 import { cloneProviderReadingEvidenceForProvider } from "./ProviderReadingEvidence.ts";
 import {
   acquireSpicyOutcomeWithBoundedAuthRetry,
+  classifySpicyEnvelopeStatus,
   classifySpicyTransportFailure,
-  isSpicyEnvelopeAuthRejectionStatus,
   type SpicyQueryAttempt,
 } from "./SpicyAuthRetry.ts";
 import {
@@ -206,17 +206,20 @@ async function spicyQueryAttempt(
 
   const result = results.get("0");
   const status = Number(result?.httpStatus ?? 0);
-  if (isSpicyEnvelopeAuthRejectionStatus(status)) {
+  const statusKind = classifySpicyEnvelopeStatus(status);
+  if (statusKind === "auth-rejected") {
     return { kind: "auth-rejected", status };
   }
-  if (status === 503) return { kind: "settled", outcome: { kind: "queued" } };
-  if (status === 404 || status === 204) {
+  if (statusKind === "queued") {
+    return { kind: "settled", outcome: { kind: "queued" } };
+  }
+  if (statusKind === "no-match") {
     return { kind: "settled", outcome: { kind: "no-match" } };
   }
-  if (status === 429) {
+  if (statusKind === "rate-limited") {
     return { kind: "settled", outcome: { kind: "rate-limited" } };
   }
-  if (status !== 200) {
+  if (statusKind === "upstream-error") {
     return { kind: "settled", outcome: { kind: "upstream-error", status } };
   }
 
