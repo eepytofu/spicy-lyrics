@@ -11,3 +11,8 @@ test("the frozen testing API exposes bounded breaker inspect and reset controls"
   assert.match(exposeSource, /retryAfterMs:\s*Math\.max\(0, Number\(state\.retryAfterMs\) \|\| 0\)/u);
   assert.doesNotMatch(exposeSource, /endpoint|accessToken|authorization/i);
 });
+
+test("the frozen testing API exposes the current lyric clock read-only", () => {
+  assert.match(exposeSource, /import GetProgress from "\.\/Gets\/GetProgress";/u);
+  assert.match(exposeSource, /getProgress:\s*\(\) => GetProgress\(\)/u);
+});

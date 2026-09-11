@@ -18,6 +18,14 @@ export interface PlaybackStateReading {
 export interface LocalPositionSyncState {
   anchor: LocalPositionAnchor | null;
   playbackState: PlaybackStateReading | null;
+  rawSource: LocalPositionSourceHealth | null;
+}
+
+export interface LocalPositionSourceHealth {
+  lastPosition: number;
+  lastChangeAt: number;
+  consecutiveChanges: number;
+  usingPlaybackState: boolean;
 }
 
 interface PlayerPositionState {
@@ -34,9 +42,11 @@ interface LocalPositionSample {
 }
 
 export const LOCAL_ANCHOR_RESYNC_THRESHOLD = 1000;
+export const LOCAL_SOURCE_STALL_TIMEOUT = 500;
+export const LOCAL_SOURCE_RECOVERY_STREAK = 3;
 
 export function initialLocalPositionSyncState(): LocalPositionSyncState {
-  return { anchor: null, playbackState: null };
+  return { anchor: null, playbackState: null, rawSource: null };
 }
 
 /**
@@ -71,6 +81,66 @@ export function resolveLocalPositionSample(
     };
   }
 
+  const trackChanged =
+    previous.anchor !== null && previous.anchor.TrackUri !== sample.trackUri;
+  const rawChanged = previous.rawSource?.lastPosition !== sample.sampledPosition;
+  let rawSource: LocalPositionSourceHealth;
+  if (!previous.rawSource || trackChanged) {
+    rawSource = {
+      lastPosition: sample.sampledPosition,
+      lastChangeAt: sample.sampledAt,
+      consecutiveChanges: 0,
+      usingPlaybackState: false,
+    };
+  } else {
+    rawSource = {
+      ...previous.rawSource,
+      lastPosition: sample.sampledPosition,
+      consecutiveChanges: rawChanged
+        ? previous.rawSource.consecutiveChanges + 1
+        : 0,
+      ...(rawChanged ? { lastChangeAt: sample.sampledAt } : {}),
+    };
+  }
+
+  if (sample.isPlaying) {
+    if (
+      rawSource.usingPlaybackState
+      && rawSource.consecutiveChanges >= LOCAL_SOURCE_RECOVERY_STREAK
+    ) {
+      rawSource.usingPlaybackState = false;
+    } else if (
+      sample.sampledAt - rawSource.lastChangeAt > LOCAL_SOURCE_STALL_TIMEOUT
+    ) {
+      rawSource.usingPlaybackState = true;
+    }
+  } else {
+    // Paused playback legitimately freezes the raw source. Preserve the active
+    // source choice, but do not let paused time count toward a new stall.
+    rawSource.lastChangeAt = sample.sampledAt;
+    rawSource.consecutiveChanges = 0;
+  }
+
+  if (
+    rawSource.usingPlaybackState
+    && sample.isPlaying
+    && Number.isFinite(playbackPosition)
+  ) {
+    const anchor = {
+      Position: playbackPosition,
+      SampledAt: sample.sampledAt,
+      TrackUri: sample.trackUri,
+    };
+    return {
+      state: { anchor, playbackState, rawSource },
+      position: {
+        StartedSyncAt: sample.sampledAt,
+        Position: playbackPosition,
+      },
+      stateJumped,
+    };
+  }
+
   const anchorIsStale =
     previous.anchor !== null &&
     sample.isPlaying &&
@@ -88,7 +158,7 @@ export function resolveLocalPositionSample(
       : previous.anchor;
 
   return {
-    state: { anchor, playbackState },
+    state: { anchor, playbackState, rawSource },
     position: {
       StartedSyncAt: anchor.SampledAt,
       Position: anchor.Position,

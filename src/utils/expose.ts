@@ -8,6 +8,7 @@ import { DeepFreeze } from "./utils";
 import { triggerSpicyLyricsFakeUpdate } from "./version/CheckForUpdates";
 import { SPICY_LYRICS_BUILD_MARKER } from "./buildMarker";
 import { BreakerDebug } from "./API/CircuitBreaker";
+import GetProgress from "./Gets/GetProgress";
 
 const inspectQueryBreaker = () => {
     const state = BreakerDebug.state();
@@ -54,6 +55,7 @@ export function exposeToWindow() {
                     return inspectQueryBreaker();
                 },
             },
+            getProgress: () => GetProgress(),
             toaster: toast,
         }
     };
