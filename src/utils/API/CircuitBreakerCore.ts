@@ -1,11 +1,24 @@
 export const BREAKER_FAILURE_THRESHOLD = 2;
-export const BREAKER_LADDER_MS = [120_000, 300_000, 900_000, 1_800_000] as const;
+export const BREAKER_LADDER_MS = [
+  30_000,
+  30_000,
+  30_000,
+  60_000,
+  120_000,
+  120_000,
+  120_000,
+  120_000,
+  120_000,
+  120_000,
+  120_000,
+  120_000,
+  300_000,
+] as const;
 export const BREAKER_LADDER_DECAY_MS = 3_600_000;
 export const BREAKER_PROBE_MIN_INTERVAL_MS = 30_000;
 export const BREAKER_PROBE_STALE_AFTER_MS = 60_000;
+export const BREAKER_OPEN_UNTIL_SANITY_MS = 45 * 60_000;
 
-const LADDER_MAX_MS = BREAKER_LADDER_MS.at(-1)!;
-const OPEN_UNTIL_SANITY_MS = LADDER_MAX_MS * 1.5;
 const TRIP_STATUSES = new Set([403, 408, 425, 429, 500, 502, 503, 504]);
 
 export type BreakerState = {
@@ -65,7 +78,7 @@ export function createCircuitBreaker(
     const now = dependencies.now();
     let changed = false;
 
-    if (state.openUntil - now > OPEN_UNTIL_SANITY_MS) {
+    if (state.openUntil - now > BREAKER_OPEN_UNTIL_SANITY_MS) {
       state.openUntil = 0;
       state.ladderIndex = 0;
       state.lastTripAt = 0;
@@ -168,7 +181,7 @@ export function createCircuitBreaker(
     ];
     const pause = Math.min(
       retryAfterHeaderMs ?? dependencies.jitter(rung, 0.5),
-      OPEN_UNTIL_SANITY_MS,
+      BREAKER_OPEN_UNTIL_SANITY_MS,
     );
     state.openUntil = now + pause;
     state.lastTripAt = now;

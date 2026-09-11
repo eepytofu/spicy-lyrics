@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   BREAKER_LADDER_MS,
+  BREAKER_OPEN_UNTIL_SANITY_MS,
   BREAKER_PROBE_MIN_INTERVAL_MS,
   BREAKER_PROBE_STALE_AFTER_MS,
   createCircuitBreaker,
@@ -31,6 +32,24 @@ function harness(startAt = 100_000) {
   };
 }
 
+test("the 6.3.15 recovery ladder starts quickly and backs off gradually", () => {
+  assert.deepEqual(BREAKER_LADDER_MS, [
+    30_000,
+    30_000,
+    30_000,
+    60_000,
+    120_000,
+    120_000,
+    120_000,
+    120_000,
+    120_000,
+    120_000,
+    120_000,
+    120_000,
+    300_000,
+  ]);
+});
+
 test("two transport failures persist the first breaker window", () => {
   const context = harness();
   context.breaker.settleFailure(context.breaker.acquire(false));
@@ -53,7 +72,10 @@ test("two transport failures persist the first breaker window", () => {
 test("one bounded early probe owns the open-breaker slot", () => {
   const context = harness();
   context.breaker.settleFailure(context.breaker.acquire(false));
-  context.breaker.settleFailure(context.breaker.acquire(false));
+  context.breaker.settleFailure(
+    context.breaker.acquire(false),
+    BREAKER_PROBE_MIN_INTERVAL_MS * 2,
+  );
 
   const probe = context.breaker.acquire(true);
   assert.equal(probe.kind, "earlyProbe");
@@ -105,7 +127,10 @@ test("a failed half-open probe advances the pause ladder", () => {
 test("a canceled probe releases its lease without changing the open window", () => {
   const context = harness();
   context.breaker.settleFailure(context.breaker.acquire(false));
-  context.breaker.settleFailure(context.breaker.acquire(false));
+  context.breaker.settleFailure(
+    context.breaker.acquire(false),
+    BREAKER_PROBE_MIN_INTERVAL_MS * 2,
+  );
   const openUntil = context.state.openUntil;
 
   const canceled = context.breaker.acquire(true);
@@ -119,7 +144,7 @@ test("persisted timestamps are normalized before they can suppress traffic", () 
   const now = 100_000;
   let saves = 0;
   const state: BreakerState = {
-    openUntil: now + BREAKER_LADDER_MS.at(-1)! * 2,
+    openUntil: now + BREAKER_OPEN_UNTIL_SANITY_MS + 1,
     ladderIndex: BREAKER_LADDER_MS.length - 1,
     lastTripAt: now + 1,
     lastProbeAt: now + 1,
@@ -133,6 +158,16 @@ test("persisted timestamps are normalized before they can suppress traffic", () 
   assert.equal(breaker.isOpen(), false);
   assert.deepEqual(state, DEFAULT_BREAKER_STATE);
   assert.equal(saves, 1);
+});
+
+test("a legitimate Retry-After can exceed the final ladder rung", () => {
+  const context = harness();
+  const retryAfterMs = 20 * 60_000;
+  context.breaker.settleFailure(context.breaker.acquire(false));
+  context.breaker.settleFailure(context.breaker.acquire(false), retryAfterMs);
+
+  assert.equal(context.state.openUntil, context.now() + retryAfterMs);
+  assert.equal(context.breaker.retryAfterMs(), retryAfterMs);
 });
 
 test("trip signals and Retry-After parsing stay transport-only", () => {
