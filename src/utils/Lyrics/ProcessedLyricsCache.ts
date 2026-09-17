@@ -5,7 +5,7 @@ export type ProcessedLyricsCacheEntry = Record<string, unknown>;
 
 const processedLyricsStore = GetExpireStore<ProcessedLyricsCacheEntry>(
   "SpicyLyrics_LyricsStore_g1",
-  2,
+  3,
   {
     Unit: "Days",
     Duration: 3,

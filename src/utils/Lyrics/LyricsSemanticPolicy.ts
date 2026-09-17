@@ -4,6 +4,7 @@ import {
   providerInfoKind,
 } from "./ProviderInfo.ts";
 import { isVocalCueEntry } from "./VocalSemantics.ts";
+import { isEmptyLyricsLine } from "./EmptyLines.ts";
 
 export function shouldExcludeFromLyricsMatching(entry: any, text: string): boolean {
   return isProviderInfoMatchingEvidence(entry, text) || isVocalCueEntry(entry);
@@ -49,7 +50,7 @@ export function indexedVisibleLyricsEntries<T>(
   policy: LyricsDisplayPolicy,
 ): IndexedLyricsEntry<T>[] {
   return entries.flatMap((entry, sourceIndex) =>
-    shouldHideLyricsDisplayEntry(semanticEntry(entry), policy)
+    isEmptyLyricsLine(entry) || shouldHideLyricsDisplayEntry(semanticEntry(entry), policy)
       ? []
       : [{ entry, sourceIndex }]);
 }

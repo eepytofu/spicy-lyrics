@@ -149,6 +149,27 @@ test("itunes timing None becomes native Static lyrics without timing fields", ()
   assert.equal("EndTime" in document, false);
 });
 
+test("romanization-only TTML rows survive in every authored timing tier", () => {
+  const namespaces = `xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata" xmlns:itunes="http://music.apple.com/lyric-ttml-internal"`;
+  const roman = `<span ttm:role="x-roman" xml:lang="ja-Latn">romaji only</span>`;
+  const staticDocument = parse(`<tt ${namespaces} itunes:timing="None"><body><div><p>Kept</p><p>${roman}</p><p>   </p></div></body></tt>`);
+  const lineDocument = parse(`<tt ${namespaces} itunes:timing="Line"><body><div><p begin="1s" end="2s">Kept</p><p begin="2s" end="3s">${roman}</p></div></body></tt>`);
+  const syllableDocument = parse(`<tt ${namespaces} itunes:timing="Word"><body><div><p begin="1s" end="2s">${roman}</p></div></body></tt>`);
+
+  assert.equal(staticDocument.Type, "Static");
+  assert.deepEqual(staticDocument.Lines.map((line: any) => line.Text), ["Kept", ""]);
+  assert.equal(staticDocument.Lines[1].TransliteratedText, "romaji only");
+  assert.equal(lineDocument.Type, "Line");
+  assert.equal(lineDocument.Content[1].TransliteratedText, "romaji only");
+  assert.equal(syllableDocument.Type, "Syllable");
+  assert.deepEqual(syllableDocument.Content[0].Lead.Syllables.map((syllable: any) => [
+    syllable.Text,
+    syllable.TransliteratedText,
+    syllable.StartTime,
+    syllable.EndTime,
+  ]), [["", "romaji only", 1, 2]]);
+});
+
 test("no fixture emits a zero-width space", () => {
   for (const name of ["a-ruby-bg-translation", "b-head-sidecar", "c-word-level-roman", "d-line-timed"]) {
     assert.ok(!allText(fixture(name)).includes("​"), `${name} contains U+200B`);

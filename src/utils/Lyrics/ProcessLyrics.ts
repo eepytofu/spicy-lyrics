@@ -88,6 +88,7 @@ import {
 } from "./Processing/Japanese/ProviderJapaneseReading.ts";
 import type { ProviderReadingEvidence } from "./ProviderReadingEvidence.ts";
 import { shouldSkipGeneratedLyricsProcessing } from "./LyricsSemanticPolicy.ts";
+import { stripEmptyLyricsLines } from "./EmptyLines.ts";
 import {
   buildTextAnalysisProjection,
   mapAnalysisCodePointRangeToDisplay,
@@ -95,8 +96,8 @@ import {
 } from "./Processing/TextAnalysisProjection.ts";
 
 export { acceptRomanization };
-// v83: remove persisted built-in translation and remote Arabic-reading output.
-export const LYRICS_PROCESSING_VERSION = 83;
+// v84: prune blank presentation rows after immutable source capture.
+export const LYRICS_PROCESSING_VERSION = 84;
 // v5: render plans can carry canonical above-reading segments.
 export const READING_PLAN_SCHEMA_VERSION = 5;
 
@@ -904,6 +905,7 @@ export const ProcessLyrics = async (lyrics: any) => {
       sourceDocument.parity.errors
     );
   }
+  stripEmptyLyricsLines(lyrics);
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   const providerReadingEvidence = sourceDocument.document?.providerReadings;

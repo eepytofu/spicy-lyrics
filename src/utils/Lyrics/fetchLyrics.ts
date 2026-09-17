@@ -75,6 +75,7 @@ import {
   removeProcessedLyricsCache,
   writeProcessedLyricsCache,
 } from "./ProcessedLyricsCache.ts";
+import { isEmptyLyrics, stripEmptyLyricsLines } from "./EmptyLines.ts";
 
 const lyricsLogger = new Logger("Lyrics Pipeline");
 const lyricsCacheLogger = new Logger("Lyrics Cache");
@@ -214,6 +215,7 @@ function hasRomanizationWorkQuick(lyrics: any): boolean {
 
 function markProcessedWithoutBackground(lyrics: any): void {
   ensureSourceEvidence(lyrics);
+  stripEmptyLyricsLines(lyrics);
   lyrics.ProcessingVersion = LYRICS_PROCESSING_VERSION;
   lyrics.ReadingPlanSchemaVersion = READING_PLAN_SCHEMA_VERSION;
   lyrics.ProcessingPending = false;
@@ -249,6 +251,7 @@ function presentLyrics(lyricsData: any, session: LyricsRequestSession): void {
 type ProcessingVersionResult = {
   lyrics: any;
   translationPending: boolean;
+  empty: boolean;
 };
 
 async function ensureProcessingVersion(
@@ -264,9 +267,11 @@ async function ensureProcessingVersion(
     ensureSourceEvidence(lyrics);
     await ensureLyricRevision(uri, lyrics);
     normalizeProviderTranslations(lyrics);
+    stripEmptyLyricsLines(lyrics);
   }
 
-  if (!lyrics) return { lyrics, translationPending: false };
+  if (!lyrics) return { lyrics, translationPending: false, empty: true };
+  if (isEmptyLyrics(lyrics)) return { lyrics, translationPending: false, empty: true };
 
   const processingContextKey = currentProcessingContextKey();
   // ProcessingPending === true means a previous session cached raw lyrics and
@@ -281,6 +286,7 @@ async function ensureProcessingVersion(
     return {
       lyrics,
       translationPending: lyrics.TranslationPending === true,
+      empty: false,
     };
   }
 
@@ -288,7 +294,7 @@ async function ensureProcessingVersion(
     markProcessedWithoutBackground(lyrics);
     lyrics.id = lyrics.id || trackId;
     await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
-    return { lyrics, translationPending: false };
+    return { lyrics, translationPending: false, empty: false };
   }
 
   lyricsCacheLogger.debug("Reprocessing stale cached lyrics", {
@@ -299,12 +305,12 @@ async function ensureProcessingVersion(
     toContext: processingContextKey,
   });
   await ProcessLyrics(lyrics);
-  if (!session.isCurrent()) return { lyrics, translationPending: false };
+  if (!session.isCurrent()) return { lyrics, translationPending: false, empty: false };
   lyrics.ProcessingPending = false;
   lyrics.RomanizationPending = false;
   lyrics.TranslationPending = false;
   await setProcessedLyricsStoreItem(trackId, lyrics, session, { persistTrack });
-  return { lyrics, translationPending: false };
+  return { lyrics, translationPending: false, empty: false };
 }
 
 function candidateDiagnostics(uri: string, selectedProvider: string): any {
@@ -335,6 +341,12 @@ async function processFreshLyrics(
   markLyricsOverridePreference(lyrics, options.overridePreference ?? null);
   lyrics.LyricsSourceCacheSignature = lyricsSourceCacheSignature();
   const revision = await ensureLyricRevision(uri, lyrics);
+  stripEmptyLyricsLines(lyrics);
+  if (isEmptyLyrics(lyrics)) {
+    lyricsLogger.warn("Lyrics payload had no renderable lines after pruning");
+    HideLoaderContainer();
+    return ["lyrics-not-found", 404];
+  }
   lyrics.ManualLyricsSelection = options.manualSelection === true;
   lyrics.AutomaticLyricRevisionId = options.automaticRevisionId ?? revision.id;
   if (options.manualSelection && options.searchOverrides) {
@@ -416,6 +428,11 @@ async function restoreLyricsOverrideForSession(
   }
   const processed = await ensureProcessingVersion(trackId, uri, lyrics, session, false);
   if (!session.isCurrent()) return { handled: true, result: null };
+  if (processed.empty) {
+    const automatic = automaticLyricsOverride(uri);
+    await setLyricsOverridePreference(automatic);
+    return { handled: false, preference: automatic };
+  }
   presentLyrics(processed.lyrics, session);
   return { handled: true, result: [{ ...processed.lyrics, fromCache: true }, 200] };
 }
@@ -445,8 +462,20 @@ async function activateLyricsCandidateForSession(
     if (diagnostics) lyrics.SelectionDiagnostics = diagnostics;
     const processed = await ensureProcessingVersion(trackId, uri, lyrics, session, false);
     if (!session.isCurrent()) return null;
-    presentLyrics(processed.lyrics, session);
-    result = [{ ...processed.lyrics, fromCache: true }, 200];
+    if (processed.empty) {
+      const freshLyrics = structuredClone(record.result.lyrics);
+      if (diagnostics) freshLyrics.SelectionDiagnostics = diagnostics;
+      result = await processFreshLyrics(trackId, uri, freshLyrics, session, {
+        persistTrack: false,
+        manualSelection: true,
+        automaticRevisionId,
+        searchOverrides,
+        overridePreference: preference,
+      });
+    } else {
+      presentLyrics(processed.lyrics, session);
+      result = [{ ...processed.lyrics, fromCache: true }, 200];
+    }
   } else {
     const lyrics = structuredClone(record.result.lyrics);
     if (diagnostics) lyrics.SelectionDiagnostics = diagnostics;
@@ -556,6 +585,9 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
       const lyrics = { ...localLyrics, id: trackId, uri };
       markLyricsOverridePreference(lyrics, preference);
       captureSourceTranslations(lyrics);
+      ensureSourceEvidence(lyrics);
+      stripEmptyLyricsLines(lyrics);
+      if (isEmptyLyrics(lyrics)) return;
       if (hasRomanizationWorkQuick(lyrics)) {
         await ProcessLyrics(lyrics);
       } else {
@@ -593,6 +625,9 @@ export async function PrefetchLyrics(uri: string): Promise<void> {
     // translations before processing so the source sidecar and rendered
     // meaning lane stay consistent.
     captureSourceTranslations(lyrics);
+    ensureSourceEvidence(lyrics);
+    stripEmptyLyricsLines(lyrics);
+    if (isEmptyLyrics(lyrics)) return;
 
     if (hasRomanizationWorkQuick(lyrics)) {
       await ProcessLyrics(lyrics);
@@ -689,8 +724,12 @@ async function fetchLyricsForSession(
           );
           if (!session.isCurrent()) return null;
           const processedLyrics = processed.lyrics;
-          presentLyrics(processedLyrics, session);
-          return [processedLyrics, 200];
+          if (processed.empty) {
+            $currentLyricsData.set("");
+          } else {
+            presentLyrics(processedLyrics, session);
+            return [processedLyrics, 200];
+          }
         }
       }
     } catch (error) {
@@ -730,8 +769,12 @@ async function fetchLyricsForSession(
         );
         if (!session.isCurrent()) return null;
         const lyricsFromCache = processed.lyrics;
-        presentLyrics(lyricsFromCache, session);
-        return [{ ...lyricsFromCache, fromCache: true }, 200];
+        if (processed.empty) {
+          await removeProcessedLyricsCache(trackId);
+        } else {
+          presentLyrics(lyricsFromCache, session);
+          return [{ ...lyricsFromCache, fromCache: true }, 200];
+        }
       }
     }
   } catch (error) {

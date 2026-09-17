@@ -211,6 +211,7 @@ test("manual candidates use revision storage without replacing the automatic tra
     /if \(options\.persistTrack !== false\) await writeProcessedLyricsCache/,
   );
   assert.match(processedLyricsCache, /processedLyricsStore\.SetItem\(trackId, lyrics\)/);
+  assert.match(processedLyricsCache, /"SpicyLyrics_LyricsStore_g1",\s*3,/u);
   assert.match(fetchLyrics, /persistTrack: false,[\s\S]*manualSelection: true/);
   assert.match(page, /lyricRevisionIdFromRaw/);
 });

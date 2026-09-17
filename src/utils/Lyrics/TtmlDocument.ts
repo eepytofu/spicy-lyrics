@@ -2,6 +2,7 @@ import { TTMLParser, type LyricLine, type Syllable, type SubLyricContent } from 
 import type { ProviderRubyTag } from "./ProviderRuby.ts";
 import type { ProviderLineSemantics, ProviderSidecar } from "./TtmlSemantics.ts";
 import type { VocalAgents } from "./VocalSemantics.ts";
+import { hasLyricsText, hasRenderableText } from "./EmptyLines.ts";
 
 type NativeSyllable = {
   Text: string;
@@ -9,6 +10,9 @@ type NativeSyllable = {
   EndTime: number;
   IsPartOfWord: boolean;
   ProviderRuby?: ProviderRubyTag[];
+  ProviderRomanizedText?: string;
+  RomanizedText?: string;
+  TransliteratedText?: string;
 };
 
 type NativeGroup = ProviderLineSemantics & {
@@ -111,13 +115,24 @@ function applyLineSemantics(
 
 function toGroup(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): NativeGroup | undefined {
   const Syllables = toSyllables(line.words ?? []);
-  if (!Syllables.length) return undefined;
   const group: NativeGroup = {
     StartTime: seconds(line.startTime),
     EndTime: seconds(line.endTime),
     Syllables,
   };
   applySidecars(group as Record<string, unknown>, line);
+  if (!Syllables.length && hasLyricsText(group.TransliteratedText)) {
+    Syllables.push({
+      Text: "",
+      StartTime: group.StartTime,
+      EndTime: group.EndTime,
+      IsPartOfWord: true,
+      ProviderRomanizedText: group.ProviderRomanizedText,
+      RomanizedText: group.RomanizedText,
+      TransliteratedText: group.TransliteratedText,
+    });
+  }
+  if (!Syllables.some(hasRenderableText)) return undefined;
   return group;
 }
 
@@ -164,7 +179,6 @@ function syllableContent(
 
 function toLine(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): NativeLine | undefined {
   const Text = line.text?.trim() ? line.text : (line.words ?? []).map((word) => word.text).join("");
-  if (!Text.trim()) return undefined;
   const entry: NativeLine = {
     Type: "Vocal",
     Text,
@@ -172,6 +186,7 @@ function toLine(line: LyricLine | NonNullable<LyricLine["backgroundVocal"]>): Na
     EndTime: seconds(line.endTime),
   };
   applySidecars(entry as unknown as Record<string, unknown>, line);
+  if (!hasRenderableText(entry)) return undefined;
   return entry;
 }
 
@@ -342,8 +357,11 @@ export function parseTtmlDocument(
   }
 
   const alignments = oppositeAlignment(lines, result.metadata.agents);
-  const isLineTimed = result.metadata.timingMode === "Line"
-    || lines.every((line) => !(line.words ?? []).length);
+  const isAuthoredWordTimed = authoredTimingMode?.toLowerCase() === "word";
+  const isLineTimed = !isAuthoredWordTimed && (
+    result.metadata.timingMode === "Line" ||
+    lines.every((line) => !(line.words ?? []).length)
+  );
   const Content = isLineTimed
     ? lineContent(lines, alignments, keyed.syntheticLineIds)
     : syllableContent(lines, alignments, keyed.syntheticLineIds);

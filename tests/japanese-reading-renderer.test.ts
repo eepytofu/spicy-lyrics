@@ -118,6 +118,20 @@ const plan = {
   joinedDisplayText: "watashi",
 };
 
+test("romanization-only entries render their reading once in the base slot", () => {
+  $japaneseReadingMode.set("romaji");
+  const line = new FakeElement();
+  const entry = { Text: "", TransliteratedText: "romaji only" };
+  renderBaseTextWithReadings(line as unknown as HTMLElement, entry, { useRomanized: true });
+  assert.equal(line.textContent, "romaji only");
+
+  assert.equal(
+    appendLineExtras(line as unknown as HTMLElement, entry, { useRomanized: true }),
+    false,
+  );
+  assert.equal(line.textContent, "romaji only");
+});
+
 function render(mode: "romaji" | "furigana" | "both"): FakeElement {
   $japaneseReadingMode.set(mode);
   const line = new FakeElement();

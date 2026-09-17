@@ -78,6 +78,7 @@ import {
   normalizeSpicyApiDocument,
   type SpicyApiFetchProvider,
 } from "./SpicyLyricsResponse.ts";
+import { hasRenderableLyrics } from "./EmptyLines.ts";
 
 type TrackLyricsInfo = {
   uri: string; id: string; durationMs: number; title: string; artists: string[]; artist: string; album: string;
@@ -130,7 +131,11 @@ const buildSyllable = (lines: TimedWordLine[], source: string, label: string) =>
   buildSyllableLyrics(lines, { source, label });
 
 function stamp(lyrics: any, provider: LyricsSourceProviderId, displayName?: string, match?: LyricsMatchMetadata): ExternalLyricsResult | null {
-  if (!lyrics || !["Static", "Line", "Syllable"].includes(lyrics.Type)) return null;
+  if (
+    !lyrics ||
+    !["Static", "Line", "Syllable"].includes(lyrics.Type) ||
+    !hasRenderableLyrics(lyrics)
+  ) return null;
   const directMatch = ["spicy", "apple", "spotify"].includes(provider) ? { confidence: 1, method: "spotify-id" } : undefined;
   const sourceMatch = match ?? lyrics.SourceMatch ?? directMatch;
   const source = lyrics.source || provider;

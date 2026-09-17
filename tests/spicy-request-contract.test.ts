@@ -9,18 +9,18 @@ import {
   SPICY_API_MODE,
 } from "../src/utils/API/SpicyRequestContract.ts";
 
-test("Spicy API requests use the complete 6.3.15 contract", () => {
+test("Spicy API requests use the complete 6.3.20 contract", () => {
   const queries = [{
     operation: "lyrics",
     variables: { id: "track-id", auth: "SpicyLyrics-WebAuth" },
   }];
 
-  assert.equal(ProjectVersion, "6.3.15");
+  assert.equal(ProjectVersion, "6.3.20");
   assert.equal(SPICY_API_MODE, "2");
   assert.equal(SPICY_API_CACHE_VERSION, 1);
   assert.deepEqual(buildSpicyApiHeaders(ProjectVersion), {
     "Content-Type": "application/json",
-    "SpicyLyrics-Version": "6.3.15",
+    "SpicyLyrics-Version": "6.3.20",
     "X-mode": "2",
   });
   assert.deepEqual(
@@ -29,14 +29,14 @@ test("Spicy API requests use the complete 6.3.15 contract", () => {
     }),
     {
       "Content-Type": "application/json",
-      "SpicyLyrics-Version": "6.3.15",
+      "SpicyLyrics-Version": "6.3.20",
       "SpicyLyrics-WebAuth": "Bearer token",
       "X-mode": "2",
     },
   );
   assert.equal(
     buildSpicyApiRequestBody(queries, ProjectVersion),
-    '{"queries":[{"operation":"lyrics","variables":{"id":"track-id","auth":"SpicyLyrics-WebAuth"}}],"client":{"version":"6.3.15"}}',
+    '{"queries":[{"operation":"lyrics","variables":{"id":"track-id","auth":"SpicyLyrics-WebAuth"}}],"client":{"version":"6.3.20"}}',
   );
 });
 

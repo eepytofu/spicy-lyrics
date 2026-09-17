@@ -7,6 +7,7 @@
 
 import { $chineseTranslitMode, $japaneseReadingMode, $pinyinPlacement } from "../../uiState.ts";
 import { isMeaningfullyDifferent } from "../TextCompare.ts";
+import { displayBaseText, hasLyricsText } from "../EmptyLines.ts";
 import { resolveTranslationSidecars, type TranslationSidecarEntry } from "../TranslationSidecar.ts";
 import {
   JapaneseKanaTextTest,
@@ -590,7 +591,7 @@ export function renderBaseTextWithReadings(
   resolvedPresentation?: ReadingRowPresentation
 ): boolean {
   const reading = getJapaneseReading(entry);
-  const sourceDisplayText = reading?.displayText ?? entry.Text ?? "";
+  const sourceDisplayText = reading?.displayText ?? displayBaseText(entry);
   const readabilityProjection = projectMixedScriptReadability(sourceDisplayText);
   const text = readabilityProjection.text;
   const syntheticGapCodePointOffsets = options.splitBaseRunsForEmphasis
@@ -802,7 +803,7 @@ export function appendRomanizedBelow(
 ): boolean {
   if (!shouldRenderRomanization(entry, options)) return false;
 
-  const sourceText = entry.JapaneseReading?.displayText ?? entry.Text ?? "";
+  const sourceText = displayBaseText(entry);
   const romanizedText = formatMixedScriptReadingForDisplay(sourceText, getRomanizedText(entry));
   const hasDistinctRomanization = isMeaningfullyDifferent(romanizedText, sourceText);
   if (!hasDistinctRomanization && !options.romanizationPending) return false;
@@ -843,7 +844,7 @@ export function appendLineExtras(
   options: ReadingRenderOptions
 ): boolean {
   let appended = appendRomanizedBelow(lineElem, entry, options);
-  appended = appendTranslationSidecars(lineElem, entry.Text || "", entry, options) || appended;
+  appended = appendTranslationSidecars(lineElem, displayBaseText(entry), entry, options) || appended;
   return appended;
 }
 
@@ -888,8 +889,11 @@ export function appendSyllableRomanizedBelow(
   options: ReadingRenderOptions
 ): boolean {
   let appended = false;
+  const baseDisplayText = hasLyricsText(sourceText)
+    ? sourceText
+    : syllables.map(displayBaseText).join("");
   const groupEntry: JapaneseReadable = {
-    Text: sourceText,
+    Text: baseDisplayText,
     RomanizedText: groupRomanizedText,
     TransliteratedText: groupRomanizedText,
     JapaneseReading: syllables.find((s) => s.JapaneseReading)?.JapaneseReading,
@@ -940,10 +944,13 @@ export function appendSyllableRomanizedBelow(
     );
   } else if (shouldRenderRomanization(groupEntry, options)) {
     const readableGroupRomanizedText = formatMixedScriptReadingForDisplay(
-      sourceText,
+      baseDisplayText,
       groupRomanizedText
     );
-    const hasDistinctRomanization = isMeaningfullyDifferent(readableGroupRomanizedText, sourceText);
+    const hasDistinctRomanization = isMeaningfullyDifferent(
+      readableGroupRomanizedText,
+      baseDisplayText,
+    );
     if (hasDistinctRomanization || options.romanizationPending) {
       forceStackedLine(lineElem, options.oppositeAligned);
       appended = true;
@@ -955,7 +962,7 @@ export function appendSyllableRomanizedBelow(
       } else if (syllables.some((s) => getRomanizedText(s))) {
         syllables.forEach((syl, index) => {
           const romaji = getRomanizedText(syl);
-          if (!isMeaningfullyDifferent(romaji, syl.Text)) return;
+          if (!isMeaningfullyDifferent(romaji, displayBaseText(syl))) return;
 
           const romajiSpan = document.createElement("span");
           romajiSpan.textContent = romaji;
@@ -982,7 +989,7 @@ export function appendSyllableRomanizedBelow(
     }
   }
 
-  const appendedTranslations = appendTranslationSidecars(lineElem, sourceText, {
+  const appendedTranslations = appendTranslationSidecars(lineElem, baseDisplayText, {
     ProviderTranslatedText: groupProviderTranslatedText,
     ProviderTranslationLanguage: options.providerTranslationLanguage,
     TranslatedText: groupTranslatedText,
