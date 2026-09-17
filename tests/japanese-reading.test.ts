@@ -142,3 +142,20 @@ test("Japanese line text map preserves explicit Latin spacing", () => {
     ]
   );
 });
+
+test("Japanese line text map preserves mixed packed provider boundaries", () => {
+  const clauseParts = [
+    "時", "は", "まくら", "ぎ", "風", "は", "にきは", "だ",
+    "星", "は", "うぶす", "な", "人", "は", "かげろ", "う",
+  ];
+  const clauses = buildJapaneseLineTextMap(
+    clauseParts.map((Text, index) => ({ Text, IsPartOfWord: index % 4 !== 3 })),
+  );
+  assert.equal(clauses.lineText, "時はまくらぎ 風はにきはだ 星はうぶすな 人はかげろう");
+
+  const counterParts = ["ほら", "この", "まま", "2", "人", "血", "が"];
+  const counter = buildJapaneseLineTextMap(
+    counterParts.map((Text, index) => ({ Text, IsPartOfWord: index !== 4 && index !== 6 })),
+  );
+  assert.equal(counter.lineText, "ほらこのまま2人 血が");
+});

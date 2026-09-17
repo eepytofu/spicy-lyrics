@@ -6,6 +6,10 @@ import type {
 } from "./JapaneseReadingModel.ts";
 
 const LatinWordTextTest = /[A-Za-zÀ-ÖØ-öø-ÿĀ-žƀ-ɏ]/;
+const JapaneseCharacterTest = /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}/u;
+
+const firstCharacter = (value: string): string => Array.from(value)[0] || "";
+const lastCharacter = (value: string): string => Array.from(value).at(-1) || "";
 
 export function normalizeJapaneseTimedText(text: string): string {
   return cleanInvisiblesPreserveEdges((text || "").normalize("NFKC"));
@@ -21,6 +25,9 @@ export function buildJapaneseLineTextMap(
   let lineText = "";
   let sourceText = "";
   const spans: JapaneseLineTextMap["spans"] = [];
+  const hasWordContinuation = syllables.some(
+    (syllable) => (syllable as JapaneseReadable & { IsPartOfWord?: boolean }).IsPartOfWord === true,
+  );
 
   for (let index = 0; index < syllables.length; index += 1) {
     const rawText = syllables[index]?.Text || "";
@@ -36,12 +43,20 @@ export function buildJapaneseLineTextMap(
     }
 
     const previousRaw = syllables[index - 1]?.Text || "";
-    const nextNeedsLatinSpace =
+    const previous = syllables[index - 1] as JapaneseReadable & { IsPartOfWord?: boolean };
+    const providerBoundary = needsSyllableSpaceBefore(syllables, index);
+    const packedJapaneseBoundary =
+      hasWordContinuation &&
+      previous?.IsPartOfWord === false &&
+      JapaneseCharacterTest.test(lastCharacter(previousRaw.trim())) &&
+      JapaneseCharacterTest.test(firstCharacter(normalizedText));
+    const nextNeedsAnalysisSpace =
       !leading &&
       lineText &&
-      needsSyllableSpaceBefore(syllables, index) &&
-      (LatinWordTextTest.test(previousRaw) || LatinWordTextTest.test(normalizedText));
-    if (nextNeedsLatinSpace) {
+      (packedJapaneseBoundary ||
+        (providerBoundary &&
+          (LatinWordTextTest.test(previousRaw) || LatinWordTextTest.test(normalizedText))));
+    if (nextNeedsAnalysisSpace) {
       lineText = appendLineSpaceIfNeeded(lineText);
       sourceText = appendLineSpaceIfNeeded(sourceText);
     }

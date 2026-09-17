@@ -331,6 +331,69 @@ test("structured-provider Japanese lines keep authored English spaces without du
   assert.equal(new Set(canonical.spanMappings.map((unit) => unit.spanId)).size, syllables.length);
 });
 
+test("packed Japanese provider boundaries reach the sentence-context reading", async () => {
+  const fixtures = [
+    {
+      parts: [
+        "時", "は", "まくら", "ぎ", "風", "は", "にきは", "だ",
+        "星", "は", "うぶす", "な", "人", "は", "かげろ", "う",
+      ],
+      flags: (index: number) => index % 4 !== 3,
+      tokens: [
+        ["時", "トキ"], ["は", "ハ"], ["まくらぎ", "マクラギ"], [" ", ""],
+        ["風", "カゼ"], ["は", "ハ"], ["にきはだ", "ニキハダ"], [" ", ""],
+        ["星", "ホシ"], ["は", "ハ"], ["うぶすな", "ウブスナ"], [" ", ""],
+        ["人", "ヒト"], ["は", "ハ"], ["かげろう", "カゲロウ"],
+      ],
+      expected: /kaze wa.*hito wa/u,
+    },
+    {
+      parts: ["ほら", "この", "まま", "2", "人", "血", "が"],
+      flags: (index: number) => index !== 4 && index !== 6,
+      tokens: [
+        ["ほら", "ホラ"], ["この", "コノ"], ["まま", "ママ"],
+        ["2人", "フタリ"], [" ", ""], ["血", "チ"], ["が", "ガ"],
+      ],
+      expected: /futari chi ga/u,
+    },
+  ] as const;
+
+  const readings: Record<string, string> = {
+    とき: "toki", は: "wa", まくらぎ: "makuragi", かぜ: "kaze",
+    にきはだ: "nikihada", ほし: "hoshi", うぶすな: "ubusuna",
+    ひと: "hito", かげろう: "kagerou", ほら: "hora", この: "kono",
+    まま: "mama", ふたり: "futari", ち: "chi", が: "ga",
+    トキ: "toki", ハ: "wa", マクラギ: "makuragi", カゼ: "kaze",
+    ニキハダ: "nikihada", ホシ: "hoshi", ウブスナ: "ubusuna",
+    ヒト: "hito", カゲロウ: "kagerou", ホラ: "hora", コノ: "kono",
+    ママ: "mama", フタリ: "futari", チ: "chi", ガ: "ga",
+  };
+
+  for (const fixture of fixtures) {
+    const syllables = fixture.parts.map((Text, index) => ({
+      Text,
+      IsPartOfWord: fixture.flags(index),
+      StartTime: index,
+      EndTime: index + 1,
+    }));
+    const map = buildJapaneseLineTextMap(syllables);
+    const result = await processJapanesePackageLine(
+      map.sourceText,
+      syllables,
+      map.spans,
+      syllables,
+      {
+        analyzer: tokenAnalyzer(
+          map.sourceText,
+          fixture.tokens.map(([surface, readingKana]) => ({ surface, readingKana })),
+        ),
+        kanaRomanizer: (kana) => readings[kana] ?? kana,
+      },
+    );
+    assert.match(result.romaji, fixture.expected);
+  }
+});
+
 test("Japanese timed-unit alignment keeps spaces in mixed title and credit lines", () => {
   for (const fixture of [
     {
