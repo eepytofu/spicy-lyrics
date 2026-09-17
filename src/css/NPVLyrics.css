@@ -10,8 +10,7 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   background-color: var(--background-tinted-base, rgba(255, 255, 255, 0.07));
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(12px);
   max-height: 350px;
 }
 
@@ -75,7 +74,7 @@
 
 #SpicyLyricsNPVCard .CardBody {
   position: relative;
-  height: 225px;
+  height: 255px;
   flex-shrink: 0;
 }
 

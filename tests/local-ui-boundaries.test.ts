@@ -29,6 +29,10 @@ const fullscreenSource = readFileSync(
   "utf8"
 );
 const settingsSource = readFileSync(new URL("../src/utils/settings.ts", import.meta.url), "utf8");
+const spotifyPlayerSource = readFileSync(
+  new URL("../src/components/Global/SpotifyPlayer.ts", import.meta.url),
+  "utf8",
+);
 
 test("NPV animation work is excluded from sidebar background observation", () => {
   assert.match(appSource, /attributeFilter: \["src", "class", "inert"\]/u);
@@ -44,6 +48,14 @@ test("expanded NPV reconciliation waits for stable card geometry", () => {
   assert.match(npvSource, /holdEvaluateUntilSettled\(morph\)/u);
   assert.match(npvSource, /if \(stateAnimation !== null\) return/u);
   assert.match(npvCss, /#SpicyLyricsNPVCard \.CardBody \{[^}]*flex-shrink: 0;/su);
+  assert.match(npvCss, /backdrop-filter: blur\(12px\)/u);
+  assert.match(npvCss, /#SpicyLyricsNPVCard \.CardBody \{[^}]*height: 255px;/su);
+});
+
+test("playbar controls follow the current PiP button contract", () => {
+  assert.match(spotifyPlayerSource, /data-testid="pip-toggle-button"/u);
+  assert.match(spotifyPlayerSource, /classList\.toggle\("ZfsMQKTLl695iPvUo3GK", bool\)/u);
+  assert.match(spotifyPlayerSource, /className === "ZfsMQKTLl695iPvUo3GK"/u);
 });
 
 test("final interface controls keep drag visibility and external volume sync", () => {
