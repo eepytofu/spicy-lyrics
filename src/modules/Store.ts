@@ -106,15 +106,18 @@ export function GetInstantStore<T extends Record<string, unknown>>(
 			}
 		}
 
-		if (parsed !== null && parsed.Version === version) {
-			items = parsed.Items
-			topUp(
-				items as Record<string, unknown>,
-				template as Record<string, unknown>,
-				`${storeName}.Items`,
-			)
-		} else {
-			items = deepClone(template)
+		items = deepClone(template)
+		if (parsed !== null && parsed.Version === version && isPlainObject(parsed.Items)) {
+			try {
+				topUp(
+					parsed.Items as Record<string, unknown>,
+					template as Record<string, unknown>,
+					`${storeName}.Items`,
+				)
+				items = parsed.Items
+			} catch (error) {
+				console.warn(`InstantStore "${storeName}": stored data is malformed, resetting`, error)
+			}
 		}
 	}
 

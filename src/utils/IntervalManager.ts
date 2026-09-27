@@ -26,6 +26,7 @@ class IntervalManager {
     this.intervalId = null;
     this.Running = false;
     this.Destroyed = false;
+    this.maid.Give(() => this.Stop());
   }
 
   // Starts the requestAnimationFrame loop
@@ -49,7 +50,6 @@ class IntervalManager {
         this.callback();
       }, this.duration);
 
-      this.maid.Give(() => this.Stop());
       return;
     }
 
@@ -72,8 +72,6 @@ class IntervalManager {
 
     this.animationFrameId = requestAnimationFrame(loop);
 
-    // Register cleanup with the Maid
-    this.maid.Give(() => this.Stop());
   }
 
   // Stops the animation frame loop without destroying the manager

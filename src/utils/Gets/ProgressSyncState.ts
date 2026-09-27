@@ -1,6 +1,14 @@
 export interface SyncedPosition {
   StartedSyncAt: number;
   Position: number;
+  TrackUri?: string | null;
+}
+
+export function isPositionSampleCurrent(
+  position: SyncedPosition,
+  currentTrackUri: string | null,
+): boolean {
+  return position.TrackUri === currentTrackUri;
 }
 
 export interface LocalPositionAnchor {

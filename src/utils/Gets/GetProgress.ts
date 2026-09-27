@@ -2,14 +2,11 @@ import { $playbackOffset } from "../stores.ts";
 import { SpotifyPlayer } from "./../../components/Global/SpotifyPlayer.ts";
 import {
   initialLocalPositionSyncState,
+  isPositionSampleCurrent,
   resolveLocalPositionSample,
   type LocalPositionSyncState,
+  type SyncedPosition,
 } from "./ProgressSyncState.ts";
-
-interface SyncedPosition {
-  StartedSyncAt: number;
-  Position: number;
-}
 
 interface PredictedProgress {
   TrackId: string | null;
@@ -99,6 +96,7 @@ export const requestPositionSync = () => {
     const SpotifyPlatform = Spicetify.Platform;
     const startedAt = Date.now();
     const isLocallyPlaying = SpotifyPlatform.PlaybackAPI._isLocal;
+    const requestedUri = SpotifyPlayer.GetUri() ?? null;
 
     const getLocalPosition = () => {
       return SpotifyPlatform.PlayerAPI._contextPlayer
@@ -147,7 +145,8 @@ export const requestPositionSync = () => {
 
     sync
       .then((position: SyncedPosition) => {
-        syncedPosition = position;
+        if ((SpotifyPlayer.GetUri() ?? null) !== requestedUri) return;
+        syncedPosition = { ...position, TrackUri: requestedUri };
       })
       .catch((error: unknown) => {
         console.error("Sync Position: Poll failed, More Details:", error);
@@ -181,6 +180,13 @@ export default function GetProgress() {
     }
     console.warn("Synced Position: Skip, Returning 0");
     return 0;
+  }
+
+  if (!isPositionSampleCurrent(syncedPosition, SpotifyPlayer.GetUri() ?? null)) {
+    return normalizeProgress(
+      Spicetify.Player.getProgress() - $playbackOffset.get(),
+      Spicetify.Player.isPlaying(),
+    );
   }
 
   const { StartedSyncAt, Position } = syncedPosition;
