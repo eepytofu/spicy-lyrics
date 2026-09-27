@@ -61,6 +61,7 @@ import { exposeToWindow } from "./utils/expose.ts";
 import Logger from "./utils/Logger.ts";
 import Whentil from "./modules/Whentil.ts";
 import App from "./utils/app.ts";
+import { guardSpicetifyScrollingFix } from "./utils/scrollFixGuard.ts";
 
 async function main() {
   const appLogger = new Logger("App");
@@ -74,6 +75,8 @@ async function main() {
   }
 
   await Platform.OnSpotifyReady;
+
+  guardSpicetifyScrollingFix();
 
   Global.SetScope("fullscreen.open", false);
 
@@ -572,6 +575,13 @@ async function main() {
       });
     };
 
+    const syncNPVDynamicBackgroundClass = () => {
+      document.body.classList.toggle(
+        "SpicyLyrics_NPVDynamicBackground",
+        Boolean(document.querySelector("aside.spicy-dynamic-bg-in-this")),
+      );
+    };
+
     const CleanupNowBarDynamicBgLets = () => {
       const nowPlayingBar = getNowPlayingBarElement() ?? lastNowPlayingBarElement;
 
@@ -582,6 +592,7 @@ async function main() {
       }
       nowPlayingBar?.querySelector<HTMLElement>(".spicy-dynamic-bg")?.remove();
       nowPlayingBar?.classList.remove("spicy-dynamic-bg-in-this");
+      syncNPVDynamicBackgroundClass();
       lastNowPlayingBarElement = null;
       lastImgUrl = null;
     };
@@ -650,6 +661,7 @@ async function main() {
     );
 
     async function applyDynamicBackgroundToNowPlayingBar(coverUrl: string | undefined) {
+      syncNPVDynamicBackgroundClass();
       if (!$showNpvDynamicBg.get()) return;
       if (SpotifyPlayer.GetContentType() === "unknown" || SpotifyPlayer.IsDJ()) return;
       if (!coverUrl) return;
@@ -668,6 +680,7 @@ async function main() {
         if (coverUrl === lastImgUrl) return;
 
         nowPlayingBar.classList.add("spicy-dynamic-bg-in-this");
+        syncNPVDynamicBackgroundClass();
 
         await ApplyDynamicBackground(nowPlayingBar, "npvbg");
 

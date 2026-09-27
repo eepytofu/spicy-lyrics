@@ -154,9 +154,15 @@ body:has(#SpicyLyricsPage):not(:has(
     height: 100%;
     position: absolute;
   }
-  .playback-bar > .playback-progressbar-container,
-  .playback-bar > :has(.playback-progressbar) {
+  .playback-bar > .playback-progressbar-container {
     margin-left: calc(var(--playback-bar-grid-gap, 8px) + 50px);
+  }
+  .playback-bar:has(> :not(.playback-progressbar-container) .playback-progressbar) {
+    padding-left: calc(var(--playback-bar-grid-gap, 8px) + 50px);
+  }
+  .playback-bar:has(> :not(.playback-progressbar-container) .playback-progressbar)
+    > :is(.playback-bar__progress-time-elapsed, [data-testid="playback-position"]) {
+    left: 0;
   }
 }
 
@@ -166,7 +172,7 @@ body:has(#SpicyLyricsPage):not(:has(
   initial-value: 0%;
 }
 
-body:has(aside.spicy-dynamic-bg-in-this) {
+html body.SpicyLyrics_NPVDynamicBackground {
   /* npv buttons */
   .yiRHu4qsmlXpKcnFQsm2:hover,
   .main-nowPlayingView-headerButton:hover,

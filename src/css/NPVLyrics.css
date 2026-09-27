@@ -86,7 +86,14 @@
   padding: var(--space-2) var(--space-4);
 }
 
-.Root__right-sidebar:has(#SpicyLyricsNPVCard.Expanded)
+.Root__right-sidebar
+  :is(.main-nowPlayingView-panel, .main-nowPlayingView-content)
+  > :has(~ #SpicyLyricsNPVCard.Expanded),
+.Root__right-sidebar
+  :is(.main-nowPlayingView-panel, .main-nowPlayingView-content)
+  > #SpicyLyricsNPVCard.Expanded ~ *,
+body.SpicyLyrics_NPVCardExpanded
+  .Root__right-sidebar
   :is(.main-nowPlayingView-panel, .main-nowPlayingView-content)
   > :not(#SpicyLyricsNPVCard, :has(#SpicyLyricsNPVCard)) {
   display: none;

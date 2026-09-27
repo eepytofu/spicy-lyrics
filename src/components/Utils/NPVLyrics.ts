@@ -86,6 +86,7 @@ async function teardownCard(): Promise<void> {
   cardMaid?.CleanUp();
   cardMaid = null;
   cardEl = null;
+  document.body.classList.remove("SpicyLyrics_NPVCardExpanded");
   cardBodyEl = null;
   lastToggleOpen = null;
   lastExpanded = null;
@@ -177,6 +178,10 @@ function refreshCardUI(): void {
   const expanded = open && $npvLyricsExpanded.get();
   cardEl.classList.toggle("Collapsed", !open);
   cardEl.classList.toggle("Expanded", expanded);
+  document.body.classList.toggle(
+    "SpicyLyrics_NPVCardExpanded",
+    expanded && cardEl.isConnected,
+  );
   if (lastToggleOpen !== open) {
     lastToggleOpen = open;
     const toggle = cardEl.querySelector<HTMLElement>("#NPVCardToggle");
@@ -346,6 +351,9 @@ function attachSidebarObserver(): void {
   const sidebar = document.querySelector(".Root__right-sidebar");
   if (!sidebar || sidebar === observedSidebar) return;
   const observer = new MutationObserver((records) => {
+    if (cardEl && !cardEl.isConnected) {
+      document.body.classList.remove("SpicyLyrics_NPVCardExpanded");
+    }
     for (const record of records) {
       const target = record.target;
       if (cardEl && (target === cardEl || cardEl.contains(target))) continue;
